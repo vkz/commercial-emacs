@@ -30,6 +30,7 @@ Hard constraints
 Out of scope (for this plan revision)
 - Tree-sitter work (we will not improve it now; we’ll only avoid breaking it).
 - Moving GC work (we will not use it; SBCL GC is the path).
+- Emacs Lisp native compilation / JIT via libgccjit (we will disable it now and delete it later).
 - Browser-only frontend (future ambition; plan should not preclude it, but does not implement it).
 
 
@@ -65,6 +66,15 @@ Suggested baseline configure shape (exact flags may be adjusted after the first 
 - Reduce moving parts while we focus on the Lisp engine rewrite:
   - `--without-native-compilation`
   - `--with-tree-sitter=no`
+
+Note on native compilation
+- Because the long-term direction is “Emacs Lisp implemented inside SBCL”, Emacs’s current ELisp
+  native compilation (libgccjit producing `.eln`) is not a goal and does not make architectural
+  sense long-term. We will:
+  - Always configure with `--without-native-compilation` during the prep phase.
+  - Treat all `:nativecomp`-tagged tests as irrelevant for conformance (our conformance target is
+    the SBCL-hosted engine, not libgccjit output).
+  - Plan to delete the native-comp feature and its codepaths once the SBCL engine work begins.
 
 0.3 Run baseline tests
 - Use the stock harness: `make -C test check` (default selector excludes `:expensive-test`, `:unstable`, `:nativecomp`).
@@ -106,7 +116,32 @@ Notes
 Acceptance criteria
 - After each port deletion chunk, a TTY-only build still succeeds on macOS and the Step 1 “smoke tests” (defined below) still run.
 
-### 0a.2 Make the build TTY-only (then delete GUI backends)
+### 0a.2 Delete ELisp native compilation / JIT infrastructure (definite)
+
+Rationale
+- With SBCL as the host runtime, “compiling and running Emacs Lisp” becomes compiling/running SBCL,
+  so maintaining a parallel ELisp JIT (libgccjit -> `.eln`) is wasted effort and complexity.
+
+Planned removals (once we have the Step 0 baseline stable)
+- C sources:
+  - `src/comp.c`, `src/comp.h`
+  - Related build glue in `src/Makefile.in` (object lists, feature flags)
+- Emacs Lisp sources:
+  - `lisp/emacs-lisp/comp.el`
+  - `lisp/emacs-lisp/comp-common.el`
+  - `lisp/emacs-lisp/comp-cstr.el`
+- Tests:
+  - `test/src/comp-tests.el`
+  - `test/src/comp-resources/`
+- Configure/build system:
+  - Remove `--with-native-compilation` support and libgccjit probing from `configure.ac`.
+  - Remove references to `.eln` / `NATIVE_SUFFIX` where they become dead codepaths.
+
+Acceptance criteria
+- `configure` has no native-compilation option, build does not mention libgccjit, and test selection
+  no longer includes native-comp-specific suites.
+
+### 0a.3 Make the build TTY-only (then delete GUI backends)
 
 We want “TTY-only” to mean: no GUI backends built, and no GUI-only runtime assets required.
 
@@ -216,7 +251,7 @@ Initial candidate smoke files (all exist in this repo today)
 - `test/src/eval-tests.el`
 - `test/src/lread-tests.el`
 - `test/src/syntax-tests.el`
-- `test/lisp/emacs-lisp/eval-tests.el`
+- `test/lisp/emacs-lisp/lisp-tests.el` (broad core semantics coverage)
 - `test/lisp/emacs-lisp/macroexp-tests.el`
 - `test/lisp/emacs-lisp/bytecomp-tests.el`
 - `test/lisp/emacs-lisp/cl-lib-tests.el`
@@ -238,6 +273,71 @@ Optional fuller suites (for later)
 Acceptance criteria
 - We can run smoke tests quickly and deterministically during development.
 - We can run the full suite before/after major milestones and interpret failures (skip vs regression vs known upstream flake).
+
+## Step 1.5 — SBCL Ecosystem Dependencies + Dev Loop Design
+
+Timing
+- Do this after we have trimmed the repo (Step 0a) and have stable `mise` build/test tasks (Step 0b/1),
+  but before the SBCL-hosted engine rewrite becomes “real work” (Step 2).
+
+Goal
+- Decide what (if anything) from the Common Lisp/SBCL ecosystem is in scope as *opt-in* dependencies,
+  and lock down a development workflow that maximizes feedback speed (REPL, debugging, tests).
+
+### 1.5.1 Dependency policy (opt-in, justified)
+
+Default stance
+- Start with **ANSI Common Lisp + SBCL** only. No third-party dependencies by default.
+
+Rules for adding a dependency
+- Must have a clear, written justification tied to one of:
+  - significant code clarity reduction in the engine implementation
+  - a facility we would otherwise have to reimplement poorly (testing, tracing, FFI ergonomics, etc.)
+  - measurable development speedup with low ongoing maintenance cost
+- Must be widely used and actively maintained (or extremely stable).
+- Must not pull in an uncontrolled dependency tree (keep transitive deps small and understandable).
+- Must run on our target SBCL platforms (macOS now; Linux/FreeBSD later).
+- Must be version-pinnable and reproducible.
+
+Versioning and reproducibility (choose one approach early)
+- A: vendor dependencies into the repo (explicit version control, no network fetch at build time).
+- B: use ASDF + a pinned Quicklisp/Ultralisp snapshot (reproducible but bootstrap complexity).
+- C: use git submodules (explicit pinning, but submodule ergonomics).
+
+Deliverable
+- A short “dependency decision record” in this plan (or a `plans/` note later) listing:
+  - which dependency mechanism we chose (A/B/C) and why
+  - the approved dependency list (possibly empty)
+  - the “no-go” list (things we explicitly avoid)
+
+### 1.5.2 Candidate libraries to evaluate (examples, not commitments)
+
+We only adopt these if they pass the above rules and we can defend the choice:
+- Small utility layer: `alexandria` (widely used helpers)
+- FFI bridge (if/when we need it): `cffi`
+- Testing framework (for SBCL-side unit tests): `fiveam` or `parachute`
+- Structured logging/tracing (if SBCL built-ins are insufficient): to be selected deliberately
+
+### 1.5.3 Tight feedback loop (design before implementation)
+
+Requirements
+- A fast way to iterate on the SBCL-hosted engine without “rebuild the world” cycles.
+- First-class debugging: reproducible crashes, stack traces, and easy stepping through engine code.
+- Unified test story: SBCL-side unit tests + Emacs ERT conformance tests, both runnable from `mise`.
+
+Planned workflow (high-level)
+- Provide `mise` tasks for:
+  - starting an SBCL REPL in the right project context
+  - running SBCL-side unit tests quickly
+  - running Emacs ERT smoke/full suites (already Step 1)
+- Decide how we capture debug artifacts:
+  - SBCL debugger output
+  - core dumps/backtraces for C/SBCL boundary issues
+  - a minimal “engine trace” facility for tricky semantic mismatches
+
+Acceptance criteria
+- We can change engine code and re-run the SBCL-side unit tests in seconds.
+- We can run `test:smoke` frequently and `test:check` as a gate, with failures easy to triage.
 
 
 ## Step 2 — Rewrite Emacs Lisp engine to SBCL-hosted implementation
