@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Configure a macOS TTY-only out-of-tree build"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "-f --force" help="Re-run configure even if already configured"
+#USAGE flag "--no-autogen" help="Do not run autogen.sh even if ./configure is missing"
+#USAGE flag "--show-args" help="Print configure args and exit"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+#USAGE flag "--configure-extra <args>" help="Extra args appended to configure (split on whitespace)" default=""
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}"
+
+if [[ ! -f ./configure ]]; then
+  if [[ "${usage_no_autogen:-false}" == "true" ]]; then
+    echo "[configure:tty] missing ./configure and --no-autogen set" >&2
+    exit 1
+  fi
+  mise run bootstrap
+fi
+
+configure_path="${project_root}/configure"
+if [[ ! -x "${configure_path}" ]]; then
+  echo "[configure:tty] expected ${configure_path} to exist after autogen" >&2
+  exit 1
+fi
+
+configure_args=(
+  "--with-ns=no"
+  "--with-x=no"
+  "--with-pgtk=no"
+  "--with-x-toolkit=no"
+  "--with-tree-sitter=no"
+  "--without-native-compilation"
+)
+
+extra="${usage_configure_extra:-}"
+if [[ -n "${extra}" ]]; then
+  read -r -a extra_args <<< "${extra}"
+  configure_args+=("${extra_args[@]}")
+fi
+
+if [[ "${usage_show_args:-false}" == "true" ]]; then
+  printf '%s\n' "${configure_args[@]}"
+  exit 0
+fi
+
+if [[ -f "${build_dir}/config.status" && "${usage_force:-false}" != "true" ]]; then
+  echo "[configure:tty] already configured in ${build_dir}; use --force to reconfigure"
+  exit 0
+fi
+
+(
+  cd "${build_dir}"
+  echo "[configure:tty] configuring in ${build_dir}"
+  "${configure_path}" "${configure_args[@]}" | tee clmacs-configure.log
+)

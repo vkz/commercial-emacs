@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Run the default Emacs test suite (make check) in the build directory"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+#USAGE flag "-j --jobs <n>" help="make -j jobs (default: cpu count)" default=""
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+if [[ ! -f "${build_dir}/Makefile" ]]; then
+  mise run -- configure:tty --build-dir "${build_dir}"
+fi
+
+jobs="${usage_jobs:-}"
+if [[ -z "${jobs}" ]]; then
+  jobs="$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
+fi
+
+echo "[test:check] make -C ${build_dir} check (-j${jobs})"
+make -C "${build_dir}" -j"${jobs}" check

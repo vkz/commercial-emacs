@@ -27,6 +27,8 @@
 !.gitignore
 !.gitlab-ci.yml
 !.mailmap
+!.mise
+!.mise/**
 
 # Built by 'autogen.sh'.
 /aclocal.m4
@@ -118,6 +120,9 @@ lisp/subdirs.el
 
 # Dependencies.
 deps/
+
+# Out-of-tree builds used by clmacs.
+/build/
 
 # Logs and temporaries.
 *.log

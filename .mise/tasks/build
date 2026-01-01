@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Build clmacs (TTY-only) in the configured build directory"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+#USAGE flag "-j --jobs <n>" help="make -j jobs (default: cpu count)" default=""
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+
+if [[ ! -f "${build_dir}/Makefile" ]]; then
+  mise run -- configure:tty --build-dir "${build_dir}"
+fi
+
+jobs="${usage_jobs:-}"
+if [[ -z "${jobs}" ]]; then
+  jobs="$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
+fi
+
+ensure_symlink_tree() {
+  local src_dir="$1"
+  local dst_dir="$2"
+
+  mkdir -p "${dst_dir}"
+  for src in "${src_dir}/"*; do
+    local base
+    base="$(basename "${src}")"
+    if [[ "${base}" == "Makefile" ]]; then
+      continue
+    fi
+    if [[ ! -e "${dst_dir}/${base}" ]]; then
+      ln -s "${src}" "${dst_dir}/${base}"
+    fi
+  done
+}
+
+echo "[build] building in ${build_dir} (-j${jobs})"
+mkdir -p "${build_dir}/lib/bitset"
+
+# Out-of-tree builds in this repo expect to find (some) architecture-
+# independent runtime files in the build tree by relative paths.
+ensure_symlink_tree "${project_root}/etc" "${build_dir}/etc"
+ensure_symlink_tree "${project_root}/lisp" "${build_dir}/lisp"
+ensure_symlink_tree "${project_root}/leim" "${build_dir}/leim"
+ensure_symlink_tree "${project_root}/admin" "${build_dir}/admin"
+ensure_symlink_tree "${project_root}/admin/unidata" "${build_dir}/admin/unidata"
+ensure_symlink_tree "${project_root}/admin/charsets" "${build_dir}/admin/charsets"
+
+make -C "${build_dir}" -j"${jobs}"

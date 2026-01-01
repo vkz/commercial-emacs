@@ -368,7 +368,7 @@ NON_CXX_CFLAGS = -Wmissing-prototypes -Wnested-externs -Wold-style-definition \
 # MYCPPFLAGS is for by-hand Emacs-specific overrides, e.g.,
 # "make MYCPPFLAGS='-DDBUS_DEBUG'".
 EMACS_CFLAGS=-Demacs $(MYCPPFLAGS) -I. -I$(srcdir) \
-  -I$(lib) -I../lib \
+  -I$(lib) -I$(abs_top_srcdir)/lib \
   $(C_SWITCH_MACHINE) $(C_SWITCH_SYSTEM) $(C_SWITCH_X_SITE) \
   $(GNUSTEP_CFLAGS) $(CFLAGS_SOUND) $(RSVG_CFLAGS) $(IMAGEMAGICK_CFLAGS) \
   $(PNG_CFLAGS) $(LIBXML2_CFLAGS) $(LIBGCCJIT_CFLAGS) $(DBUS_CFLAGS) \
@@ -570,20 +570,20 @@ ALLLIBS = $(LIBS) $(W32_LIBS) $(LIBS_GNUSTEP) $(PGTK_LIBS) $(LIBX_BASE) $(LIBIMA
    $(LIBGMP) $(LIBGCCJIT_LIBS) $(XINPUT_LIBS) $(HAIKU_LIBS) \
    $(SQLITE3_LIBS) $(XCOMPOSITE_LIBS) $(XSHAPE_LIBS)
 
-../lisp/international/charscript.el:
-	$(MAKE) -C ../admin/unidata ../$@
+$(abs_top_srcdir)/lisp/international/charscript.el:
+	$(MAKE) -C ../admin/unidata $@
 
 ../admin/charsets/charsets.stamp:
 	$(MAKE) -C ../admin/charsets all
 
-../lisp/international/emoji-zwj.el:
-	$(MAKE) -C ../admin/unidata ../$@
+$(abs_top_srcdir)/lisp/international/emoji-zwj.el:
+	$(MAKE) -C ../admin/unidata $@
 
 emacs$(EXEEXT): $(LIBXMENU) $(ALLOBJS) $(LIBEGNU_ARCHIVE) $(EMACSRES) \
   globals.h \
   ../admin/charsets/charsets.stamp \
-  ../lisp/international/charscript.el \
-  ../lisp/international/emoji-zwj.el \
+  $(abs_top_srcdir)/lisp/international/charscript.el \
+  $(abs_top_srcdir)/lisp/international/emoji-zwj.el \
   $(libsrc)/make-fingerprint$(EXEEXT) $(etc)/DOC
 ifeq ($(HAVE_BE_APP),yes)
 	$(AM_V_CXXLD)$(CXX) -o $@.tmp \
@@ -649,7 +649,7 @@ $(oldXMenudir)/libXMenu11.a:
 	$(MAKE) -C $(dir $@) $(notdir $@)
 
 .PRECIOUS: ../config.status Makefile
-../config.status: ../configure.ac ../m4/*.m4
+../config.status: $(abs_top_srcdir)/configure.ac $(abs_top_srcdir)/m4/*.m4
 	$(MAKE) -C $(dir $@) $(notdir $@)
 Makefile: ../config.status $(srcdir)/Makefile.in
 	$(MAKE) -C .. src/$@

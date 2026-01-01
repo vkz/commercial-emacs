@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Run the built clmacs binary (TTY-only)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+#USAGE arg "[args]" var=#true hide=#true
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+bin="${build_dir}/src/emacs"
+
+if [[ ! -x "${bin}" ]]; then
+  mise run -- build --build-dir "${build_dir}"
+fi
+
+exec "${bin}" "$@"

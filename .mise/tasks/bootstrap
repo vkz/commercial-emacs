@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Generate configure and related files (autogen.sh)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "-f --force" help="Run even if ./configure exists"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+if [[ -f ./configure && "${usage_force:-false}" != "true" ]]; then
+  echo "[bootstrap] ./configure already exists; use --force to rerun"
+  exit 0
+fi
+
+echo "[bootstrap] running ./autogen.sh"
+./autogen.sh

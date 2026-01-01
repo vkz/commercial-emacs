@@ -1,0 +1,10 @@
+[env]
+CLMACS_BUILD_DIR = "build/macos-tty"
+
+# NOTE: We intentionally do not declare `sbcl` as a mise tool yet.
+# The current `asdf:mise-plugins/mise-sbcl` installer requires an
+# already-working host Common Lisp to build SBCL from source, and this
+# machine currently has no SBCL installed.
+#
+# Add `sbcl` here once SBCL is present on the machine, or once we have a
+# reliable bootstrapping strategy that still keeps SBCL as the runtime.
