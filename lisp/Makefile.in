@@ -25,10 +25,7 @@ top_builddir = @top_builddir@
 VPATH = $(srcdir)
 EXEEXT = @EXEEXT@
 
-# MinGW xargs needs an explicit limitation.
 XARGS_LIMIT = @XARGS_LIMIT@
-
-HAVE_NATIVE_COMP = @HAVE_NATIVE_COMP@
 
 -include ${top_builddir}/src/verbose.mk
 
@@ -40,13 +37,6 @@ COMPILER_EL = \
     emacs-lisp/byte-opt.el \
     emacs-lisp/bytecomp.el
 
-ifeq ($(HAVE_NATIVE_COMP),yes)
-COMPILER_EL += \
-    emacs-lisp/comp-common.el \
-    emacs-lisp/comp-cstr.el \
-    emacs-lisp/comp.el
-endif
-
 EMACS = ../src/emacs${EXEEXT}
 
 EMACSOPT = -Q -batch
@@ -56,22 +46,11 @@ BYTE_COMPILE_EXTRA_FLAGS =
 # loaddefs is a confusing historical name for autoloads
 loaddefs = $(shell find ${srcdir} -name '*loaddefs.el' ! -name '.*')
 
-ifeq ($(HAVE_NATIVE_COMP),yes)
-TARGET_EXT = eln
-TARGET_REGEX = byte\|native
-else
 TARGET_EXT = elc
-TARGET_REGEX = byte
-endif
 
 COMPILE_FLAGS = \
   --eval "(custom-set-variables (quote (byte-compile-warnings (quote all))))" \
   $(BYTE_COMPILE_EXTRA_FLAGS)
-
-ifeq ($(HAVE_NATIVE_COMP),yes)
-COMPILE_FLAGS += \
-  --eval "(setq native-comp-disable-subr-trampolines t)" -l comp
-endif
 
 # Prevent any settings in the user environment causing problems.
 unexport EMACSDATA EMACSDOC EMACSLOADPATH EMACSPATH EMACSNATIVELOADPATH
@@ -158,24 +137,17 @@ define byte-compile
 	$(AM_V_ELC)$(emacs) $(COMPILE_FLAGS) -f batch-byte-compile $<
 endef
 
-define native-compile
-	$(AM_V_ELN)$(emacs) $(COMPILE_FLAGS) -f batch-native-compile $<
-endef
 
 %.elc: %.el | $(COMPILER_EL:.el=.elc)
 	$(call byte-compile)
 $(COMPILER_EL:.el=.elc): %.elc : %.el
 	$(call byte-compile)
 
-# Cannot dep on $(COMPILER_EL:.el=.eln), else rug pulled from pdmp
-%.eln: %.el
-	$(call native-compile)
-
 # grep is the wrong way of doing this (hack-local-variables better).
 define compile-rest
-$(filter-out $(COMPILER_EL:.el=.$(TARGET_EXT)) $(COMPILE_FIRST:.el=.$(TARGET_EXT)), $(shell \
-  read -a arr <<<`find * -type f -name '*.el' -exec grep -L '^;.*[^a-zA-Z]no-\($(TARGET_REGEX)\)-compile: *t' {} + | sort | xargs $(XARGS_LIMIT) echo`; \
-  arr=( "$${arr[@]/%.el/.$(TARGET_EXT)}" ); \
+$(filter-out $(COMPILER_EL:.el=.elc) $(COMPILE_FIRST:.el=.elc), $(shell \
+  read -a arr <<<`find * -type f -name '*.el' -exec grep -L '^;.*[^a-zA-Z]no-byte-compile: *t' {} + | sort | xargs $(XARGS_LIMIT) echo`; \
+  arr=( "$${arr[@]/%.el/.elc}" ); \
   echo "$${arr[*]}"; \
 ))
 endef
@@ -186,18 +158,12 @@ compile: $(COMPILER_EL:.el=.$(TARGET_EXT)) \
   $(COMPILE_FIRST:.el=.$(TARGET_EXT)) \
   $$(call compile-rest)
 
-./leim/leim-list.el: ./international/titdic-cnv.$(TARGET_EXT)
+./leim/leim-list.el: ./international/titdic-cnv.elc
 	$(MAKE) -C ../leim all EMACS="$(EMACS)"
-
-ifeq ($(HAVE_NATIVE_COMP),yes)
-.PHONY: trampolines
-trampolines: compile
-	$(emacs) $(COMPILE_FLAGS) -f comp-compile-all-trampolines
-endif
 
 .PHONY: bootstrap-clean
 bootstrap-clean:
-	find . \( -name '*.elc' -o -name '*.eln' \) $(FIND_DELETE)
+	find . -name '*.elc' $(FIND_DELETE)
 
 # ldefs-boot.el is merely the last working loaddefs.el that was manually
 # checked in.  It acts as a stopgap for the bootstrap pdump until

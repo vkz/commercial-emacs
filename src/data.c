@@ -3855,6 +3855,7 @@ syms_of_data (void)
   /* Types that type-of returns.  */
   DEFSYM (Qboolean, "boolean");
   DEFSYM (Qinteger, "integer");
+  DEFSYM (Qfixnum, "fixnum");
   DEFSYM (Qbignum, "bignum");
   DEFSYM (Qsymbol, "symbol");
   DEFSYM (Qstring, "string");

@@ -41,9 +41,6 @@ version=@version@
 ### e.g., 'x86_64-unknown-linux-gnu' or 'powerpc-ibm-aix7.1.2.0'
 configuration=@configuration@
 
-### The nt/ subdirectory gets built only for MinGW
-NTDIR=@NTDIR@
-
 top_builddir = @top_builddir@
 -include ${top_builddir}/src/verbose.mk
 
@@ -276,7 +273,7 @@ EMACSFULL = `echo emacs-${version} | sed '$(TRANSFORM)'`${EXEEXT}
 EMACS_PDMP = `./src/emacs${EXEEXT} --fingerprint`.pdmp
 
 # Subdirectories to make recursively.
-SUBDIR = $(NTDIR) lib lib-src src lisp
+SUBDIR = lib lib-src src lisp
 
 # The subdir makefiles created by config.status.
 SUBDIR_MAKEFILES_IN = @SUBDIR_MAKEFILES_IN@
@@ -284,7 +281,6 @@ SUBDIR_MAKEFILES = $(patsubst ${srcdir}/%,%,${SUBDIR_MAKEFILES_IN:.in=})
 
 # Non-makefile files created by config.status.
 CONFIG_STATUS_FILES_IN = \
- ${srcdir}/nt/emacs.rc.in ${srcdir}/nt/emacsclient.rc.in \
  ${srcdir}/doc/man/emacs.1.in ${srcdir}/src/emacs-module.h.in \
  ${srcdir}/src/module-env-*.h
 
@@ -300,7 +296,7 @@ gsettings_SCHEMAS = etc/org.gnu.emacs.defaults.gschema.xml
 .PHONY: all
 all: ${SUBDIR} info $(gsettings_SCHEMAS:.xml=.valid) lisp ${OTHER_FILES}
 
-.PHONY: ${SUBDIR} blessmail epaths-force epaths-force-w32 epaths-force-ns-self-contained etc-emacsver
+.PHONY: ${SUBDIR} blessmail epaths-force epaths-force-ns-self-contained etc-emacsver
 
 .PHONY: ns-app
 ns-app: | lisp
@@ -350,29 +346,6 @@ epaths-force:
 	  -e 's;\(#.*PATH_DOC\).*$$;\1 "${etcdocdir}";') &&		\
 	${srcdir}/build-aux/move-if-change epaths.h.$$$$ src/epaths.h
 
-# The w32 build needs a slightly different editing, and it uses
-# nt/epaths.nt as the template.
-#
-# Use the value of ${locallisppath} supplied by 'configure',
-# to support the --enable-locallisppath argument.
-#
-# In this case, the paths written to 'src/epaths.h' must be in native
-# MS-Windows format (e.g. 'c:/foo/bar'), because temacs is a MinGW
-# program that doesn't support MSYS-style paths (e.g. '/c/foo/bar' or
-# '/foo/bar').
-epaths-force-w32:
-	@(w32srcdir=`${srcdir}/build-aux/msys-to-w32 "${abs_srcdir}"`; \
-	  w32prefix=`${srcdir}/build-aux/msys-to-w32 "${prefix}"`; \
-	  w32locallisppath=`${srcdir}/build-aux/msys-to-w32 "${locallisppath}"` ; \
-	  w32locallisppath=$${w32locallisppath//$${w32prefix}/"%emacs_dir%"} ; \
-	  sed < ${srcdir}/nt/epaths.nt > epaths.h.$$$$		\
-	  -e 's;\(#.*PATH_SITELOADSEARCH\).*$$;\1 "'"$${w32locallisppath//;/\\;}"'";' \
-	  -e 's;\(#.*PATH_REL_LOADSEARCH\).*$$;\1 "${lispdirrel}";' \
-	  -e '/^.*#/s/@VER@/${version}/g' 			\
-	  -e '/^.*#/s/@CFG@/${configuration}/g' 		\
-	  -e "/^.*#/s|@SRC@|$${w32srcdir}|g") &&		\
-	${srcdir}/build-aux/move-if-change epaths.h.$$$$ src/epaths.h
-
 # A NextStep style app bundle is relocatable, so instead of
 # hard-coding paths try to generate them at run-time.
 #
@@ -384,17 +357,13 @@ epaths-force-ns-self-contained: epaths-force
 	  -e 's;${ns_appdir}/;;') &&			\
 	${srcdir}/build-aux/move-if-change epaths.h.$$$$ src/epaths.h
 
-ifneq ($(NTDIR),)
-$(NTDIR): lib
-endif
-
-lib-src src: $(NTDIR) lib
+lib-src src: lib
 
 src: lib-src
 
 lisp: src
 
-lib lib-src lisp nt: Makefile
+lib lib-src lisp: Makefile
 	$(MAKE) -C $@ all
 
 src: Makefile
@@ -427,10 +396,10 @@ $(srcdir)/configure: $(srcdir)/configure.ac $(srcdir)/m4/*.m4
 	cd $(srcdir) && ./autogen.sh autoconf
 
 .PHONY: install install-arch-dep install-arch-indep install-etcdoc install-info
-.PHONY: install-man install-etc install-strip install-$(NTDIR)
-.PHONY: uninstall uninstall-$(NTDIR)
+.PHONY: install-man install-etc install-strip
+.PHONY: uninstall
 
-install: install-arch-indep install-etcdoc install-arch-dep install-$(NTDIR) install-gsettings-schemas
+install: install-arch-indep install-etcdoc install-arch-dep install-gsettings-schemas
 
 ## Ensure that $subdir contains a subdirs.el file.
 ## Here and elsewhere, we set the umask so that any created files are
@@ -450,7 +419,7 @@ write_subdir=if [ -f "$${subdir}/subdirs.el" ]; \
 ### Install the executables that were compiled specifically for this machine.
 ### We do install-arch-indep first because the executable needs the
 ### Lisp files and DOC file to work properly.
-install-arch-dep: src pdump install-arch-indep install-etcdoc install-$(NTDIR)
+install-arch-dep: src pdump install-arch-indep install-etcdoc
 	umask 022; ${MKDIR_P} "$(DESTDIR)${bindir}"
 	$(MAKE) -C lib-src install
 ifeq (${ns_self_contained},yes)
@@ -466,12 +435,6 @@ ifndef NO_BIN_LINK
 	cd "$(DESTDIR)${bindir}" && $(LN_S_FILEONLY) "$(EMACSFULL)" "$(EMACS)"
 endif
 endif
-
-### Windows-specific install target for installing programs produced
-### in nt/, and its Posix do-nothing shadow.
-install-:
-install-nt:
-	$(MAKE) -C $(NTDIR) install
 
 ## In the share directory, we are deleting:
 ## applications (with emacs.desktop, also found in etc/)
@@ -738,7 +701,7 @@ install-strip:
 ### create (but not the noninstalled files such as 'make all' would create).
 ###
 ### Don't delete the lisp and etc directories if they're in the source tree.
-uninstall: uninstall-$(NTDIR) uninstall-doc uninstall-gsettings-schemas
+uninstall: uninstall-doc uninstall-gsettings-schemas
 	rm -f "$(DESTDIR)$(includedir)/emacs-module.h"
 	$(MAKE) -C lib-src uninstall
 	-unset CDPATH; \
@@ -791,12 +754,6 @@ uninstall: uninstall-$(NTDIR) uninstall-doc uninstall-gsettings-schemas
 	  [ -s "$${file}" ] || rm -f "$$file"; \
 	done
   endif
-
-### Windows-specific uninstall target for removing programs produced
-### in nt/, and its Posix do-nothing shadow.
-uninstall-:
-uninstall-nt:
-	$(MAKE) -C $(NTDIR) uninstall
 
 .PHONY: TAGS tags
 TAGS tags: lib lib-src # src

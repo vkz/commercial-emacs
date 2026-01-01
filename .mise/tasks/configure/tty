@@ -40,7 +40,6 @@ configure_args=(
   "--with-pgtk=no"
   "--with-x-toolkit=no"
   "--with-tree-sitter=no"
-  "--without-native-compilation"
 )
 
 extra="${usage_configure_extra:-}"

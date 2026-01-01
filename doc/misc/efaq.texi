@@ -3804,7 +3804,7 @@ and any Emacs Info files that might be in @file{/usr/local/share/info/}.
 @end itemize
 
 @node Emacs for other operating systems
-@section Where can I get Emacs for macOS, MS Windows, etc?
+@section Where can I get Emacs for macOS and other systems?
 
 @cindex Apple computers, Emacs for
 @cindex Macintosh, Emacs for
@@ -3812,26 +3812,11 @@ and any Emacs Info files that might be in @file{/usr/local/share/info/}.
 Emacs supports macOS natively.  See the file @file{nextstep/INSTALL}
 in the distribution.
 
-@cindex FAQ for Emacs on MS-Windows
-@cindex Emacs for MS-Windows
-@cindex Microsoft Windows, Emacs for
-There is a separate FAQ for Emacs on MS-Windows,
-@pxref{Top,,,efaq-w32,FAQ for Emacs on MS Windows}.
-
 @cindex GNUstep, Emacs for
 Emacs supports GNUstep natively.  See the file @file{nextstep/INSTALL}
 in the distribution.
 
-@cindex MS-DOS, Emacs for
-@cindex DOS, Emacs for
-@cindex Compiling Emacs for DOS
-@cindex Emacs for MS-DOS
-To build Emacs from source for MS-DOS, see the instructions in the file
-@file{msdos/INSTALL} in the distribution.  The DOS port builds and runs
-on plain DOS, and also on all versions of MS-Windows from version 3.X
-onwards, including Windows XP and Vista.  Pre-built binaries may be
-available at
-@uref{https://www.delorie.com/pub/djgpp/current/v2gnu/emacs.README}
+This fork does not ship MS-Windows or MS-DOS ports.
 
 For a list of other implementations of Emacs (and Emacs
 look-alikes), consult the list of ``Emacs implementations and literature,''

@@ -418,7 +418,6 @@ OPTION_DEFAULT_ON([gnutls],[don't use -lgnutls for SSL/TLS support])
 OPTION_DEFAULT_ON([zlib],[don't compile with zlib decompression support])
 OPTION_DEFAULT_ON([modules],[don't compile with dynamic modules support])
 OPTION_DEFAULT_ON([threads],[don't compile with elisp threading support])
-OPTION_DEFAULT_OFF([cygwin32-native-compilation],[use native compilation on 32-bit Cygwin])
 OPTION_DEFAULT_ON([xinput2],[don't use version 2 of the X Input Extension for input])
 OPTION_DEFAULT_OFF([small-ja-dic],[generate a smaller-size Japanese dictionary])
 
@@ -777,6 +776,14 @@ If you think it should, please send a report to ${PACKAGE_BUGREPORT}.
 Check 'etc/MACHINES' for recognized configuration names.])
 fi
 
+dnl This fork targets modern Unix-like systems only.
+case "${opsys}" in
+  darwin | gnu-linux | freebsd) ;;
+  *)
+    AC_MSG_ERROR([This fork supports only macOS (darwin), GNU/Linux, and FreeBSD.])
+  ;;
+esac
+
 #### Choose a compiler.
 
 dnl Don't bother to test for C89.
@@ -926,20 +933,8 @@ AC_ARG_ENABLE([gcc-warnings],
 	   [gl_gcc_warnings=warn-only],
 	   [gl_GCC_VERSION_IFELSE([5], [3], [gl_gcc_warnings=warn-only])])])])])
 
-AC_ARG_WITH([native-compilation],
-  [AS_HELP_STRING([--with-native-compilation@<:@=TYPE@:>@],
-                  [compile with Emacs Lisp native compiler support.])],
-  [
-  case $withval in
-     aot)
-       withval=yes
-       ;;
-     yes|no) ;;
-     *)      AC_MSG_ERROR([bad value $withval for native-compilation option]) ;;
-   esac
-   with_native_compilation=$withval],
-  [with_native_compilation=yes]
-)
+dnl This fork disables ELisp native compilation (libgccjit).
+with_native_compilation=no
 
 AC_ARG_ENABLE([check-lisp-object-type],
   [AS_HELP_STRING([--enable-check-lisp-object-type],
@@ -1294,13 +1289,6 @@ their sources.] )
   fi
 fi
 AC_SUBST([MAKEINFO])
-
-if test $opsys = mingw32; then
-   DOCMISC_W32=efaq-w32
-else
-   DOCMISC_W32=
-fi
-AC_SUBST([DOCMISC_W32])
 
 dnl Add our options to ac_link now, after it is set up.
 
@@ -6454,7 +6442,7 @@ dnl config.status treats $srcdir specially, so I think this is ok...
 AC_CONFIG_FILES([$srcdir/doc/man/emacs.1])
 
 m4_define([subdir_makefiles],
-  [lib/Makefile lib-src/Makefile oldXMenu/Makefile doc/emacs/Makefile doc/misc/Makefile doc/lispintro/Makefile doc/lispref/Makefile src/Makefile lwlib/Makefile lisp/Makefile leim/Makefile nextstep/Makefile nt/Makefile])
+  [lib/Makefile lib-src/Makefile oldXMenu/Makefile doc/emacs/Makefile doc/misc/Makefile doc/lispintro/Makefile doc/lispref/Makefile src/Makefile lwlib/Makefile lisp/Makefile leim/Makefile nextstep/Makefile])
 SUBDIR_MAKEFILES="subdir_makefiles"
 AC_CONFIG_FILES(subdir_makefiles)
 
@@ -6500,9 +6488,7 @@ dnl to run 'make prefix=/some/where/else' and override the values set
 dnl by configure.  This also explains the 'move-if-change' test and
 dnl the use of force in the 'epaths-force' rule in Makefile.in.
 AC_CONFIG_COMMANDS([src/epaths.h], [
-if test "${opsys}" = "mingw32"; then
-  ${MAKE-make} MAKEFILE_NAME=do-not-make-Makefile epaths-force-w32
-elif test "$HAVE_NS" = "yes" && test "$EN_NS_SELF_CONTAINED" = "yes"; then
+if test "$HAVE_NS" = "yes" && test "$EN_NS_SELF_CONTAINED" = "yes"; then
   ${MAKE-make} MAKEFILE_NAME=do-not-make-Makefile epaths-force-ns-self-contained
 else
   ${MAKE-make} MAKEFILE_NAME=do-not-make-Makefile epaths-force

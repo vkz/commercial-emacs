@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-#MISE description="Build clmacs (TTY-only) in the configured build directory"
+#MISE description="Build clmacs (TTY-only) in the configured build directory (no manuals)"
 #USAGE flag "-h --help" help="Print help"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
 #USAGE flag "-j --jobs <n>" help="make -j jobs (default: cpu count)" default=""
@@ -54,4 +54,4 @@ ensure_symlink_tree "${project_root}/admin" "${build_dir}/admin"
 ensure_symlink_tree "${project_root}/admin/unidata" "${build_dir}/admin/unidata"
 ensure_symlink_tree "${project_root}/admin/charsets" "${build_dir}/admin/charsets"
 
-make -C "${build_dir}" -j"${jobs}"
+make -C "${build_dir}" -j"${jobs}" src
