@@ -77,6 +77,16 @@ This is the core bet of Option B.
 
 Option B is large enough that it helps to name two concrete approaches.
 
+## Stance for this worktree ("clemacs" branch)
+
+This branch is explicitly pursuing the ambitious variant:
+
+- Commit to **B1** as the target architecture.
+- Allow **B2-like shims only as a timeboxed bootstrap aid**, with explicit exit
+  criteria (see "Anti-hybrid guardrails" below).
+- Treat "Elisp" as a **CL-hosted dialect + compatibility layer**, not as a goal
+  to perfectly preserve every historical Emacs Lisp implementation quirk.
+
 ### B1: “Handle-based C API” (best-aligned with SBCL-canonical values)
 
 Rewrite the C substrate to accept opaque handles rather than `Lisp_Object`.
@@ -111,6 +121,20 @@ Cons:
 
 If the stated goal is “SBCL does its magic with optimizations and GC”, B1 lines
 up more directly; B2 is primarily a transitional compromise.
+
+### Anti-hybrid guardrails (what "no ugly hybrids" means operationally)
+
+We still need transition scaffolding, but we want it to be:
+
+- **Mechanical and removable**: shims exist to keep progress measurable, not as
+  a permanent architecture.
+- **Timeboxed**: every shim has a milestone after which it must be deleted.
+- **One canonical owner per responsibility**:
+  - SBCL owns evaluation and Lisp object lifetimes (B1 goal).
+  - C owns OS/TTY integration that is inherently system-bound.
+
+Concretely, any bridge that introduces "two heaps" or "C-owned Lisp values"
+must be treated as a temporary bootstrap tool, not a destination.
 
 ---
 
@@ -246,6 +270,68 @@ In Option B, equivalents must exist:
 
 This is a real workload item, not an afterthought.
 
+### Bytecode compatibility (initial position)
+
+We should **not** prioritize Emacs bytecode (`.elc`) compatibility early.
+
+Rationale:
+- If "Elisp" is implemented as a CL dialect, SBCL's compiler is a better
+  optimization path than keeping an Elisp-specific bytecode VM.
+- Most real-world packages can be distributed and loaded as source (`.el`) and
+  compiled locally by the host (in our case: to SBCL code), so `.elc` is not a
+  fundamental requirement for developer velocity.
+
+Practical consequence:
+- Early clemacs should load **source** and either interpret or compile to CL.
+- Bytecode support remains an optional later milestone only if it unlocks a
+  large compatibility win (e.g. specific upstream boot paths we cannot easily
+  replace).
+
+### GC / cleanup strategy during active migration (answering "let it leak?")
+
+During early bring-up, we can accept that the experimental clemacs runtime:
+
+- does not need to run for hours, but it **must not crash** or wedge the TTY,
+  and it must reliably run our test gates.
+
+That still implies two rules:
+
+1. **Do not leak critical OS resources** even in the short term:
+   - terminal modes,
+   - file descriptors/process handles,
+   - temporary files that break subsequent test runs.
+
+2. **Do not depend on Emacs GC correctness** for CL-owned values:
+   - once B1 is in play, Emacs GC is not the authority for Lisp lifetimes.
+
+Reasonable bootstrap stance:
+- Allow some process-lifetime leaks for "cold path" C allocations while we are
+  still moving responsibilities, but keep cleanup for "must restore" resources
+  via CL `unwind-protect` and/or explicit substrate APIs.
+
+---
+
+## Migrating "more than the evaluator" (where to cut the boundary)
+
+The key observation from the current codebase is that `Lisp_Object` flows
+through much more than `eval.c`. There is no single "easy seam" where only the
+evaluator changes and everything else stays untouched.
+
+So the question becomes: what do we port together to keep the system coherent
+and avoid chatty CL<->C glue?
+
+Guiding goal:
+- **Minimize cross-boundary calls** by keeping high-level editor logic in CL and
+  using C for coarse-grained substrate services.
+
+Working hypothesis (subject to revision once we inventory call graphs):
+- Move command dispatch, keymap lookup, and most "editor logic" to CL early.
+- Keep TTY IO, low-level filesystem/process/pty, and platform sysdeps in C via a
+  small substrate API.
+
+This is intentionally different from "embed SBCL into the existing C command
+loop" (Option A). It is also why B1 requires large but mechanical C refactors.
+
 ---
 
 ## Allocation/destruction patterns and “arena allocation” on modern machines
@@ -291,6 +377,23 @@ Option B’s main language-level upside:
 
 But: the substrate contract (buffers, keymaps, markers, etc.) remains the
 hard half, and must be planned explicitly via the substrate API.
+
+### Language contract (initial, for developer velocity)
+
+We should explicitly bias toward "Elisp is mostly CL" and accept a small number
+of controlled incompatibilities if they enable faster progress and keep the end
+state clean.
+
+Defaults for this branch:
+- Namespace: read/compile "elisp" forms into a single dedicated package (e.g.
+  `ELISP`) to approximate the global namespace.
+- Keywords: accept CL `:keywords` as CL keywords (self-evaluating) in the
+  `KEYWORD` package rather than emulating elisp's `:foo` as an ordinary symbol.
+- Binding: lexical binding is the default; dynamic binding is only for variables
+  declared via `defvar` (or equivalent "special" declarations).
+- Reader: support only the highest-leverage elisp read tokens (vectors `[]`,
+  character syntax `?x`, etc.), and prefer a small prepass/readtable over a full
+  custom reader.
 
 ---
 
@@ -360,3 +463,28 @@ Acceptance:
 4. Do we replace pdumper, reuse it, or defer it?
 5. How do we map Emacs quit / nonlocal exits to CL conditions and back?
 6. Performance: which operations must be hot in C vs hot in CL?
+
+## Working answers (to keep us moving)
+
+These are "default answers" for this branch; revise only with a concrete reason.
+
+1. **B1**, with B2 shims timeboxed and scheduled for deletion.
+2. Minimal substrate for first interactive loop:
+   - TTY input (key reading),
+   - TTY output (cursor motion + write spans),
+   - filesystem (open/read/write/stat),
+   - time/timers (sleep, monotonic clock),
+   - process spawning (eventually; not needed for M2).
+3. Prefer CL-owned core data (buffers/keymaps/text props) once we are past the
+   "hello loop". Until then, treat anything still C-owned as temporary and
+   accessed through stable handles.
+4. **Defer pdumper** for clemacs bring-up; use an SBCL core/image as the fast
+   startup story. Revisit pdumper only if it is strictly required for parity.
+5. Map Emacs nonlocal exits into CL conditions:
+   - "quit" becomes a specific condition type that CL can handle/restart.
+   - "throw/catch" maps to CL `catch`/`throw`.
+   - substrate failures return error codes that CL turns into conditions.
+6. Hot paths should be kept within a single runtime:
+   - if a loop is in CL, keep data in CL and avoid per-element C calls;
+   - if a loop must be in C (rare initially), operate on C-native data and
+     avoid calling back into CL per element.

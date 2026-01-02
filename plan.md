@@ -144,79 +144,266 @@ Status (DONE, 2026-01-02)
   - `mise run inventory:regen`
   - `mise run inventory:check` (fails if mismatch or if inventory is out of date)
 
-### 3) Decide and document the embedding boundary (what stays C vs what becomes SBCL first)
+### 3) Decide and document the embedding boundary (Option A vs Option B)
 
-- You need a crisp “first integration milestone”, e.g.:
-  - SBCL loads + can evaluate a small embedded ELisp subset, called from `Feval`/`Fapply` (or a parallel entrypoint).
-  - Or SBCL implements reader/printer first (often easier to validate early), while evaluation remains in C temporarily.
-- Write down the exact boot path: how Emacs reaches a usable state (loadup/pdump/startup) when parts of ELisp move.
+This repo now has two explicit design documents:
 
-### 4) Create “compatibility seams” in the C runtime (so you can swap subsystems gradually)
+- Option A ("C-hosted, embed SBCL"): `plans/emacl.md`
+- Option B ("SBCL-hosted, C as substrate library"): `plans/clemacs.md`
 
-- Identify the choke points you’ll eventually replace:
-  - reader: `lread.c` paths
-  - evaluator: `eval.c` / `bytecode.c`
-  - printer: `print.c`
-  - symbol/value/function cells, environments, backtrace/debugger hooks
-- Put thin indirection layers around them (even if initially they just call the existing implementation), so later you can route calls to SBCL without rewriting half of Emacs at once.
+For this worktree/branch ("clemacs"), commit to Option B, specifically **B1
+handle-based substrate API**, with a CL-first "Elisp as CL dialect" stance.
 
-### 5) Hard rules for removed features and future removals (to avoid false negatives)
+Decisions (record as the conformance contract for this branch)
 
-- Keep a single source of truth listing what is permanently gone: GUI backends, modules, nativecomp, x-dnd, etc.
-- Ensure the test runner automatically skips tests that depend on removed features (rather than deleting random tests ad hoc).
-- Add guardrails like your existing `trim:check`, but focused for the rewrite too (e.g., “no new nativecomp references”, “no GUI lisp files reintroduced”).
+- Process ownership (initial): keep the existing `src/emacs` build intact for
+  baseline tests, and build a separate experimental `clemacs` binary/image for
+  Option B bring-up.
+- Value model (target): CL owns Lisp values and their lifetimes; C is forbidden
+  from depending on `Lisp_Object` except behind explicitly timeboxed shims.
+- Bytecode: do not prioritize `.elc` / Emacs bytecode compatibility initially.
+- Semantics stance: "Elisp" is a compat layer; prefer CL constructs where the
+  migration cost is mechanical and bounded.
+- Syntax/namespace stance (initial):
+  - read and compile elisp into a dedicated `ELISP` package,
+  - accept CL `:keywords` as CL keywords in the `KEYWORD` package (migration
+    may be required),
+  - provide reader support for the highest-impact tokens (e.g. `[]`, `?x`),
+  - treat lexical binding as the default; dynamic binding is explicit via
+    `defvar`-style declarations (or an equivalent `special` policy).
+
+First integration milestone (must be crisp)
+
+- Start SBCL, load a CL system, call into the C substrate, and return a value.
+- Add a tiny "hello command loop" in CL (TTY): read a key, run a command, update
+  the screen, quit cleanly.
+
+Boot story (write down and keep correct)
+
+- Existing baseline stays: `mise run build`, `mise run run`, `mise run test:*`
+  remain meaningful for the C-hosted Emacs while clemacs is experimental.
+- clemacs boot uses an SBCL core/image (pdumper deferred); it loads:
+  1) substrate FFI bindings,
+  2) the CL-hosted Elisp dialect layer,
+  3) a minimal editor core and test harness.
+
+### 4) Create compatibility seams in the C runtime (for Option B1)
+
+In Option B1, the key seam is not "swap eval.c later"; it is "stop letting
+`Lisp_Object` be the substrate ABI."
+
+Action items (C side)
+
+- Introduce an explicit substrate API layer (new header + C files) that:
+  - exports a small, stable C ABI (TTY IO, filesystem, timers, etc.),
+  - uses `emx_value` (opaque handles) for any Lisp values crossing the boundary,
+  - never exposes `Lisp_Object` in the substrate header.
+- Create timeboxed shims (if needed) that adapt legacy `Lisp_Object` code to the
+  new substrate API, and schedule their deletion.
+
+Action items (CL side)
+
+- Choose a stable-handle strategy and implement it early:
+  - default: integer handles backed by a CL-managed table,
+  - optional later: pinned/immobile objects if performance demands it.
+- Define a single error propagation model for CL<->C:
+  - substrate returns error codes/errno-ish data,
+  - CL converts to conditions (including a dedicated "quit" condition).
+
+Guardrails
+
+- Any new C code in the substrate layer must not include or traffic in
+  `Lisp_Object`.
+- Any B2-like bridging must be explicitly marked as temporary and have a
+  milestone after which it is removed.
+
+### 5) Hard rules for removed features and future removals (avoid false negatives)
+
+Keep the Step 0/1 invariants as hard constraints:
+
+- GUI backends stay removed.
+- Dynamic modules stay removed.
+- Native compilation stays disabled.
+
+Add clemacs-specific constraints (until proven necessary)
+
+- Source-only load path initially (no `.elc` requirements).
+- No "reintroduce GUI-only lisp" for clemacs to get tests green; instead, update
+  the test contract skip lists.
 
 ### 6) Build/debug ergonomics tuned for the rewrite
 
-- Add a standard “debug build profile” (CFLAGS, assertions, maybe sanitizers where feasible) that agents always use when touching eval/alloc/GC-adjacent code.
-- Add a fast “core crash repro” loop: run batch eval scripts under the built `emacs` and capture backtraces reliably.
+Make clemacs iteration loops as short as the existing `mise run verify` loop.
 
-### 7) Decide the SBCL ecosystem dependency policy now (explicit opt-in)
+- SBCL: run SBCL via `mise` (tools and/or tasks), and keep invocation flags
+  deterministic across developers and CI.
+- Add `mise` tasks (new, clemacs-specific):
+  - `clemacs:build` / `clemacs:run` for the SBCL-hosted binary/image
+  - `clemacs:test:smoke` for CL-level tests (fast, always runnable)
+  - `clemacs:verify` as the one-command loop for clemacs bring-up
+- Debugging:
+  - standardize on SLY/SLYNK attachment to the running SBCL process,
+  - ensure crashes yield actionable backtraces on both sides (C and SBCL).
 
-- Write down:
-  - whether you allow Quicklisp/Ultralisp at all
-  - how dependencies are vendored/pinned (git submodules? vendored tarballs? ASDF local-projects?)
-  - what categories are allowed (testing, parsing, unicode, ffi, logging)
-- This prevents “just add library X” sprawl once implementation pressure hits.
+Execution model (two loops, both supported)
 
-### 8) Autoloads / generated artifacts policy
+1. Non-interactive "agent gate" loop
+   - Use one-shot invocations for determinism:
+     - `sbcl --non-interactive` for eval/test commands
+     - add `--disable-debugger` for CI-like runs so we never wedge waiting on an
+       interactive debugger prompt
+   - Expectation: this is the default for `clemacs:test:*` and `clemacs:verify`.
+   - Performance note: if one-shot startup becomes a bottleneck, mitigate with:
+     - precompiled FASLs and incremental caching under the clemacs build dir,
+     - an SBCL saved core/image for clemacs dev loops.
 
-- Right now you’re editing/depending on generated-ish files (`ldefs-boot.el`, `loaddefs.el` is ignored).
-- Before the rewrite, decide:
-  - what is regenerated, when, and by which `mise` task
-  - what is checked in vs always-generated
-- Otherwise you’ll hit confusing rebuild diffs and “file came back” regressions mid-refactor.
+2. Interactive "human REPL" loop
+   - Provide `mise run clemacs:slynk` to start a long-lived SBCL with SLYNK.
+   - Developer attaches with `M-x sly-connect` and uses SLY to compile/eval,
+     inspect values, and drive the debugger UI.
 
-## SBCL-hosted engine rewrite (high-level, after prep)
+TTY safety (avoid wedging the shell)
 
-This is the main project. The plan here must be explicit about milestones and test gates.
+- Until the "hello TTY loop" milestone, prefer headless/non-interactive tests.
+- For any interactive TTY loop work:
+  - use CL `unwind-protect` around terminal raw-mode changes, and
+  - wrap `clemacs:run` in a shell guard that snapshots/restores `stty` state.
+- Optional safety harness: run interactive clemacs inside `tmux` so killing the
+  session restores a usable outer terminal even if clemacs wedges.
 
-### Architecture spike
+### 7) SBCL ecosystem dependency policy (explicit opt-in, SBCL-only)
 
-Questions to answer early
-- How does `src/emacs` start/own the SBCL runtime?
-- How do we represent Lisp values across the boundary (C <-> CL) without GC hazards?
-- How do we call “primitive” operations that remain implemented in C while the engine is in CL?
+Policy (branch default)
 
-Deliverable
-- A written “engine boundary contract” (what is implemented in CL vs C, and the calling convention).
+- SBCL-only is acceptable; do not spend effort on portability until later.
+- Allow dependencies only when they:
+  1) cut implementation time significantly,
+  2) are stable/widely used,
+  3) do not define Elisp semantics,
+  4) can be swapped later.
 
-Acceptance criteria
-- We can start Emacs and evaluate a minimal Emacs Lisp form via the SBCL-hosted engine, in the real
-  command loop (not just a toy harness).
+Initial allowed set (expected to be enough for bring-up)
 
-### Port plan for the “C-defined Lisp core”
+- ASDF/UIOP (project structure)
+- Alexandria (utilities)
+- CFFI (FFI to the substrate library)
+- named-readtables (isolated reader mode for Elisp tokens)
+- Test framework: pick one (FiveAM or Parachute)
 
-Scope we must eventually reimplement (high-level)
-- The evaluator and apply/funcall machinery currently in C.
-- The reader (or an equivalent that produces identical Lisp objects/semantics).
-- Core object model (symbols, conses, vectors, strings, numbers, hash tables, markers, etc.) with
-  correct printing and equality semantics.
-- The “defuns/defmacros in C” surface area (every primitive exposed to Lisp must exist and behave
-  correctly).
+Optional (only if we have a concrete need)
 
-Suggested milestones (test-gated)
-- M1: Reader + printer parity for basic types; passes `test/src/lread-tests.el`
-- M2: Core eval/apply parity for special forms and function call; passes smoke subset (`eval-tests`, `macroexp-tests`)
-- M3: Bytecode execution parity (if we keep bytecode); passes `bytecomp-tests` / `byte-run-tests` as relevant
-- M4: Pass `mise run test:check` with a documented exception list (ideally empty)
+- Eclector (CST/reader + source locations)
+- Serapeum (higher-level utilities)
+- Trivia (pattern matching for AST transforms)
+- SLY/SLYNK (interactive debugging; dev-only)
+
+Vendoring/pinning (decide once, then stick to it)
+
+- Prefer vendored/pinned sources in-repo (submodules or `vendor/`) over global
+  Quicklisp state. If Quicklisp is used, it must be pinned and automated via
+  `mise` tasks so it is reproducible.
+
+### 8) Autoloads / generated artifacts policy (for clemacs)
+
+The C-hosted Emacs build has existing "generated-ish" artifacts and policies.
+clemacs will introduce more.
+
+Rules to decide up front
+
+- Any generated/transformed artifacts for clemacs should live out-of-tree under
+  `build/` (or a clemacs-specific build dir) unless there is a strong reason to
+  commit them.
+- If we add a source-to-source rewrite step (Elisp -> CL-ish), it must be:
+  - deterministic,
+  - driven by a `mise` task,
+  - cached/incremental where possible,
+  - diffable for review.
+
+## clemacs rewrite plan (Option B1, test-gated milestones)
+
+This section is the actionable plan for this branch. The goal is to keep
+progress measurable and always "execution guided": make a change, run a gate,
+only proceed if the gate behaves as expected.
+
+### Milestone B1-0: repo + toolchain readiness
+
+Deliverables
+- SBCL installed and invoked deterministically.
+- A minimal CL system layout for clemacs (ASDF system + entrypoint).
+- `mise run clemacs:build` and `mise run clemacs:run` exist (even if they only
+  start SBCL and print a banner).
+- Measure one-shot latency (wall time) for `clemacs:eval`/`clemacs:test:smoke`
+  and decide whether we also need a saved core for fast iteration.
+
+Gate
+- `mise run clemacs:run` starts and exits cleanly from a terminal.
+
+### Milestone B1-1: substrate library callable from SBCL
+
+Deliverables
+- C substrate library builds as a dylib (or linked objects) with a tiny API:
+  - version/probe call,
+  - one trivial function (e.g., return platform string).
+- CL code calls the substrate via CFFI and gets the correct result.
+
+Gate
+- A CL-level smoke test calls the substrate and validates results.
+
+### Milestone B1-2: stable handle table + error model
+
+Deliverables
+- `emx_value` handle type and CL-side handle table.
+- Defined C<->CL error propagation contract (return codes -> conditions).
+- Defined "quit" propagation model.
+
+Gate
+- CL tests cover handle allocation/freeing and error propagation.
+
+### Milestone B1-3: Elisp-as-CL dialect loader (source first)
+
+Deliverables
+- A loader that can read a restricted Elisp subset and run it as CL (either via
+  reader macros or a prepass + standard CL reader).
+- A compatibility layer module (`ELISP` package) with initial shims:
+  `defun`, `defvar`, `setq`, basic predicates, and plists.
+
+Gate
+- A small compatibility test suite runs under SBCL and cross-checks a handful of
+  expressions against the baseline C-hosted `emacs -Q --batch`.
+
+### Milestone B1-4: hello TTY command loop
+
+Deliverables
+- Minimal TTY input/output through the substrate API.
+- Minimal command dispatch in CL with a few built-in commands:
+  - insert text,
+  - move point,
+  - save/quit.
+
+Gate
+- Manual interactive check: edit a file in a terminal and exit without breaking
+  terminal state.
+- Prefer running this milestone inside `tmux` so a wedged TTY can be killed
+  without losing the outer shell.
+
+### Milestone B1-5: expand editor substrate coverage
+
+Deliverables
+- Incrementally grow substrate services needed for a real editor core:
+  buffers, gap/text representation, markers, keymaps, minibuffer (as needed).
+- Keep moving "editor logic" into CL to avoid chatty cross-boundary loops.
+
+Gate
+- Start running a curated subset of Emacs lisp shipped in this repo (ported or
+  mechanically rewritten) and pass an expanding clemacs smoke suite.
+
+### Milestone B1-6: converge on the existing test contract
+
+Deliverables
+- A plan to run ERT and selected upstream tests under clemacs.
+- A compatibility report: what is identical, what is intentionally different,
+  and how to mechanically migrate third-party elisp.
+
+Gate
+- `mise run test:smoke` (or an agreed successor contract) passes under clemacs
+  with an explicit, justified skip list.

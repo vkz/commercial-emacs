@@ -27,6 +27,19 @@ constraints discovered during the Step 0/1 trimming + build/test work.
 - Future direction is an SBCL-hosted ELisp engine; until then we keep
   building/running Emacs normally as a TTY editor and use tests to keep parity.
 
+## Guiding documents (read these first)
+
+Start here for current intent and constraints, in this order:
+
+- `AGENTS.md`: repo-wide invariants, workflows, and gotchas.
+- `plan.md`: the current, actionable plan and milestones.
+- `plans/clemacs.md`: Option B ("clemacs") architecture and branch-specific
+  decisions (B1 handle-based substrate, CL-first Elisp dialect stance).
+
+Related/background (useful when debating architecture, but not the day-to-day plan)
+- `plans/emacl.md`: Option A ("emacl") alternative (C-hosted Emacs, embed SBCL).
+- `plans/cl.md`: earlier design discussion and rationale snapshots.
+
 ## Golden acceptance criteria (while trimming / assimilating)
 
 After any trimming/refactor iteration:
