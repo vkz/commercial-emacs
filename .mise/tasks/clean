@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Clean build outputs in an out-of-tree build directory"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+#USAGE flag "-j --jobs <n>" help="make -j jobs (default: cpu count)" default=""
+#USAGE flag "-f --force" help="Force clean (pass -B to make)"
+#USAGE flag "--distclean" help="Also remove configure results (make distclean)"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+jobs="${usage_jobs:-}"
+if [[ -z "${jobs}" ]]; then
+  jobs="$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
+fi
+
+if [[ ! -f "${build_dir}/Makefile" ]]; then
+  echo "[clean] no Makefile in ${build_dir}; nothing to clean"
+  exit 0
+fi
+
+make_flags=("-j${jobs}")
+if [[ "${usage_force:-false}" == "true" ]]; then
+  make_flags+=("-B")
+fi
+
+echo "[clean] cleaning ${build_dir}"
+if [[ "${usage_distclean:-false}" == "true" ]]; then
+  make -C "${build_dir}" "${make_flags[@]}" distclean
+else
+  make -C "${build_dir}" "${make_flags[@]}" clean
+fi
+
+if [[ -f "${build_dir}/test/Makefile" ]]; then
+  echo "[clean] cleaning ${build_dir}/test"
+  make -C "${build_dir}/test" "${make_flags[@]}" clean || true
+fi

@@ -31,6 +31,20 @@ After any trimming/refactor iteration:
 - `mise run test:smoke` passes (fast conformance signal).
 - The build is out-of-tree and repeatable with incremental rebuilds.
 
+## Agent expectations (how to collaborate)
+
+While working in this repo, agents should actively look for friction and
+failures in build, tests, and infra. In the final summary for each task, call
+out any issues encountered and propose at least one concrete fix path:
+
+- remove or change assumptions / redefine the problem
+- implement tools/scripts/mise tasks to automate the fix
+- add or improve AGENTS instructions to prevent repeats
+- add or adjust tests to avoid false negatives
+
+If a tool/task will materially shorten the current work *and* improve future
+iterations, implement it immediately (prefer a `mise` file task).
+
 ## Workflows (use mise)
 
 All project tasks should be run via `mise` (prefer `mise run ...`).
@@ -63,6 +77,26 @@ All project tasks should be run via `mise` (prefer `mise run ...`).
 - `mise run verify -- --level fast` (build + run + smoke)
 - `mise run verify -- --level check` (adds `make check`)
 
+### Tooling helpers
+
+- `mise run doctor` (and `mise run doctor -- --check-build`)
+- `mise run clean` / `mise run clean -- --distclean`
+- `mise run clobber` (dry-run) / `mise run clobber -- --yes`
+
+### Manuals (opt-in)
+
+Manual builds are intentionally opt-in and kept out of the core build/test
+loops:
+
+- `mise run docs:info`
+- `mise run docs:html`
+- `mise run docs:pdf`
+
+Doc editing policy (when we touch texinfo)
+- Do not point users at upstream Emacs docs for removed features.
+- If a feature/platform is removed here, remove its texinfo node and update
+  menus/cross-refs accordingly (do not keep dead chapters around).
+
 ## Gotchas (important)
 
 ### Out-of-tree builds require a "runtime symlink tree"
@@ -80,6 +114,11 @@ Do not replace this with `make` defaults without checking bootstrap/pdump.
 Running `make -C build/... check` can pull in extra build work (including docs)
 depending on makefile wiring. Prefer `mise run test:check`, which runs
 `make -C build/.../test check` directly.
+
+### Manual builds can dirty the source tree if invoked incorrectly
+
+Top-level `make info` regenerates `info/dir` under the source tree. Prefer
+`mise run docs:info`, which builds `*-info` targets without updating `info/dir`.
 
 ### Native compilation is disabled (and should stay disabled)
 

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Remove an out-of-tree build directory (dangerous)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+#USAGE flag "--dry-run" help="Print what would be removed and exit"
+#USAGE flag "-y --yes" help="Actually remove the build directory"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+
+dry_run="${usage_dry_run:-false}"
+yes="${usage_yes:-false}"
+
+if [[ "${dry_run}" != "true" && "${yes}" != "true" ]]; then
+  dry_run="true"
+fi
+
+if [[ ! -e "${build_dir}" ]]; then
+  echo "[clobber] missing path: ${build_dir}"
+  exit 0
+fi
+
+echo "[clobber] target: ${build_dir}"
+
+if [[ "${dry_run}" == "true" ]]; then
+  echo "[clobber] dry-run; pass --yes to remove"
+  exit 0
+fi
+
+echo "[clobber] removing ${build_dir}"
+rm -rf -- "${build_dir}"

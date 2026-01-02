@@ -86,21 +86,17 @@ TTY-only trimming + build/test iteration (steps 0 and 1 in `plan.md`).
 - `mise run test:smoke -- --force`: forces rebuilding selected smoke logs.
 - `mise run test:check -- --force`: forces rebuilding the full default suite.
 
-## Next tooling proposals (not done yet)
+## Tooling proposals and status
 
-1) Add `mise run doctor`
-   - Quick sanity checks: required tools present, build dir layout, expected
-     invariants (e.g. `(native-comp-available-p)` is nil).
+Implemented
+- `mise run doctor`: quick sanity checks (invariants, required tools, build dir).
+- `mise run clean` / `mise run clobber`: safe cleanup of out-of-tree builds.
+- `mise run docs:*`: opt-in manual builds (info/html/pdf).
 
-2) Add `mise run clean` / `clobber`
-   - Safe cleanup of `build/<name>` with confirm/dry-run.
-
-3) Add doc tasks (`docs:info`, `docs:pdf`)
-   - Opt-in and separate from the main build/test loop.
-
-4) Re-enable modules as a tracked milestone
-   - Only after we have a reliable debugging path for macOS crashes and a
-     reproducible module test runner under `mise`.
+Not done yet
+- Re-enable dynamic modules as a tracked milestone
+  - Only after we have a reliable debugging path for macOS crashes and a
+    reproducible module test runner under `mise`.
 
 ## Additional notes (follow-up trim iteration)
 
@@ -130,3 +126,51 @@ TTY-only trimming + build/test iteration (steps 0 and 1 in `plan.md`).
 
 - `mise run trim:check`
 - `mise run verify -- --level check` (use `--force` when you need guaranteed reruns)
+
+## Tooling implemented (this repo)
+
+This section tracks the "next tooling proposals" once they are actually
+implemented.
+
+### 1) `mise run doctor` (implemented)
+
+- Task: `.mise/tasks/doctor`
+- Purpose: fast sanity checks for invariants, required tools, and (optionally)
+  presence of `emacs`/`emacsclient` artifacts.
+- Examples:
+  - `mise run doctor`
+  - `mise run doctor -- --check-build`
+
+### 2) `mise run clean` and `mise run clobber` (implemented)
+
+- Tasks:
+  - `.mise/tasks/clean`
+  - `.mise/tasks/clobber`
+- Behavior:
+  - `clean` runs `make -C <build> clean` (or `distclean` when requested).
+  - `clobber` defaults to dry-run and requires `--yes` to remove the build dir.
+- Examples:
+  - `mise run clean`
+  - `mise run clean -- --distclean`
+  - `mise run clobber` (dry-run)
+  - `mise run clobber -- --yes`
+
+### 3) Manual builds are opt-in (`docs:*`) (implemented)
+
+Rationale
+- Manuals are useful, but they must not be built implicitly during core
+  build/test verification loops.
+
+Tasks
+- `.mise/tasks/docs/info`: builds `emacs-info`, `lispref-info`,
+  `lispintro-info`, `misc-info`.
+  - Important: this intentionally avoids the top-level `info` target, which
+    regenerates `info/dir` in the source tree.
+- `.mise/tasks/docs/html`: builds the corresponding `*-html` targets.
+- `.mise/tasks/docs/pdf`: builds the corresponding `*-pdf` targets (requires a
+  TeX toolchain).
+
+Examples
+- `mise run docs:info`
+- `mise run docs:html`
+- `mise run docs:pdf`

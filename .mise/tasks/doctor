@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Sanity-check local toolchain, repo invariants, and build artifacts"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+#USAGE flag "--check-build" help="Also check that emacs/emacsclient exist and run"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+check_build="${usage_check_build:-false}"
+
+fail() {
+  echo "[doctor] ERROR: $*" >&2
+  exit 1
+}
+
+have() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+echo "[doctor] repo invariants"
+mise run trim:check
+
+echo "[doctor] required tools"
+for bin in make gcc perl sed awk; do
+  if ! have "${bin}"; then
+    fail "missing required tool: ${bin}"
+  fi
+done
+if ! have autoconf; then
+  echo "[doctor] WARNING: missing autoconf (bootstrap may fail)" >&2
+fi
+if ! have automake; then
+  echo "[doctor] WARNING: missing automake (bootstrap may fail)" >&2
+fi
+if ! have texi2any && ! have makeinfo; then
+  echo "[doctor] NOTE: missing texinfo tools (manual builds may fail)" >&2
+fi
+
+echo "[doctor] build dir"
+if [[ -d "${build_dir}" ]]; then
+  if [[ -f "${build_dir}/config.status" ]]; then
+    echo "[doctor] configured: ${build_dir}"
+  else
+    echo "[doctor] NOTE: ${build_dir} exists but is not configured" >&2
+  fi
+else
+  echo "[doctor] NOTE: missing build dir ${build_dir} (run: mise run configure:tty)" >&2
+fi
+
+if [[ "${check_build}" == "true" ]]; then
+  echo "[doctor] build artifacts"
+  if [[ -x "${build_dir}/src/emacs" ]]; then
+    "${build_dir}/src/emacs" -Q --batch --eval '(princ emacs-version)'
+    echo
+  else
+    fail "missing ${build_dir}/src/emacs (run: mise run build)"
+  fi
+  if [[ -x "${build_dir}/lib-src/emacsclient" ]]; then
+    "${build_dir}/lib-src/emacsclient" --version >/dev/null
+  else
+    fail "missing ${build_dir}/lib-src/emacsclient (run: make -C ${build_dir} lib-src)"
+  fi
+fi
+
+echo "[doctor] OK"
