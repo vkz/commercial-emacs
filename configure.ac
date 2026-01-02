@@ -6270,9 +6270,8 @@ fi
 
 dnl The admin/ directory used to be excluded from tarfiles.
 if test -d $srcdir/admin; then
-  SUBDIR_MAKEFILES="$SUBDIR_MAKEFILES admin/charsets/Makefile admin/unidata/Makefile"
+  SUBDIR_MAKEFILES="$SUBDIR_MAKEFILES admin/charsets/Makefile"
   AC_CONFIG_FILES([admin/charsets/Makefile])
-  AC_CONFIG_FILES([admin/unidata/Makefile])
 fi                              dnl -d admin
 
 

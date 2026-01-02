@@ -118,6 +118,13 @@ Acceptance criteria
 - After any trim chunk, a TTY-only build still succeeds on macOS and the Step 1
   smoke tests (defined below) still run.
 
+Notes from the first trim iterations
+- `admin/unidata/` was removed to reduce repo size and reduce regeneration
+  surface area.  We treat `lisp/international/{charprop,charscript,emoji-zwj}.el`
+  as vendored/generated inputs for now.
+- One upstream test used `admin/unidata/NormalizationTest.txt`; that file now
+  lives at `test/data/unicode/NormalizationTest.txt`.
+
 ### 0a.2 Delete ELisp native compilation / JIT infrastructure (definite)
 
 Rationale

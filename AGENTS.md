@@ -71,7 +71,7 @@ This repo still expects some arch-independent runtime files to exist by
 relative paths in the build tree.  The `mise run build` task creates symlinks
 from the source tree into the build dir for:
 
-- `etc/`, `lisp/`, `leim/`, `admin/` and subdirs used by bootstrap.
+- `etc/`, `lisp/`, `leim/`, `admin/` (notably `admin/charsets/` used at build time).
 
 Do not replace this with `make` defaults without checking bootstrap/pdump.
 

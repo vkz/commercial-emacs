@@ -22,6 +22,9 @@ for dir in nextstep lwlib oldXMenu; do
     fail "unexpected path still present: ${dir}"
   fi
 done
+if [[ -e "admin/unidata" ]]; then
+  fail "unexpected path still present: admin/unidata"
+fi
 
 if rg -n --fixed-strings -- "--with-native-compilation" configure.ac Makefile.in >/dev/null; then
   fail "found native-comp build/config references"

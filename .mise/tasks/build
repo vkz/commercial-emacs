@@ -51,7 +51,6 @@ ensure_symlink_tree "${project_root}/etc" "${build_dir}/etc"
 ensure_symlink_tree "${project_root}/lisp" "${build_dir}/lisp"
 ensure_symlink_tree "${project_root}/leim" "${build_dir}/leim"
 ensure_symlink_tree "${project_root}/admin" "${build_dir}/admin"
-ensure_symlink_tree "${project_root}/admin/unidata" "${build_dir}/admin/unidata"
 ensure_symlink_tree "${project_root}/admin/charsets" "${build_dir}/admin/charsets"
 
 make -C "${build_dir}" -j"${jobs}" src

@@ -37,7 +37,7 @@
 (require 'ucs-normalize)
 
 (defconst ucs-normalize-test-data-file
-  (expand-file-name "admin/unidata/NormalizationTest.txt" source-directory))
+  (expand-file-name "test/data/unicode/NormalizationTest.txt" source-directory))
 
 (defun ucs-normalize-tests--parse-column ()
   (let ((chars nil)

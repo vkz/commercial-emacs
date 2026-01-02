@@ -469,9 +469,6 @@ bootstrap-emacs$(EXEEXT): | emacs$(EXEEXT)
 	@# symlink preferred but for mingw
 	cp -f $(firstword $|) $@
 
-../lisp/international/charprop.el: | bootstrap-emacs.pdmp
-	$(MAKE) -C ../admin/unidata all EMACS=../../src/bootstrap-emacs$(EXEEXT)
-
 ../lisp/loaddefs.elc: | bootstrap-emacs.pdmp
 	$(MAKE) -C ../lisp autoloads EMACS=../src/bootstrap-emacs$(EXEEXT)
 	$(MAKE) -C ../lisp loaddefs.elc EMACS=../src/bootstrap-emacs$(EXEEXT)
@@ -552,20 +549,14 @@ ALLLIBS = $(LIBS) $(W32_LIBS) $(LIBS_GNUSTEP) $(PGTK_LIBS) $(LIBX_BASE) $(LIBIMA
    $(LIBGMP) $(XINPUT_LIBS) $(HAIKU_LIBS) \
    $(SQLITE3_LIBS) $(XCOMPOSITE_LIBS) $(XSHAPE_LIBS)
 
-$(abs_top_srcdir)/lisp/international/charscript.el:
-	$(MAKE) -C ../admin/unidata $@
-
 ../admin/charsets/charsets.stamp:
 	$(MAKE) -C ../admin/charsets all
 
-$(abs_top_srcdir)/lisp/international/emoji-zwj.el:
-	$(MAKE) -C ../admin/unidata $@
-
 emacs$(EXEEXT): $(LIBXMENU) $(ALLOBJS) $(LIBEGNU_ARCHIVE) $(EMACSRES) \
-  globals.h \
-  ../admin/charsets/charsets.stamp \
-  $(abs_top_srcdir)/lisp/international/charscript.el \
-  $(abs_top_srcdir)/lisp/international/emoji-zwj.el \
+	  globals.h \
+	  ../admin/charsets/charsets.stamp \
+	  $(abs_top_srcdir)/lisp/international/charscript.el \
+	  $(abs_top_srcdir)/lisp/international/emoji-zwj.el \
   $(libsrc)/make-fingerprint$(EXEEXT) $(etc)/DOC
 ifeq ($(HAVE_BE_APP),yes)
 	$(AM_V_CXXLD)$(CXX) -o $@.tmp \

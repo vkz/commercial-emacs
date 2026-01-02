@@ -102,6 +102,30 @@ TTY-only trimming + build/test iteration (steps 0 and 1 in `plan.md`).
    - Only after we have a reliable debugging path for macOS crashes and a
      reproducible module test runner under `mise`.
 
+## Additional notes (follow-up trim iteration)
+
+### Remove `admin/unidata/` safely
+
+- Motivation: `admin/unidata/` is a large regeneration subtree and is not
+  required for day-to-day builds once the generated Lisp outputs are present.
+- What changed:
+  - `admin/unidata/` removed.
+  - `test/lisp/international/ucs-normalize-tests.el` now reads Unicode test
+    vectors from `test/data/unicode/NormalizationTest.txt`.
+  - Build glue no longer configures or references `admin/unidata`.
+- Gotcha: if we ever regenerate the Unicode-derived Lisp files, we will need to
+  temporarily restore `admin/unidata/` (or replace it with a different data
+  source).
+
+### Thread tests on macOS
+
+- Symptom: `src/thread-tests.log` failed in `threads-condvar-wait` by observing
+  `thread-live-p` as nil immediately after `make-thread`.
+- What we did: make the test robust by yielding briefly until the new thread is
+  observed alive (bounded wait).
+- Fast repro:
+  - `mise run test:file -- --force src/thread-tests`
+
 ## Verification checklist for each trimming change
 
 - `mise run trim:check`

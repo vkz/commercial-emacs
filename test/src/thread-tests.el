@@ -388,7 +388,11 @@
     (setq new-thread (make-thread #'thread-test-condvar-wait))
 
     ;; Make sure new-thread is alive.
-    (should (thread-live-p new-thread))
+    (let ((deadline (+ (float-time) 1.0)))
+      (while (and (not (thread-live-p new-thread))
+                  (< (float-time) deadline))
+        (thread-yield))
+      (should (thread-live-p new-thread)))
     (should (= (length (all-threads)) 2))
     ;; Wait for new-thread to become blocked on the condvar.
     (while (not (eq (thread--blocker new-thread) threads-condvar))
