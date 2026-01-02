@@ -23074,11 +23074,6 @@ Turning on Perl mode runs the normal hook `perl-mode-hook'.
 (register-definition-prefixes "perl-mode" '("perl-"))
 
 
-;;; Generated autoloads from pgtk-dnd.el
-
-(register-definition-prefixes "pgtk-dnd" '("pgtk-dnd-"))
-
-
 ;;; Generated autoloads from textmodes/picture.el
 
 (autoload 'picture-mode "picture" "\

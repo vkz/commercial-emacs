@@ -164,9 +164,11 @@ Recommended approach (two-phase, to reduce risk)
        - X11: `src/xterm.c`, `src/xfns.c`, `src/xmenu.c`, `src/xselect.c`, `src/xsettings.c`, `src/xwidget.c`, etc.
        - PGTK/GTK: `src/pgtk*`, `src/gtkutil.*`, `src/emacsgtkfixed.*`, etc.
        - Note: `src/xwidget.h` is intentionally kept for non-xwidget stub inlines when `HAVE_XWIDGETS` is off.
-   - Lisp: delete GUI-only integration files when they are no longer reachable:
-     - `lisp/term/ns-win.el`, `lisp/term/pgtk-win.el` (and any other GUI-only `*-win.el`)
-     - `lisp/pgtk-dnd.el` (and other GUI-only integration)
+   - Lisp: GUI-only integration removed once no longer reachable:
+     - `lisp/term/common-win.el`
+     - `lisp/term/x-win.el`, `lisp/term/ns-win.el`, `lisp/term/pgtk-win.el`
+     - `lisp/x-dnd.el`, `lisp/pgtk-dnd.el`
+     - `test/lisp/x-dnd-tests.el` (now-irrelevant test for removed feature)
 
 Guardrail
 - Do **not** delete core display infrastructure that TTY still uses (e.g., `src/xdisp.c` is not “X11”; it is core redisplay).

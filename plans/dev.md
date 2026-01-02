@@ -110,6 +110,18 @@ Not done yet
   - Kept `src/xwidget.h` even though `src/xwidget.c` is deleted, because
     `xwidget.h` provides stub inlines when `HAVE_XWIDGETS` is off.
 
+### Remove GUI-only Elisp integration (window systems + DnD)
+
+- Motivation: keep a TTY-only distribution surface; avoid shipping
+  GUI-only Elisp that cannot work without NS/X11/PGTK backends.
+- What changed:
+  - Deleted GUI window-system integration: `lisp/term/common-win.el`,
+    `lisp/term/x-win.el`, `lisp/term/ns-win.el`, `lisp/term/pgtk-win.el`.
+  - Deleted X/PGTK drag-and-drop code: `lisp/x-dnd.el`, `lisp/pgtk-dnd.el`.
+  - Deleted the now-irrelevant test: `test/lisp/x-dnd-tests.el`.
+  - Removed the stale `loaddefs`/`ldefs-boot` sections that referenced the
+    deleted files.
+
 ### Remove `admin/unidata/` safely
 
 - Motivation: `admin/unidata/` is a large regeneration subtree and is not

@@ -19,6 +19,11 @@ constraints discovered during the Step 0/1 trimming + build/test work.
 - GUI backends are **removed** in this fork:
   - `nextstep/`, `lwlib/`, `oldXMenu/`
   - GUI-backend sources under `src/` (NS/X11/PGTK)
+- GUI-only Elisp integration is **removed** in this fork:
+  - `lisp/term/common-win.el`, `lisp/term/x-win.el`, `lisp/term/ns-win.el`,
+    `lisp/term/pgtk-win.el`
+  - `lisp/x-dnd.el`, `lisp/pgtk-dnd.el` (and the now-irrelevant
+    `test/lisp/x-dnd-tests.el`)
 - Future direction is an SBCL-hosted ELisp engine; until then we keep
   building/running Emacs normally as a TTY editor and use tests to keep parity.
 

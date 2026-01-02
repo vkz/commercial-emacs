@@ -71,4 +71,23 @@ if rg -n --fixed-strings -- "emacs-module.h" Makefile.in >/dev/null; then
   fail "found emacs-module.h references in top-level build rules"
 fi
 
+for path in \
+  lisp/term/common-win.el lisp/term/x-win.el lisp/term/ns-win.el lisp/term/pgtk-win.el \
+  lisp/x-dnd.el lisp/pgtk-dnd.el \
+  test/lisp/x-dnd-tests.el; do
+  if [[ -e "${path}" ]]; then
+    fail "unexpected GUI-only Elisp still present: ${path}"
+  fi
+done
+
+if [[ -f "lisp/ldefs-boot.el" ]] && rg -n --fixed-strings -- "Generated autoloads from pgtk-dnd.el" lisp/ldefs-boot.el >/dev/null; then
+  fail "found stale ldefs-boot for removed pgtk-dnd.el"
+fi
+if [[ -f "lisp/loaddefs.el" ]] && rg -n --fixed-strings -- "Generated autoloads from pgtk-dnd.el" lisp/loaddefs.el >/dev/null; then
+  fail "found stale loaddefs for removed pgtk-dnd.el"
+fi
+if [[ -f "lisp/loaddefs.el" ]] && rg -n --fixed-strings -- "Generated autoloads from x-dnd.el" lisp/loaddefs.el >/dev/null; then
+  fail "found stale loaddefs for removed x-dnd.el"
+fi
+
 echo "[trim:check] OK"
