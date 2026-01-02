@@ -77,11 +77,22 @@ All project tasks should be run via `mise` (prefer `mise run ...`).
 - `mise run test:file -- <relative-test-path>`
   - Example: `mise run test:file -- lisp/emacs-lisp/ert-tests`
 
+### Test contract (source of truth)
+
+- Contract data lives under `test/contract/`.
+- Prefer running the contract gate when changing ELisp-core or trimming:
+  - `mise run test:contract -- --level check`
+
 ### Trim verification helpers
 
 - `mise run trim:check` (fast guardrails)
 - `mise run verify -- --level fast` (build + run + smoke)
 - `mise run verify -- --level check` (adds `make check`)
+
+### C-defined ELisp inventory (pre-SBCL port checklist)
+
+- Regenerate: `mise run inventory:regen`
+- Validate: `mise run inventory:check`
 
 ### Tooling helpers
 
@@ -105,6 +116,14 @@ Doc editing policy (when we touch texinfo)
   menus/cross-refs accordingly (do not keep dead chapters around).
 
 ## Gotchas (important)
+
+### Reference Emacs for baseline checks
+
+When you need to verify behavior against a known-good Emacs (not this fork):
+
+- Use system Emacs in batch mode: `emacs -Q --batch --eval '(progn ...)'`.
+- An Emacs 31.0.50 server is available as `wip` for interactive/probing evals:
+  - `gxeval -s wip -e '(setq gx-elisp-result ...)'` (prefer `--json` + `jq`).
 
 ### `src/xwidget.h` must stay (stub header)
 
@@ -162,6 +181,8 @@ stubs that fail loudly if something tries to use native compilation.
 Avoid expanding empty arrays under `set -u` (e.g. `"${arr[@]}"`), since Bash
 will treat that as an unbound variable. Prefer simple `if` branches for
 optional flags (see `.mise/tasks/test/*`).
+
+On macOS, assume the default `/bin/bash` is Bash 3.2: avoid `mapfile`/`readarray`.
 
 ## Where plans live
 

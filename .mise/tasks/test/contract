@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Run the project test contract (must-pass suites + explicit skips)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+#USAGE flag "-j --jobs <n>" help="make -j jobs (default: cpu count)" default=""
+#USAGE flag "-f --force" help="Force rebuilding test logs (pass -B to make)"
+#USAGE flag "--level <level>" help="Contract level" default="check" {
+#USAGE   choices "smoke" "check" "check-all"
+#USAGE }
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+jobs="${usage_jobs:-}"
+if [[ -z "${jobs}" ]]; then
+  jobs="$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
+fi
+
+force="${usage_force:-false}"
+level="${usage_level:-check}"
+
+contract_dir="${project_root}/test/contract"
+for f in smoke.logtargets allowed-skip.logtargets known-fail.logtargets; do
+  if [[ ! -f "${contract_dir}/${f}" ]]; then
+    echo "[test:contract] missing ${contract_dir}/${f}" >&2
+    exit 1
+  fi
+done
+
+echo "[test:contract] level=${level} build_dir=${build_dir}"
+
+if [[ "${force}" == "true" ]]; then
+  mise run test:smoke -- --build-dir "${build_dir}" --jobs "${jobs}" --force
+else
+  mise run test:smoke -- --build-dir "${build_dir}" --jobs "${jobs}"
+fi
+
+case "${level}" in
+  smoke)
+    ;;
+  check)
+    if [[ "${force}" == "true" ]]; then
+      mise run test:check -- --build-dir "${build_dir}" --jobs "${jobs}" --force
+    else
+      mise run test:check -- --build-dir "${build_dir}" --jobs "${jobs}"
+    fi
+    ;;
+  check-all)
+    if [[ "${force}" == "true" ]]; then
+      mise run test:check -- --build-dir "${build_dir}" --jobs "${jobs}" --force
+      mise run test:check-all -- --build-dir "${build_dir}" --jobs "${jobs}" --force
+    else
+      mise run test:check -- --build-dir "${build_dir}" --jobs "${jobs}"
+      mise run test:check-all -- --build-dir "${build_dir}" --jobs "${jobs}"
+    fi
+    ;;
+  *)
+    echo "[test:contract] unknown level: ${level}" >&2
+    exit 2
+    ;;
+esac

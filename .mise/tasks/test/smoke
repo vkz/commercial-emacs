@@ -33,17 +33,27 @@ if [[ -z "${jobs}" ]]; then
 fi
 
 targets=(
-  "src/alloc-tests.log"
-  "src/eval-tests.log"
-  "src/lread-tests.log"
-  "src/syntax-tests.log"
-  "lisp/emacs-lisp/lisp-tests.log"
-  "lisp/emacs-lisp/macroexp-tests.log"
-  "lisp/emacs-lisp/bytecomp-tests.log"
-  "lisp/emacs-lisp/cl-lib-tests.log"
-  "lisp/emacs-lisp/subr-x-tests.log"
-  "lisp/emacs-lisp/ert-tests.log"
+  # Populated below from test/contract/smoke.logtargets
 )
+
+contract_file="${project_root}/test/contract/smoke.logtargets"
+if [[ ! -f "${contract_file}" ]]; then
+  echo "[test:smoke] missing ${contract_file}; did you remove test/contract/?" >&2
+  exit 1
+fi
+
+targets=()
+while IFS= read -r line; do
+  case "${line}" in
+    ""|\#*) continue ;;
+  esac
+  targets+=("${line}")
+done < "${contract_file}"
+
+if [[ "${#targets[@]}" -eq 0 ]]; then
+  echo "[test:smoke] empty contract: ${contract_file}" >&2
+  exit 1
+fi
 
 echo "[test:smoke] running ${#targets[@]} targets (-j${jobs})"
 if [[ "${usage_force:-false}" == "true" ]]; then

@@ -46,6 +46,15 @@ Acceptance criteria (still the gate for future changes)
   - `known-fail` (if any; should be temporary and tracked)
 - Make the test entrypoints deterministic and fast to iterate (you already have `mise run verify`, but for the rewrite you’ll want a narrower “elisp-core” set you can run constantly).
 
+Status (DONE, 2026-01-02)
+- Contract data lives in `test/contract/`:
+  - `test/contract/smoke.logtargets` (must-pass fast suite)
+  - `test/contract/allowed-skip.logtargets` (intentionally not run)
+  - `test/contract/known-fail.logtargets` (temporary tolerations)
+- `mise` entrypoints (must remain stable):
+  - `mise run test:smoke` consumes `test/contract/smoke.logtargets`
+  - `mise run test:contract -- --level smoke|check|check-all` is the “contract gate”
+
 Expansion (project-specific)
 - Conformance statement (initial):
   - Target “Emacs 31.0.50 behavior” as observed in this repo’s TTY build, but with the stronger
@@ -124,6 +133,16 @@ Collection plan (static + dynamic cross-check)
    - The static and dynamic inventories match within an explicitly documented, small exception set.
    - The inventory is sufficient to drive a “port checklist” (we can sort/group by `kind` and by
      `source.path` to plan port order).
+
+Status (DONE, 2026-01-02)
+- Inventory artifacts live in `inventory/`:
+  - `inventory/c-elisp.jsonl` and `inventory/c-elisp.tsv` (authoritative for the current TTY build)
+  - `inventory/runtime-subrs.json` (canonical subr list; de-duped via `subr-name` to avoid aliases)
+  - `inventory/runtime-check.json` (runtime validation for variables/symbols)
+  - `inventory/exceptions.json` (explicit, small exception lists; keep empty if possible)
+- Regenerate / validate:
+  - `mise run inventory:regen`
+  - `mise run inventory:check` (fails if mismatch or if inventory is out of date)
 
 ### 3) Decide and document the embedding boundary (what stays C vs what becomes SBCL first)
 

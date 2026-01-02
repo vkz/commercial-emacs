@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Check inventory/ is up to date and matches runtime"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/clmacs-inventory.XXXXXX")"
+cleanup() { rm -rf "${tmp}"; }
+trap cleanup EXIT
+
+mkdir -p "${tmp}/inventory"
+
+echo "[inventory:check] generating into ${tmp}"
+
+if [[ ! -x "${build_dir}/src/emacs" ]]; then
+  mise run build -- --build-dir "${build_dir}"
+fi
+
+echo "[inventory:check] runtime subrs"
+"${build_dir}/src/emacs" -Q --batch -l scripts/inventory/runtime-subrs.el > "${tmp}/inventory/runtime-subrs.json"
+
+echo "[inventory:check] static extract (filtered to runtime)"
+python3 scripts/inventory/c-elisp.py \
+  --root "${project_root}" \
+  --runtime-subrs "${tmp}/inventory/runtime-subrs.json" \
+  --out-jsonl "${tmp}/inventory/c-elisp.jsonl" \
+  --out-tsv "${tmp}/inventory/c-elisp.tsv"
+
+echo "[inventory:check] runtime checks"
+CLMACS_INVENTORY_JSONL="${tmp}/inventory/c-elisp.jsonl" \
+  "${build_dir}/src/emacs" -Q --batch -l scripts/inventory/runtime-check.el > "${tmp}/inventory/runtime-check.json"
+
+python3 scripts/inventory/check.py \
+  --static-jsonl "${tmp}/inventory/c-elisp.jsonl" \
+  --runtime-subrs "${tmp}/inventory/runtime-subrs.json" \
+  --runtime-check "${tmp}/inventory/runtime-check.json" \
+  --exceptions "${project_root}/inventory/exceptions.json"
+
+for f in c-elisp.jsonl c-elisp.tsv; do
+  if ! cmp -s "${project_root}/inventory/${f}" "${tmp}/inventory/${f}"; then
+    echo "[inventory:check] inventory/${f} is out of date" >&2
+    echo "[inventory:check] run: mise run inventory:regen" >&2
+    exit 1
+  fi
+done

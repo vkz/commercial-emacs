@@ -1,0 +1,10 @@
+src/alloc-tests.log
+src/eval-tests.log
+src/lread-tests.log
+src/syntax-tests.log
+lisp/emacs-lisp/lisp-tests.log
+lisp/emacs-lisp/macroexp-tests.log
+lisp/emacs-lisp/bytecomp-tests.log
+lisp/emacs-lisp/cl-lib-tests.log
+lisp/emacs-lisp/subr-x-tests.log
+lisp/emacs-lisp/ert-tests.log

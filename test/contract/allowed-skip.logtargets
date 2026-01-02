@@ -1,0 +1,2 @@
+# Empty for now.  Add entries only when a test is inapplicable due to
+# intentionally removed features (GUI backends, nativecomp, modules).

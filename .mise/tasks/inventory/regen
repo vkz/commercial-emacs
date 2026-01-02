@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Regenerate inventory/ (C-defined ELisp surface area + runtime cross-check inputs)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+if [[ ! -x "${build_dir}/src/emacs" ]]; then
+  mise run build -- --build-dir "${build_dir}"
+fi
+
+mkdir -p inventory
+
+echo "[inventory:regen] runtime subrs -> inventory/runtime-subrs.json"
+"${build_dir}/src/emacs" -Q --batch -l scripts/inventory/runtime-subrs.el > inventory/runtime-subrs.json
+
+echo "[inventory:regen] static extract (filtered to runtime) -> inventory/c-elisp.{jsonl,tsv}"
+python3 scripts/inventory/c-elisp.py \
+  --root "${project_root}" \
+  --runtime-subrs inventory/runtime-subrs.json \
+  --out-jsonl inventory/c-elisp.jsonl \
+  --out-tsv inventory/c-elisp.tsv
+
+echo "[inventory:regen] runtime checks -> inventory/runtime-check.json"
+CLMACS_INVENTORY_JSONL="${project_root}/inventory/c-elisp.jsonl" \
+  "${build_dir}/src/emacs" -Q --batch -l scripts/inventory/runtime-check.el > inventory/runtime-check.json
