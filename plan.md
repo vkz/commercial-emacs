@@ -159,10 +159,11 @@ Recommended approach (two-phase, to reduce risk)
    - Done in this fork:
      - `nextstep/` (NS/Cocoa port glue)
      - `lwlib/` and `oldXMenu/` (X11 GUI support)
-   - `src/`: delete GUI-backend objects (and their makefile entries) such as:
-     - NS/Cocoa: `src/ns*.m`, `src/nsterm.*`, `src/nsfns.*`, `src/nsselect.*`, etc.
-     - X11: `src/xterm.c`, `src/xfns.c`, `src/xmenu.c`, `src/xselect.c`, `src/xsettings.c`, `src/xwidget.*`, etc.
-     - PGTK/GTK: `src/pgtk*`, `src/gtkutil.*`, `src/emacsgtkfixed.*`, etc.
+     - `src/`: GUI backend sources removed (and makefile entries updated):
+       - NS/Cocoa: `src/ns*.m`, `src/nsterm.*`, `src/nsfns.*`, `src/nsselect.*`, etc.
+       - X11: `src/xterm.c`, `src/xfns.c`, `src/xmenu.c`, `src/xselect.c`, `src/xsettings.c`, `src/xwidget.c`, etc.
+       - PGTK/GTK: `src/pgtk*`, `src/gtkutil.*`, `src/emacsgtkfixed.*`, etc.
+       - Note: `src/xwidget.h` is intentionally kept for non-xwidget stub inlines when `HAVE_XWIDGETS` is off.
    - Lisp: delete GUI-only integration files when they are no longer reachable:
      - `lisp/term/ns-win.el`, `lisp/term/pgtk-win.el` (and any other GUI-only `*-win.el`)
      - `lisp/pgtk-dnd.el` (and other GUI-only integration)

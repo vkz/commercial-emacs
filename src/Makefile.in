@@ -418,12 +418,8 @@ obj = $(doc_obj) $(HAIKU_CXX_OBJ)
 ## Some of them have no DOC entries, but it does no harm to have them
 ## in the list, in case they ever add any such entries.
 SOME_MACHINE_OBJECTS = \
-  xterm.o xfns.o xmenu.o xselect.o xrdb.o xsmfns.o fringe.o image.o \
-  fontset.o dbusbind.o \
-  nsterm.o nsfns.o nsmenu.o nsselect.o nsimage.o nsfont.o macfont.o \
-  nsxwidget.o \
-  w16select.o widget.o xfont.o ftfont.o xftfont.o gtkutil.o \
-  xsettings.o xgselect.o termcap.o hbfont.o
+  fringe.o image.o fontset.o dbusbind.o \
+  ftfont.o termcap.o hbfont.o
 
 SYSTEM_TYPE = @SYSTEM_TYPE@
 

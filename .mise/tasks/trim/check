@@ -35,6 +35,25 @@ for path in admin/notes admin/gitmerge.el admin/make-manuals admin/make-emacs ad
     fail "unexpected path still present: ${path}"
   fi
 done
+for path in \
+  src/emacsgtkfixed.c src/emacsgtkfixed.h \
+  src/gtkutil.c src/gtkutil.h \
+  src/pgtkim.c src/pgtkgui.h src/pgtkterm.h \
+  src/nsgui.h src/nsfns.m src/nsfont.m src/nsimage.m src/nsmenu.m src/nsselect.m \
+  src/nsterm.h src/nsterm.m src/nsxwidget.h src/nsxwidget.m \
+  src/macfont.h src/macfont.m \
+  src/xfns.c src/xfont.c src/xftfont.c src/xgselect.c src/xgselect.h \
+  src/xmenu.c src/xrdb.c src/xselect.c src/xsettings.c src/xsettings.h \
+  src/xsmfns.c src/xterm.c src/xterm.h src/xwidget.c src/widget.c src/w16select.c \
+  src/pgtkterm.h; do
+  if [[ -e "${path}" ]]; then
+    fail "unexpected path still present: ${path}"
+  fi
+done
+
+if [[ -d "info" ]] && find info -maxdepth 1 -type f -iname '*w32*' | rg -n . >/dev/null; then
+  fail "unexpected Windows-only Info files still present under info/"
+fi
 
 if rg -n --fixed-strings -- "--with-native-compilation" configure.ac Makefile.in >/dev/null; then
   fail "found native-comp build/config references"

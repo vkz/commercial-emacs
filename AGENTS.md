@@ -16,6 +16,9 @@ constraints discovered during the Step 0/1 trimming + build/test work.
   - `native-comp-available-p` always returns nil.
   - `lisp/emacs-lisp/comp*.el` are stubs that error if used.
 - Emacs dynamic modules support is **removed** in this fork.
+- GUI backends are **removed** in this fork:
+  - `nextstep/`, `lwlib/`, `oldXMenu/`
+  - GUI-backend sources under `src/` (NS/X11/PGTK)
 - Future direction is an SBCL-hosted ELisp engine; until then we keep
   building/running Emacs normally as a TTY editor and use tests to keep parity.
 
@@ -98,6 +101,12 @@ Doc editing policy (when we touch texinfo)
 
 ## Gotchas (important)
 
+### `src/xwidget.h` must stay (stub header)
+
+Even though `src/xwidget.c` is deleted, `src/xwidget.h` is still required:
+it provides inline stubs when `HAVE_XWIDGETS` is off, and core code expects
+those definitions to exist in TTY builds.
+
 ### Out-of-tree builds require a "runtime symlink tree"
 
 This repo still expects some arch-independent runtime files to exist by
@@ -138,6 +147,8 @@ stubs that fail loudly if something tries to use native compilation.
     `src/Makefile.in`, doc makefiles).
   - run `mise run bootstrap -- --force`, then `mise run configure:tty -- --force`.
   - run `mise run verify -- --level check --force`.
+- If removing GUI backend sources under `src/`, keep `src/xwidget.h` (stub header)
+  even if `src/xwidget.c` is deleted.
 - Be careful with ambiguous names:
   - `doc/emacs/windows.texi` is the Emacs "windows" chapter (not MS Windows).
 

@@ -391,7 +391,7 @@
     (let ((deadline (+ (float-time) 1.0)))
       (while (and (not (thread-live-p new-thread))
                   (< (float-time) deadline))
-        (thread-yield))
+        (sleep-for 0.01))
       (should (thread-live-p new-thread)))
     (should (= (length (all-threads)) 2))
     ;; Wait for new-thread to become blocked on the condvar.

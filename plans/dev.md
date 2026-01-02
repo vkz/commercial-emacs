@@ -100,6 +100,16 @@ Not done yet
 
 ## Additional notes (follow-up trim iteration)
 
+### Remove GUI backend sources under `src/`
+
+- Motivation: keep the runtime TTY-only and reduce platform-specific surface
+  area.
+- What changed:
+  - Deleted NS/X11/PGTK backend sources under `src/` and updated
+    `src/Makefile.in` accordingly.
+  - Kept `src/xwidget.h` even though `src/xwidget.c` is deleted, because
+    `xwidget.h` provides stub inlines when `HAVE_XWIDGETS` is off.
+
 ### Remove `admin/unidata/` safely
 
 - Motivation: `admin/unidata/` is a large regeneration subtree and is not

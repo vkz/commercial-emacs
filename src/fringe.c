@@ -31,7 +31,9 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "pdumper.h"
 
 #ifdef HAVE_PGTK
-# include "pgtkterm.h"
+# ifdef HAVE_PGTK
+#  include "pgtkterm.h"
+# endif
 #endif
 
 /* Fringe bitmaps are represented in three different ways:

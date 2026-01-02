@@ -99,9 +99,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#ifdef USE_GTK
-# include "gtkutil.h"
-#endif
 #ifdef WINDOWSNT
 #include "w32.h"
 #include "w32heap.h"	/* for sbrk */

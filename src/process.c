@@ -114,7 +114,9 @@ static struct rlimit nofile_limit;
 #endif /* HAVE_WINDOW_SYSTEM */
 
 #ifdef HAVE_GLIB
+#ifdef HAVE_X11
 #include "xgselect.h"
+#endif
 #ifndef WINDOWSNT
 #include <glib.h>
 #endif
