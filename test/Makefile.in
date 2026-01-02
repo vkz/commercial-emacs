@@ -101,11 +101,7 @@ ifneq (${TEST_BACKTRACE_LINE_LENGTH},)
 ert_opts += --eval '(setq ert-batch-backtrace-right-margin ${TEST_BACKTRACE_LINE_LENGTH})'
 endif
 
-ifeq (@HAVE_MODULES@, yes)
-MODULES_EMACSOPT := --module-assertions
-else
 MODULES_EMACSOPT :=
-endif
 
 # The actual Emacs command run in the targets below.
 # Prevent any setting of EMACSLOADPATH in user environment causing problems,
@@ -121,7 +117,6 @@ emacs = $(TEST_TIMEOUT) "$(EMACS)" $(MODULES_EMACSOPT) $(EMACSOPT)
 # startup.el must be updated too.
 TEST_HOME = /nonexistent
 
-test_module_dir := src/emacs-module-resources
 
 .PHONY: all check
 
@@ -174,7 +169,7 @@ endif
 
 ## Always show logs for certain problematic tests.
 ifdef EMACS_EMBA_CI
-lisp/filenotify-tests.log lisp/net/tramp-tests.log src/emacs-module-tests.log \
+lisp/filenotify-tests.log lisp/net/tramp-tests.log \
 : WRITE_LOG = 2>&1 | tee $@
 else ifdef GITHUB_ACTIONS
 lisp/net/tramp-tests.log src/thread-tests.log: WRITE_LOG = 2>&1 | tee $@
@@ -194,20 +189,8 @@ else
 testloadfile = $*
 endif
 
-ifeq (@HAVE_MODULES@, yes)
-maybe_exclude_module_tests :=
-else
 maybe_exclude_module_tests := -name emacs-module-tests.el -prune -o
-endif
-
-ifeq ($(GITHUB_ACTIONS),true)
-ifeq (@SYSTEM_TYPE@, darwin)
-maybe_exclude_module_tests := -name emacs-module-tests.el -prune -o
-endif
-echo_done_test := @echo "  DONE    "
-else
 echo_done_test := @true
-endif
 
 %.log: %.elc
 	$(AM_V_at)${MKDIR_P} $(dir $@)
@@ -246,7 +229,7 @@ TESTS := $(LOGFILES:.log=)
 .PRECIOUS: %.log
 
 ## Stop make deleting these as intermediate files.
-.SECONDARY: ${ELFILES:.el=.elc} $(test_module_dir)/*.o
+.SECONDARY: ${ELFILES:.el=.elc}
 
 .PHONY: ${TESTS}
 
@@ -288,43 +271,6 @@ define subdir_template
 endef
 
 $(foreach subdir, $(SUBDIRS), $(eval $(call subdir_template,$(subdir))))
-
-ifeq (@HAVE_MODULES@, yes)
-# -fPIC is a no-op on Windows, but causes a compiler warning
-ifeq ($(SO),.dll)
-FPIC_CFLAGS =
-else
-FPIC_CFLAGS = -fPIC
-endif
-
-GMP_H = @GMP_H@
-LIBGMP = @LIBGMP@
-CLOCK_TIME_LIB = @CLOCK_TIME_LIB@
-NANOSLEEP_LIB = @NANOSLEEP_LIB@
-
-MODULE_CFLAGS = $(and $(GMP_H),-I.) -I../src -I$(srcdir)/../src \
-  $(FPIC_CFLAGS) $(PROFILING_CFLAGS) \
-  $(WARN_CFLAGS) $(WERROR_CFLAGS) $(CFLAGS)
-
-gmp.h:
-	echo '#include "$(srcdir)/../lib/mini-gmp.h"' >$@
-
-test_module = $(test_module_dir)/mod-test${SO}
-src/emacs-module-tests.log src/emacs-module-tests.elc: $(test_module)
-
-# In the compilation command, we can't use any object or archive file
-# as source because those are not compiled with -fPIC.  Therefore we
-# use only source files.
-$(test_module): $(test_module:${SO}=.c) ../src/emacs-module.h \
-  ../src/config.h $(and $(GMP_H),gmp.h)
-	$(AM_V_CCLD)${MKDIR_P} $(dir $@)
-	$(AM_V_at)$(CC) -shared $(CPPFLAGS) $(MODULE_CFLAGS) $(LDFLAGS) \
-	  -o $@ $< $(LIBGMP) \
-	  $(and $(GMP_H),$(srcdir)/../lib/mini-gmp-gnulib.c) \
-	  $(FREE_SOURCE_$(REPLACE_FREE)) \
-	  $(srcdir)/../lib/timespec.c $(srcdir)/../lib/gettime.c \
-	  $(srcdir)/../lib/nanosleep.c
-endif
 
 src/emacs-tests.log: ../lib-src/seccomp-filter.c
 
@@ -393,8 +339,7 @@ clean:
 	find . '(' -name '*.log' -o -name '*.log~' ')' $(FIND_DELETE)
 	find . $(CLEAN_XML_FILES)
 	rm -f ${srcdir}/lisp/gnus/mml-sec-resources/random_seed
-	rm -f $(test_module_dir)/*.o $(test_module_dir)/*.so \
-	  $(test_module_dir)/*.dll gmp.h
+	rm -f ./*.tmp
 
 bootstrap-clean: clean
 	find $(srcdir) -name '*.elc' $(FIND_DELETE)

@@ -32,7 +32,9 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "intervals.h"
 #include "blockinput.h"
 #include "xwidget.h"
+#ifdef HAVE_MODULES
 #include "dynlib.h"
+#endif
 
 #include <c-ctype.h>
 #include <float.h>

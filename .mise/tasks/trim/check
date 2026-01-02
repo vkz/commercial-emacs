@@ -25,6 +25,11 @@ done
 if [[ -e "admin/unidata" ]]; then
   fail "unexpected path still present: admin/unidata"
 fi
+for path in modules src/emacs-module.c test/src/emacs-module-tests.el test/src/emacs-module-resources; do
+  if [[ -e "${path}" ]]; then
+    fail "unexpected path still present: ${path}"
+  fi
+done
 
 if rg -n --fixed-strings -- "--with-native-compilation" configure.ac Makefile.in >/dev/null; then
   fail "found native-comp build/config references"
@@ -37,6 +42,9 @@ if rg -n --fixed-strings -- "libgccjit.h" configure.ac src >/dev/null; then
 fi
 if rg -n --fixed-strings -- "gcc_jit_" configure.ac src >/dev/null; then
   fail "found gcc_jit_ symbol usage in build/runtime code"
+fi
+if rg -n --fixed-strings -- "emacs-module.h" Makefile.in >/dev/null; then
+  fail "found emacs-module.h references in top-level build rules"
 fi
 
 echo "[trim:check] OK"

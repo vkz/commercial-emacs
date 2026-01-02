@@ -39,7 +39,6 @@ configure_args=(
   "--with-x=no"
   "--with-pgtk=no"
   "--with-x-toolkit=no"
-  "--with-modules=no"
   "--with-tree-sitter=no"
 )
 

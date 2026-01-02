@@ -59,14 +59,14 @@ TTY-only trimming + build/test iteration (steps 0 and 1 in `plan.md`).
   contexts).
 - Lesson: prefer the modern, maintained macro implementations when they exist.
 
-### 6) Dynamic module tests segfaulted on macOS
+### 6) Dynamic modules removed
 
-- Symptom: `src/emacs-module-tests.log` crashed reproducibly in
-  `mod-test-sleep-until`.
-- What we did: configure the TTY build with `--with-modules=no` to keep the
-  baseline editor stable while trimming.
-- Lesson: when a feature is both out-of-scope and unstable, disable it at
-  configure time so the default verification loop stays green.
+- Symptom: the module test runner was unstable on macOS (segfaults in the
+  module tests).
+- What we did: remove Emacs dynamic module support and its tests/resources
+  entirely, and remove install/build rules for `emacs-module.h`.
+- Lesson: when a feature is both out-of-scope and unstable, remove it and add
+  guardrails so it cannot drift back in.
 
 ### 7) Bash `set -u` + empty arrays is a trap
 
@@ -94,9 +94,9 @@ Implemented
 - `mise run docs:*`: opt-in manual builds (info/html/pdf).
 
 Not done yet
-- Re-enable dynamic modules as a tracked milestone
-  - Only after we have a reliable debugging path for macOS crashes and a
-    reproducible module test runner under `mise`.
+- Reintroduce modules only if required
+  - Only if the project direction changes and we can keep module support stable
+    across our supported platforms.
 
 ## Additional notes (follow-up trim iteration)
 

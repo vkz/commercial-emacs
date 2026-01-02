@@ -15,9 +15,7 @@ constraints discovered during the Step 0/1 trimming + build/test work.
 - ELisp **native compilation (libgccjit / .eln)** is intentionally disabled.
   - `native-comp-available-p` always returns nil.
   - `lisp/emacs-lisp/comp*.el` are stubs that error if used.
-- Dynamic modules are **disabled by default** in the TTY build.
-  - Rationale: `src/emacs-module-tests` currently segfaults on macOS; we keep
-    the baseline editor stable while trimming.
+- Emacs dynamic modules support is **removed** in this fork.
 - Future direction is an SBCL-hosted ELisp engine; until then we keep
   building/running Emacs normally as a TTY editor and use tests to keep parity.
 
@@ -55,7 +53,7 @@ All project tasks should be run via `mise` (prefer `mise run ...`).
   - Runs `./autogen.sh` if needed.
 - `mise run configure:tty`
   - Configures an out-of-tree build in `build/macos-tty` by default.
-  - The canonical TTY configure disables GUI backends, tree-sitter, and modules.
+  - The canonical TTY configure disables GUI backends and tree-sitter.
 - `mise run build`
   - Builds the core editor (`make -C build/... src`).
   - Note: this intentionally does **not** build manuals by default.

@@ -104,7 +104,6 @@ libexecdir=@libexecdir@
 # Currently only used for the systemd service file.
 libdir=@libdir@
 
-# Where to install emacs-module.h.
 includedir=@includedir@
 
 # Where to install Emacs's man pages.
@@ -281,8 +280,7 @@ SUBDIR_MAKEFILES = $(patsubst ${srcdir}/%,%,${SUBDIR_MAKEFILES_IN:.in=})
 
 # Non-makefile files created by config.status.
 CONFIG_STATUS_FILES_IN = \
- ${srcdir}/doc/man/emacs.1.in ${srcdir}/src/emacs-module.h.in \
- ${srcdir}/src/module-env-*.h
+ ${srcdir}/doc/man/emacs.1.in
 
 # Subdirectories to install, and where they'll go.  lib-src's and nt's
 # makefiles know how to install them, so we don't do that here.
@@ -488,8 +486,6 @@ set_installuser=for installuser in $${LOGNAME} $${USERNAME} $${USER} \
 ## See also these comments from 2004 about cp -r working fine:
 ## https://lists.gnu.org/r/autoconf-patches/2004-11/msg00005.html
 install-arch-indep: lisp install-info install-man ${INSTALL_ARCH_INDEP_EXTRA}
-	umask 022 && $(MKDIR_P) "$(DESTDIR)$(includedir)"
-	$(INSTALL_DATA) src/emacs-module.h "$(DESTDIR)$(includedir)/emacs-module.h"
 	-set ${COPYDESTS} ; \
 	unset CDPATH; \
 	$(set_installuser); \
@@ -698,7 +694,6 @@ install-strip:
 ###
 ### Don't delete the lisp and etc directories if they're in the source tree.
 uninstall: uninstall-doc uninstall-gsettings-schemas
-	rm -f "$(DESTDIR)$(includedir)/emacs-module.h"
 	$(MAKE) -C lib-src uninstall
 	-unset CDPATH; \
 	for dir in "$(DESTDIR)${lispdir}" "$(DESTDIR)${etcdir}" ; do 	\

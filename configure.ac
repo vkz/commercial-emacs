@@ -416,7 +416,6 @@ OPTION_DEFAULT_ON([gsettings],[don't compile with GSettings support])
 OPTION_DEFAULT_ON([selinux],[don't compile with SELinux support])
 OPTION_DEFAULT_ON([gnutls],[don't use -lgnutls for SSL/TLS support])
 OPTION_DEFAULT_ON([zlib],[don't compile with zlib decompression support])
-OPTION_DEFAULT_ON([modules],[don't compile with dynamic modules support])
 OPTION_DEFAULT_ON([threads],[don't compile with elisp threading support])
 OPTION_DEFAULT_ON([xinput2],[don't use version 2 of the X Input Extension for input])
 OPTION_DEFAULT_OFF([small-ja-dic],[generate a smaller-size Japanese dictionary])
@@ -3838,71 +3837,31 @@ AC_DEFINE_UNQUOTED(DYNAMIC_LIB_SECONDARY_SUFFIX, "$DYNAMIC_LIB_SECONDARY_SUFFIX"
 AC_SUBST(DYNAMIC_LIB_SUFFIX)
 AC_SUBST(DYNAMIC_LIB_SECONDARY_SUFFIX)
 
+### Dynamic library loader support (dlopen)
+LIBDL=
+save_LIBS=$LIBS
+AC_SEARCH_LIBS([dlopen], [dl], [], [])
+LIBS=$save_LIBS
+case "$ac_cv_search_dlopen" in
+  -l*) LIBDL="$ac_cv_search_dlopen" ;;
+  *) LIBDL= ;;
+esac
+AC_SUBST([LIBDL])
+
 ### Dynamic modules support
-LIBMODULES=
 HAVE_MODULES=no
 MODULES_OBJ=
 MODULES_SUFFIX="${DYNAMIC_LIB_SUFFIX}"
 MODULES_SECONDARY_SUFFIX="${DYNAMIC_LIB_SECONDARY_SUFFIX}"
-if test "${with_modules}" != "no"; then
-  case $opsys in
-    gnu|gnu-linux)
-      LIBMODULES="-ldl"
-      HAVE_MODULES=yes
-      ;;
-    cygwin|mingw32|darwin)
-      HAVE_MODULES=yes
-      ;;
-    *)
-      # BSD systems have dlopen in libc.
-      AC_CHECK_FUNC([dlopen], [HAVE_MODULES=yes])
-      ;;
-  esac
-
-  if test "${HAVE_MODULES}" = no; then
-    AC_MSG_ERROR([Dynamic modules are not supported on your system])
-  else
-    SAVE_LIBS=$LIBS
-    LIBS="$LIBS $LIBMODULES"
-    AC_CHECK_FUNCS([dladdr dlfunc])
-    LIBS=$SAVE_LIBS
-  fi
-fi
-
-if test "${HAVE_MODULES}" = yes; then
-   MODULES_OBJ="emacs-module.o"
-   NEED_DYNLIB=yes
-   AC_DEFINE(HAVE_MODULES, 1, [Define to 1 if dynamic modules are enabled])
-   AC_DEFINE_UNQUOTED(MODULES_SUFFIX, "$MODULES_SUFFIX",
-     [System extension for dynamic modules])
-   if test -n "${MODULES_SECONDARY_SUFFIX}"; then
-     AC_DEFINE_UNQUOTED(MODULES_SECONDARY_SUFFIX, "$MODULES_SECONDARY_SUFFIX",
-       [Alternative system extension for dynamic modules.])
-   fi
-fi
+dnl This fork intentionally removes support for Emacs dynamic modules.
+dnl Keep the configure-time variables stable for makefile conditionals.
 AC_SUBST([MODULES_OBJ])
-AC_SUBST([LIBMODULES])
 AC_SUBST([HAVE_MODULES])
 AC_SUBST([MODULES_SUFFIX])
 AC_SUBST([MODULES_SECONDARY_SUFFIX])
 
 upstream_version="31.0.50"
 AC_DEFINE_UNQUOTED([UPSTREAM_VERSION], ["$upstream_version"], [GNU Emacs version])
-AC_CONFIG_FILES([src/emacs-module.h])
-AC_SUBST_FILE([module_env_snippet_25])
-AC_SUBST_FILE([module_env_snippet_26])
-AC_SUBST_FILE([module_env_snippet_27])
-AC_SUBST_FILE([module_env_snippet_28])
-AC_SUBST_FILE([module_env_snippet_29])
-AC_SUBST_FILE([module_env_snippet_30])
-AC_SUBST_FILE([module_env_snippet_31])
-module_env_snippet_25="$srcdir/src/module-env-25.h"
-module_env_snippet_26="$srcdir/src/module-env-26.h"
-module_env_snippet_27="$srcdir/src/module-env-27.h"
-module_env_snippet_28="$srcdir/src/module-env-28.h"
-module_env_snippet_29="$srcdir/src/module-env-29.h"
-module_env_snippet_30="$srcdir/src/module-env-30.h"
-module_env_snippet_31="$srcdir/src/module-env-31.h"
 emacs_major_version=`AS_ECHO([$upstream_version]) | sed 's/[[.]].*//'`
 AC_SUBST([emacs_major_version])
 
@@ -3919,10 +3878,9 @@ AC_SUBST([HAVE_NATIVE_COMP])
 AC_SUBST([LIBGCCJIT_CFLAGS])
 AC_SUBST([LIBGCCJIT_LIBS])
 
-DYNLIB_OBJ=
-if test "${NEED_DYNLIB}" = yes; then
-  DYNLIB_OBJ="dynlib.o"
-fi
+dnl dynlib is used by other optional features (e.g. tree-sitter module loading),
+dnl even though Emacs dynamic modules are removed.
+DYNLIB_OBJ=dynlib.o
 AC_SUBST([DYNLIB_OBJ])
 
 ### Use -lpng if available, unless '--with-png=no'.

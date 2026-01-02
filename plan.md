@@ -65,8 +65,6 @@ Suggested baseline configure shape (exact flags may be adjusted after the first 
   - `--with-ns=no`
   - `--with-pgtk=no`
   - `--with-x-toolkit=no` (and, if supported by the generated `configure`, `--with-x=no`)
-- Disable dynamic modules (temporary; see note below):
-  - `--with-modules=no`
 - Reduce moving parts while we focus on the Lisp engine rewrite:
   - `--with-tree-sitter=no`
 
@@ -78,11 +76,11 @@ Note on native compilation
     the SBCL-hosted engine, not libgccjit output).
   - Keep it deleted; ELisp runs as SBCL code in the long-term design.
 
-Note on dynamic modules (temporary)
-- This fork currently configures TTY builds with `--with-modules=no`.
-- Rationale: `src/emacs-module-tests` currently segfaults on macOS, and we
-  want a stable TTY editor baseline before investing time in module API
-  debugging.  Revisit once we have more rigorous debugging tooling.
+Note on dynamic modules
+- This fork removes Emacs dynamic module support entirely (and removes the
+  module tests/resources).
+- Rationale: the module test binary was unstable on macOS, and dynamic modules
+  are not in scope for the SBCL-hosted ELisp engine direction.
 
 0.3 Run baseline tests
 - Use the stock harness via mise: `mise run test:check`.
