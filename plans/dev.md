@@ -169,8 +169,11 @@ Tasks
 - `.mise/tasks/docs/html`: builds the corresponding `*-html` targets.
 - `.mise/tasks/docs/pdf`: builds the corresponding `*-pdf` targets (requires a
   TeX toolchain).
+- `.mise/tasks/docs/dir`: regenerates `info/dir` (explicit opt-in; dirties git).
 
 Examples
 - `mise run docs:info`
 - `mise run docs:html`
 - `mise run docs:pdf`
+- `mise run docs:dir` (dry-run)
+- `mise run docs:dir -- --yes`

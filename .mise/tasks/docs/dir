@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Regenerate info/dir in the source tree (opt-in; dirties git)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+#USAGE flag "--dry-run" help="Print what would happen and exit"
+#USAGE flag "-y --yes" help="Actually regenerate info/dir"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+dry_run="${usage_dry_run:-false}"
+yes="${usage_yes:-false}"
+
+if [[ "${dry_run}" != "true" && "${yes}" != "true" ]]; then
+  dry_run="true"
+fi
+
+if [[ ! -f "${build_dir}/Makefile" ]]; then
+  mise run configure:tty -- --build-dir "${build_dir}"
+fi
+
+echo "[docs:dir] will regenerate info/dir under the source tree"
+if [[ "${dry_run}" == "true" ]]; then
+  echo "[docs:dir] dry-run; pass --yes to proceed"
+  exit 0
+fi
+
+make -C "${build_dir}" info-dir

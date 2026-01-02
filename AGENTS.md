@@ -91,6 +91,7 @@ loops:
 - `mise run docs:info`
 - `mise run docs:html`
 - `mise run docs:pdf`
+- `mise run docs:dir` (regenerates `info/dir`, dirties git; opt-in)
 
 Doc editing policy (when we touch texinfo)
 - Do not point users at upstream Emacs docs for removed features.
