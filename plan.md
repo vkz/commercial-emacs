@@ -338,6 +338,18 @@ Deliverables
 Gate
 - `mise run clemacs:run` starts and exits cleanly from a terminal.
 
+Status (DONE, 2026-01-02)
+- DONE: Pin SBCL via `mise` (`sbcl@2.6.0` in `mise.toml`).
+- DONE: Add minimal ASDF system scaffold under `clemacs/`.
+- DONE: Add `mise` tasks:
+  - `clemacs:bootstrap` (installs ECL host CL + SBCL via mise)
+  - `clemacs:build`
+  - `clemacs:run`
+  - `clemacs:test:smoke`
+- DONE: Gate passes: `mise run clemacs:run` prints banner and exits cleanly.
+- DONE: One-shot timing (warm): `mise run clemacs:run` ~0.12s real on this machine.
+- TODO: Capture a cold-start timing (after clearing `build/clemacs/xdg-cache`) and decide whether a saved SBCL core is worth it.
+
 ### Milestone B1-1: substrate library callable from SBCL
 
 Deliverables

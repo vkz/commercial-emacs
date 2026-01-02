@@ -1,10 +1,10 @@
 [env]
 CLMACS_BUILD_DIR = "build/macos-tty"
 
-# NOTE: We intentionally do not declare `sbcl` as a mise tool yet.
-# The current `asdf:mise-plugins/mise-sbcl` installer requires an
-# already-working host Common Lisp to build SBCL from source, and this
-# machine currently has no SBCL installed.
+[tools]
+# SBCL is the intended host runtime for clemacs bring-up (Option B).
 #
-# Add `sbcl` here once SBCL is present on the machine, or once we have a
-# reliable bootstrapping strategy that still keeps SBCL as the runtime.
+# Note: the mise sbcl plugin builds SBCL from source and requires a host CL
+# implementation during install. On macOS, installing ECL via Homebrew works:
+#   brew install ecl
+sbcl = "2.6.0"

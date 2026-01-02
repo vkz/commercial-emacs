@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Bootstrap clemacs toolchain (install host CL + SBCL via mise)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--sbcl-version <ver>" help="SBCL version to install" default="2.6.0"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+sbcl_version="${usage_sbcl_version}"
+
+if ! command -v brew >/dev/null 2>&1; then
+  echo "[clemacs:bootstrap] missing Homebrew (brew); cannot install host CL (ECL)" >&2
+  exit 1
+fi
+
+if ! command -v ecl >/dev/null 2>&1; then
+  echo "[clemacs:bootstrap] installing ECL (host CL for SBCL build) via Homebrew"
+  brew install ecl
+fi
+
+mise install "sbcl@${sbcl_version}"
+
+echo "[clemacs:bootstrap] sbcl --version"
+mise x "sbcl@${sbcl_version}" -- sbcl --version
