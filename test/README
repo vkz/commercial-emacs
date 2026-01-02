@@ -127,22 +127,19 @@ Some of the tests require a remote temporary directory
 (autorevert-tests.el, dnd-tests.el, filenotify-tests.el,
 shadowfile-tests.el and tramp-tests.el).  Per default, a mock-up
 connection method is used (this might not be possible when running on
-MS Windows).  If you want to test a real remote connection, set
+some systems).  If you want to test a real remote connection, set
 $REMOTE_TEMPORARY_FILE_DIRECTORY to a suitable value in order to
 overwrite the default value:
 
     env REMOTE_TEMPORARY_FILE_DIRECTORY=/ssh:host:/tmp make ...
 
 
-There are also continuous integration tests on
-<https://hydra.nixos.org/jobset/gnu/emacs-trunk> (see
-admin/notes/hydra) and <https://emba.gnu.org/emacs/emacs> (see
-admin/notes/emba).  Both environments provide an environment variable,
-which could be used to determine, whether the tests run in one of
-these test environments.
+Some continuous integration environments provide an environment
+variable which can be used to determine whether tests are running under
+CI.
 
-$EMACS_HYDRA_CI indicates the hydra environment, and $EMACS_EMBA_CI
-indicates the emba environment, respectively.
+$EMACS_HYDRA_CI and $EMACS_EMBA_CI are used for this purpose in some
+test setups.
 
 If tests on these premises take too long, and it is needed to create a
 core dump for further analysis, the environment variable

@@ -938,16 +938,6 @@ check-declare:
 	$(MAKE) -C lisp $@
 	$(MAKE) -C test $@
 
-.PHONY: gitmerge
-
-GITMERGE_EMACS = ./src/emacs${EXEEXT}
-GITMERGE_NMIN = 10
-
-gitmerge:
-	${GITMERGE_EMACS} -batch --no-site-file --no-site-lisp \
-	  -l ${srcdir}/admin/gitmerge.el \
-	  --eval '(setq gitmerge-minimum-missing ${GITMERGE_NMIN})' -f gitmerge
-
 install-gsettings-schemas:
 ifeq ($(HAVE_PGTK)$(HAVE_GSETTINGS),yesyes)
 	$(MKDIR_P) "$(DESTDIR)$(gsettingsschemadir)"

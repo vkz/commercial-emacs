@@ -30,6 +30,11 @@ for path in modules src/emacs-module.c test/src/emacs-module-tests.el test/src/e
     fail "unexpected path still present: ${path}"
   fi
 done
+for path in admin/notes admin/gitmerge.el admin/make-manuals admin/make-emacs admin/merge-gnulib; do
+  if [[ -e "${path}" ]]; then
+    fail "unexpected path still present: ${path}"
+  fi
+done
 
 if rg -n --fixed-strings -- "--with-native-compilation" configure.ac Makefile.in >/dev/null; then
   fail "found native-comp build/config references"

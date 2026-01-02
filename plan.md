@@ -182,7 +182,6 @@ Definite (safe, not needed for building/running)
 
 Optional (policy choice; safe for build, but may be useful for archaeology)
 - `etc/AUTHORS`
-- Some of `admin/notes/*` (developer-process docs)
 - Any remaining release-note collections under `etc/` if present in future
 
 Acceptance criteria

@@ -25,10 +25,7 @@ The following shell commands then build and run Emacs from scratch:
 	make
 	src/emacs
 
-For more details, see
-https://www.emacswiki.org/emacs/GitQuickStartForEmacsDevs and
-https://www.emacswiki.org/emacs/GitForEmacsDevs or see the file
-admin/notes/git-workflow.
+For more details, consult the project documentation for this fork.
 
 ** Getting involved with development
 
@@ -103,8 +100,7 @@ the least, each bug needs to be regularly re-reviewed to make sure it
 is still reproducible.
 
 The process of going through old or new bugs and acting on them is
-called bug triage.  This process is described in the file
-admin/notes/bug-triage.
+called bug triage.
 
 ** Documenting your changes
 
@@ -382,8 +378,7 @@ possibly being merged to the master.  Release branches are named
 intended for more-conservative changes such as bug fixes.  Typically,
 collective development is active on the master branch and possibly on
 the current release branch.  Periodically, the current release branch
-is merged into the master, using the gitmerge function described in
-admin/notes/git-workflow.
+is merged into the master.
 
 If you are fixing a bug that exists in the current release, you should
 generally commit it to the release branch; it will be merged to the
@@ -405,19 +400,9 @@ is in feature freeze, it can still receive doc fixes.  However, this
 rule is limited to fixing real problems in the documentation; cleanups
 and stylistic changes are excluded.
 
-When you know that the change will be difficult to merge to the
-master (e.g., because the code on master has changed a lot), you can
-apply the change to both master and branch yourself.  It could also
-happen that a change is cherry-picked from master to the release
-branch, and so doesn't need to be merged back.  In these cases,
-say in the release branch commit message that there is no need to merge
-the commit to master, by starting the commit message with "Backport:".
-The gitmerge function excludes these commits from the merge to the master.
-
-Some changes should not be merged to master at all, for whatever
-reason.  These should be marked by including something like "Do not
-merge to master" or anything that matches gitmerge-skip-regexp (see
-admin/gitmerge.el) in the commit message.
+When you know that a change should not be merged between branches,
+record that decision in the commit message (e.g. with a "Backport:"
+prefix or an explicit note).
 
 ** Some packages in Emacs are maintained externally
 
@@ -431,15 +416,6 @@ So when you are making a contribution -- such as fixing a bug or
 proposing an enhancement -- to one of these externally maintained
 packages, you sometimes need to deal with that package at its upstream
 source.
-
-In the section "Externally maintained packages" in "admin/MAINTAINERS"
-we maintain a list of such packages.
-
-** GNU ELPA
-
-This repository does not contain the Emacs Lisp package archive
-(elpa.gnu.org).  See admin/notes/elpa for how to access the GNU ELPA
-repository.
 
 ** Understanding Emacs internals
 
@@ -461,19 +437,6 @@ UTF-8 encoding unless it cannot do the job for some good reason.
 Although it is generally a good idea to add 'coding:' cookies to
 non-ASCII source files, cookies are not needed in UTF-8-encoded *.el
 files intended for use only with Emacs version 24.5 and later.
-
-*** Useful files in the admin/ directory
-
-See all the files in 'admin/notes/*'.  In particular, see
-'admin/notes/newfile' and 'admin/notes/repo'.
-
-The file admin/MAINTAINERS records the areas of interest of frequent
-Emacs contributors.  If you are making changes in one of the files
-mentioned there, it is a good idea to consult the person who expressed
-an interest in that file, and/or get his/her feedback for the changes.
-If you are a frequent contributor and have interest in maintaining
-specific files, please record those interests in that file, so that
-others could be aware of that.
 
 *** git vs rename
 

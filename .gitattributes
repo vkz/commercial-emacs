@@ -96,15 +96,7 @@ Makefile.in diff=make
 *.texi diff=texinfo
 #
 # Diff hunk header special-case file names.
-admin/build-configs diff=perl
 admin/charsets/mapconv diff=shell
-admin/diff-tar-files diff=shell
-admin/make-emacs diff=perl
-admin/merge-gnulib diff=shell
-admin/merge-pkg-config diff=shell
-admin/quick-install-emacs diff=shell
-admin/update-copyright diff=shell
-admin/update_autogen diff=shell
 build-aux/config.guess diff=shell
 build-aux/config.sub diff=shell
 build-aux/git-hooks/commit-msg diff=shell

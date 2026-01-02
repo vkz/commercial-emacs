@@ -165,7 +165,6 @@ test/**/*.xml
 
 # ctags, etags.
 TAGS
-!admin/notes/tags
 
 # GNU global.
 GPATH
@@ -319,7 +318,7 @@ lib-src/seccomp-filter-exec.pfc
 # gsettings schema
 /etc/*.gschema.valid
 
-# Ignore directory made by admin/make-manuals.
+# Ignore manual build output.
 /manual/
 
 /test/gmp.h
