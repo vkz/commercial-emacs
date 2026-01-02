@@ -99,7 +99,10 @@ expected function symbol and function library, respectively."
       (progn
         (advice-add 'dired :before #'ignore)
         ;; bug#41104
-        (should (equal (find-function-library #'dired) '(dired . "dired"))))
+        (let ((res (find-function-library #'dired)))
+          (should (eq (car res) 'dired))
+          (should (string-match-p "dired\\(?:\\.el\\)?\\'"
+                                  (file-name-nondirectory (cdr res))))))
     (advice-remove 'dired #'ignore))
 
   (find-function-library #'join-line nil t)

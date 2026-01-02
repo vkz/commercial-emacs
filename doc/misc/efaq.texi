@@ -933,14 +933,13 @@ Emacs @file{NEWS} file by typing @kbd{C-h n} inside Emacs.
 
 @itemize
 @item
-Native compilation is now enabled by default.  When Emacs is built on a
-machine with @samp{libgccjit}, this will improve Emacs performance in
-many typical workloads.
+Upstream Emacs enables native compilation by default when built with
+@samp{libgccjit}.  This fork intentionally disables/removes native
+compilation.
 
 @item
-Emacs has been ported to the Android operating system.  See the file
-@file{java/INSTALL} in the Emacs source distribution for details on how
-to build it.
+Upstream Emacs has an Android port.  This fork does not ship the Android
+build.
 
 @item
 Numerous performance improvements, for example in parsing JSON, reading
@@ -1135,6 +1134,7 @@ file (@kbd{C-h n}) for the full list of changes in Emacs 28.
 Emacs now optionally supports native compilation of Lisp files.  This
 can improves performance significantly in some cases.  To enable this,
 configure Emacs with the @option{--with-native-compilation} option.
+This fork intentionally disables/removes native compilation.
 
 @item
 The new NonGNU ELPA archive is enabled by default alongside GNU ELPA.
@@ -3809,13 +3809,10 @@ and any Emacs Info files that might be in @file{/usr/local/share/info/}.
 @cindex Apple computers, Emacs for
 @cindex Macintosh, Emacs for
 @cindex macOS, Emacs for
-Emacs supports macOS natively.  See the file @file{nextstep/INSTALL}
-in the distribution.
+Upstream Emacs supports macOS and GNUstep natively via its GUI ports.
+This fork is currently TTY-only and does not ship those GUI ports.
 
 @cindex GNUstep, Emacs for
-Emacs supports GNUstep natively.  See the file @file{nextstep/INSTALL}
-in the distribution.
-
 This fork does not ship MS-Windows or MS-DOS ports.
 
 For a list of other implementations of Emacs (and Emacs

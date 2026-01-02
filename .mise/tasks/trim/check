@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Guardrails: ensure removed ports/features stay removed"
+#USAGE flag "-h --help" help="Print help"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+fail() {
+  echo "[trim:check] $*" >&2
+  exit 1
+}
+
+for dir in nextstep lwlib oldXMenu; do
+  if [[ -e "${dir}" ]]; then
+    fail "unexpected path still present: ${dir}"
+  fi
+done
+
+if rg -n --fixed-strings -- "--with-native-compilation" configure.ac Makefile.in >/dev/null; then
+  fail "found native-comp build/config references"
+fi
+if rg -n --fixed-strings -- "AC_CHECK_LIB([gccjit]" configure.ac >/dev/null; then
+  fail "found gccjit probing in configure.ac"
+fi
+if rg -n --fixed-strings -- "libgccjit.h" configure.ac src >/dev/null; then
+  fail "found libgccjit.h references in build/runtime code"
+fi
+if rg -n --fixed-strings -- "gcc_jit_" configure.ac src >/dev/null; then
+  fail "found gcc_jit_ symbol usage in build/runtime code"
+fi
+
+echo "[trim:check] OK"

@@ -17,7 +17,7 @@ cd "${project_root}"
 build_dir="${usage_build_dir}"
 
 if [[ ! -f "${build_dir}/Makefile" ]]; then
-  mise run -- configure:tty --build-dir "${build_dir}"
+  mise run configure:tty -- --build-dir "${build_dir}"
 fi
 
 jobs="${usage_jobs:-}"

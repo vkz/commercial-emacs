@@ -5,6 +5,7 @@ set -euo pipefail
 #USAGE flag "-h --help" help="Print help"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
 #USAGE flag "-j --jobs <n>" help="make -j jobs (default: cpu count)" default=""
+#USAGE flag "-f --force" help="Force rebuilding the log (pass -B to make)"
 #USAGE arg "<path>" help="Test path under test/ (e.g. lisp/emacs-lisp/eval-tests)"
 
 if [[ "${usage_help:-false}" == "true" ]]; then
@@ -19,7 +20,7 @@ build_dir="${usage_build_dir}"
 test_dir="${build_dir}/test"
 
 if [[ ! -f "${test_dir}/Makefile" ]]; then
-  mise run -- build --build-dir "${build_dir}"
+  mise run build -- --build-dir "${build_dir}"
 fi
 
 jobs="${usage_jobs:-}"
@@ -33,4 +34,8 @@ path="${path%.log}"
 target="${path}.log"
 
 echo "[test:file] ${target} (-j${jobs})"
-make -C "${test_dir}" -j"${jobs}" "${target}"
+if [[ "${usage_force:-false}" == "true" ]]; then
+  make -C "${test_dir}" -B -j"${jobs}" "${target}"
+else
+  make -C "${test_dir}" -j"${jobs}" "${target}"
+fi

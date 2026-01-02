@@ -11,10 +11,13 @@ constraints discovered during the Step 0/1 trimming + build/test work.
   added later for CI/testing.
 - Supported platforms for this fork are **macOS (darwin)**, **GNU/Linux
   (gnu-linux)**, and **FreeBSD (freebsd)** only.
-  - `configure.ac` hard-errors for other `opsys` values.
+  - Other `opsys` values may still exist upstream, but are out of scope here.
 - ELisp **native compilation (libgccjit / .eln)** is intentionally disabled.
   - `native-comp-available-p` always returns nil.
   - `lisp/emacs-lisp/comp*.el` are stubs that error if used.
+- Dynamic modules are **disabled by default** in the TTY build.
+  - Rationale: `src/emacs-module-tests` currently segfaults on macOS; we keep
+    the baseline editor stable while trimming.
 - Future direction is an SBCL-hosted ELisp engine; until then we keep
   building/running Emacs normally as a TTY editor and use tests to keep parity.
 
@@ -38,6 +41,7 @@ All project tasks should be run via `mise` (prefer `mise run ...`).
   - Runs `./autogen.sh` if needed.
 - `mise run configure:tty`
   - Configures an out-of-tree build in `build/macos-tty` by default.
+  - The canonical TTY configure disables GUI backends, tree-sitter, and modules.
 - `mise run build`
   - Builds the core editor (`make -C build/... src`).
   - Note: this intentionally does **not** build manuals by default.
@@ -46,13 +50,18 @@ All project tasks should be run via `mise` (prefer `mise run ...`).
 - `mise run test:smoke`
   - Runs a small ERT-focused set of test targets under `build/.../test`.
 - `mise run test:check` / `mise run test:check-all`
-  - Upstream-style test entrypoints; these may fail during trimming and should
-    be treated as longer-term convergence targets.
+  - Runs the upstream harness in `build/.../test` (does not build manuals).
 
 ### Running a single test file
 
-- `mise run test:file -- --path <relative-test-path>`
-  - Example: `mise run test:file -- --path lisp/emacs-lisp/ert-tests.log`
+- `mise run test:file -- <relative-test-path>`
+  - Example: `mise run test:file -- lisp/emacs-lisp/ert-tests`
+
+### Trim verification helpers
+
+- `mise run trim:check` (fast guardrails)
+- `mise run verify -- --level fast` (build + run + smoke)
+- `mise run verify -- --level check` (adds `make check`)
 
 ## Gotchas (important)
 
@@ -66,18 +75,11 @@ from the source tree into the build dir for:
 
 Do not replace this with `make` defaults without checking bootstrap/pdump.
 
-### Manuals currently fail to build after platform trimming
+### Top-level `make check` is not the preferred test entrypoint
 
-We removed MS-DOS/Haiku/Windows-port manuals and related nodes.  Upstream docs
-still contain cross-references to those nodes, so `make -C doc/... info` can
-fail.
-
-Policy:
-
-- Default build tasks should not build manuals.
-- If/when we want manuals again, we must either:
-  - repair texi references/menus consistently, or
-  - restore removed platform chapters as documentation-only.
+Running `make -C build/... check` can pull in extra build work (including docs)
+depending on makefile wiring. Prefer `mise run test:check`, which runs
+`make -C build/.../test check` directly.
 
 ### Native compilation is disabled (and should stay disabled)
 
@@ -91,14 +93,21 @@ stubs that fail loudly if something tries to use native compilation.
 
 ## Change hygiene (how to trim safely)
 
-- Prefer deleting whole directories that are clearly out of scope (e.g. `nt/`).
+- Prefer deleting whole directories that are clearly out of scope (e.g.
+  `nextstep/`, `lwlib/`, `oldXMenu/`).
 - After deleting, immediately:
   - remove or gate build-system references (`configure.ac`, `Makefile.in`,
     `src/Makefile.in`, doc makefiles).
   - run `mise run bootstrap -- --force`, then `mise run configure:tty -- --force`.
-  - run `mise run build` and `mise run test:smoke`.
+  - run `mise run verify -- --level check --force`.
 - Be careful with ambiguous names:
   - `doc/emacs/windows.texi` is the Emacs "windows" chapter (not MS Windows).
+
+### Bash + `set -u` arrays
+
+Avoid expanding empty arrays under `set -u` (e.g. `"${arr[@]}"`), since Bash
+will treat that as an unbound variable. Prefer simple `if` branches for
+optional flags (see `.mise/tasks/test/*`).
 
 ## Where plans live
 

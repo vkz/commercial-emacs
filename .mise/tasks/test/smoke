@@ -5,6 +5,7 @@ set -euo pipefail
 #USAGE flag "-h --help" help="Print help"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
 #USAGE flag "-j --jobs <n>" help="make -j jobs (default: cpu count)" default=""
+#USAGE flag "-f --force" help="Force rebuilding test logs (pass -B to make)"
 
 if [[ "${usage_help:-false}" == "true" ]]; then
   mise tasks info "${MISE_TASK_NAME}"
@@ -17,7 +18,7 @@ cd "${project_root}"
 build_dir="${usage_build_dir}"
 
 if [[ ! -x "${build_dir}/src/emacs" ]]; then
-  mise run -- build --build-dir "${build_dir}"
+  mise run build -- --build-dir "${build_dir}"
 fi
 
 test_dir="${build_dir}/test"
@@ -45,4 +46,8 @@ targets=(
 )
 
 echo "[test:smoke] running ${#targets[@]} targets (-j${jobs})"
-make -C "${test_dir}" -j"${jobs}" "${targets[@]}"
+if [[ "${usage_force:-false}" == "true" ]]; then
+  make -C "${test_dir}" -B -j"${jobs}" "${targets[@]}"
+else
+  make -C "${test_dir}" -j"${jobs}" "${targets[@]}"
+fi

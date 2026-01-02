@@ -1,162 +1,108 @@
 # Dev Notes (Step 0/1 iteration)
 
-This file records issues, discoveries, and proposed tooling improvements from
-the first large trimming + build/test iteration (steps 0 and 1 in `plan.md`).
+This file records issues, discoveries, and tooling lessons from the first large
+TTY-only trimming + build/test iteration (steps 0 and 1 in `plan.md`).
 
 ## Summary of what worked
 
-- Out-of-tree **TTY** build on macOS works via `mise` tasks.
-- A fast smoke suite exists and is practical for repeated runs:
-  - `mise run test:smoke` (and/or `make -C build/.../test -B ...`).
-- Large-scale repo trimming is feasible as long as build-system references are
-  updated immediately and verified using the tasks.
+- Out-of-tree **TTY** build on macOS is repeatable via `mise`.
+- A tight verification loop exists and is practical during trimming:
+  - `mise run trim:check`
+  - `mise run verify -- --level check` (and `--force` when needed)
+- Removing GUI/toolkit directories (`nextstep/`, `lwlib/`, `oldXMenu/`) is
+  workable as long as build glue is updated immediately and tests are run.
 
 ## Problems encountered (and lessons)
 
-### 0) Commit-message hooks are strict
+### 1) Commit-message hooks are strict
 
-Symptom:
+- Symptom: commit hooks complain about long lines/words in messages.
+- Lesson: ASCII-only, short subject, wrapped body (~72 cols).
 
-- `git commit` warned about long lines / very long words in commit messages and
-  pointed to `CONTRIBUTE`.
+### 2) "Full tests" entrypoints can do extra work
 
-Lesson:
+- Symptom: running `make -C <build> check` can build docs and other subdirs,
+  which is slow and noisy for a trimming verification loop.
+- What we did: `mise run test:check` now runs `make -C <build>/test check`
+  directly.
+- Lesson: prefer narrow, explicit entrypoints for agent loops.
 
-- Keep commit messages short and wrapped (body ~72 columns). Avoid very long
-  unbroken strings.
+### 3) Native-comp disabling needs bootstrapping-safe stubs
 
-### 1) Manual/documentation builds broke after removing platform chapters
+- Symptom: pdump/bootstrap can trip over missing file-local vars such as
+  `no-native-compile` / `no-byte-compile`.
+- What we did: keep minimal stubs in `lisp/emacs-lisp/comp*.el` plus C-side
+  `native-comp-available-p` returning nil.
+- Lesson: "remove a feature" often still requires compatibility shims so the
+  rest of Emacs loads cleanly.
 
-Symptom:
+### 4) Edebug backtrace navigation broke in subtle ways
 
-- `make -C doc/emacs info` produced many texinfo errors about missing nodes
-  (MS-DOS/Windows/Haiku references and menus).
+- Symptoms:
+  - `edebug-tests-backtrace-goto-source` originally hit
+    `max-lisp-eval-depth` (deep recursion via `edebug-unwrap*`).
+  - After limiting unwrapping, the test still failed due to frame indexing
+    mismatches in the Edebug backtrace buffer.
+- What we did:
+  - Stop unwrapping already-evaluated frame args (avoid descending into large
+    cyclic structures).
+  - Strip leading debugger-internal frames without `:source-available`.
+  - Drop the `while` special-form frame (it shifts navigation in a way the
+    test suite considers wrong).
 
-Root cause:
+### 5) Obsolete `cl` `labels` macro blew the stack under `macroexpand-all`
 
-- Platform chapters were removed, but upstream manuals contain cross-references
-  and menus that still refer to those nodes.
+- Symptom: `test/lisp/obsolete/cl-tests.el` failed with `excessive-lisp-nesting`
+  while expanding `labels`.
+- What we did: when `lexical-binding` is non-nil, make `labels` delegate to
+  `cl-labels` (keep the legacy `lexical-let` path only for old dynamic-scope
+  contexts).
+- Lesson: prefer the modern, maintained macro implementations when they exist.
 
-What we did:
+### 6) Dynamic module tests segfaulted on macOS
 
-- Changed `mise run build` to build only the core editor target (`make ... src`)
-  and not manuals.
+- Symptom: `src/emacs-module-tests.log` crashed reproducibly in
+  `mod-test-sleep-until`.
+- What we did: configure the TTY build with `--with-modules=no` to keep the
+  baseline editor stable while trimming.
+- Lesson: when a feature is both out-of-scope and unstable, disable it at
+  configure time so the default verification loop stays green.
 
-Proposed improvement:
+### 7) Bash `set -u` + empty arrays is a trap
 
-- Add explicit tasks for manuals and keep them opt-in:
-  - `mise run docs:info` / `docs:pdf` which run the doc targets and fail fast.
-- Add a follow-up trimming task to either:
-  - comprehensively remove/update texinfo refs and menus, or
-  - re-add platform chapters as documentation-only (if we want manuals intact).
+- Symptom: expanding `"${arr[@]}"` when `arr=()` triggers "unbound variable"
+  under `set -u`.
+- What we did: switch to explicit `if` branches for optional `make -B` flags in
+  `.mise/tasks/test/*`.
+- Lesson: keep task scripts boring and shell-portable; avoid clever array
+  expansions under `-u`.
 
-Agentic note:
+## Tooling improvements made (now present)
 
-- Avoid broad `make` targets (e.g. default `all`) during trimming; prefer
-  `src` and targeted tests until docs are reconciled.
+- `mise run trim:check`: grep-based guardrails (removed GUI dirs, native-comp
+  probing).
+- `mise run verify`: single-command verification loop with `--level` and
+  `--force` (forces `-B` for smoke/check).
+- `mise run test:smoke -- --force`: forces rebuilding selected smoke logs.
+- `mise run test:check -- --force`: forces rebuilding the full default suite.
 
-### 2) Native compilation removal caused bootstrap/pdump failures in subtle ways
+## Next tooling proposals (not done yet)
 
-Symptom:
+1) Add `mise run doctor`
+   - Quick sanity checks: required tools present, build dir layout, expected
+     invariants (e.g. `(native-comp-available-p)` is nil).
 
-- Build failed during pdump / bootstrap due to void variables:
-  - `no-native-compile`
-  - `no-byte-compile`
+2) Add `mise run clean` / `clobber`
+   - Safe cleanup of `build/<name>` with confirm/dry-run.
 
-Root cause:
+3) Add doc tasks (`docs:info`, `docs:pdf`)
+   - Opt-in and separate from the main build/test loop.
 
-- `admin/relative-lisp-files.el` uses `hack-local-variables` and expects those
-  variables to exist when scanning file-local directives.
-- Upstream defines these via native-comp codepaths/autoloads; after stripping,
-  they became undefined.
-
-What we did:
-
-- Provided minimal definitions in the `comp.el` stub:
-  - `no-native-compile` and `no-byte-compile` (and marked them safe locals).
-
-Proposed improvements:
-
-- Add a focused task `mise run doctor` that performs:
-  - `rg` checks for removed features reappearing (e.g. `.eln`, libgccjit).
-  - a tiny `--batch` check that loads core bootstrap helpers and asserts
-    expected invariants (e.g. `(native-comp-available-p)` is nil).
-
-### 3) Configure/task drift created avoidable warnings
-
-Symptom:
-
-- `configure` warned about an unrecognized option we were still passing from a
-  task (a removed `--without-native-compilation` flag).
-
-Lesson:
-
-- When we hard-disable a feature in `configure.ac`, the tasks must be updated
-  immediately to avoid noisy output and confusion.
-
-Proposed improvements:
-
-- Add a `mise run configure:tty -- --show-args` habit in review checklists.
-- Consider emitting the configure args into a stable file:
-  - `build/<name>/configure.args` for easier diffs in future changes.
-
-### 4) Rebuild signal quality: smoke tests can appear "up to date"
-
-Symptom:
-
-- `mise run test:smoke` reported targets "up to date" and returned quickly,
-  even when we wanted a true rerun after internal changes.
-
-Lesson:
-
-- For confidence during trimming, we sometimes need a forced rebuild.
-
-Proposed improvement:
-
-- Add `--force` flag to `.mise/tasks/test/smoke` that passes `-B` to make.
-  (We used `make -B` manually once to confirm.)
-
-### 5) Generated headers should not live in the source tree
-
-Lesson:
-
-- This repo is a fork-of-a-fork; out-of-tree expectations are fragile.
-  Generating config-dependent headers in the source tree leads to confusion.
-
-Proposed improvements:
-
-- Keep tightening out-of-tree assumptions:
-  - If a path under the build dir is expected, ensure the task creates it.
-  - Prefer build-dir generated files over source-dir mutation.
-
-## Tooling proposals to improve future agent performance
-
-1) Add `mise run doctor` (new task)
-   - Verify prerequisites: `autoconf`, `automake`, `texinfo` (makeinfo), etc.
-   - Verify supported host OS and that `configure` will error out on others.
-   - Verify native-comp is disabled:
-     - `./build/.../src/emacs -Q --batch --eval '(kill-emacs (if (native-comp-available-p) 1 0))'`
-
-2) Add `mise run clean` (new task)
-   - Remove `build/<name>` (configurable) and regenerate symlink tree.
-   - Should be explicit and safe (confirm / dry-run).
-
-3) Add `mise run docs:info` (new task)
-   - Opt-in doc build to surface broken texi references when desired.
-   - Keep default `build` task doc-free.
-
-4) Add `mise run test:smoke -- --force`
-   - Forces rebuilding test logs by passing `-B` to `make`.
-
-5) Add `mise run trim:check` (new task)
-   - Grep-based guardrails to prevent reintroducing removed ports/features:
-     - `nt/`, `w32`, `msdos`, `haiku` sources
-     - libgccjit probes, `.eln` references, native-comp configure flags
+4) Re-enable modules as a tracked milestone
+   - Only after we have a reliable debugging path for macOS crashes and a
+     reproducible module test runner under `mise`.
 
 ## Verification checklist for each trimming change
 
-- `mise run bootstrap -- --force` (after touching `configure.ac` / m4)
-- `mise run configure:tty -- --force`
-- `mise run build`
-- `mise run run` (smoke: `--version` and a quick batch eval)
-- `mise run test:smoke` (use forced mode when changing core load/bootstrap)
+- `mise run trim:check`
+- `mise run verify -- --level check` (use `--force` when you need guaranteed reruns)

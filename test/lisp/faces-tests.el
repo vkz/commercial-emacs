@@ -220,8 +220,8 @@
 (ert-deftest test-tty-find-type ()
   (let ((pred (lambda (string)
                 (locate-library (concat "term/" string ".el")))))
-    (should (tty-find-type pred "cygwin"))
-    (should (tty-find-type pred "cygwin-foo"))
+    (should (tty-find-type pred "linux"))
+    (should (tty-find-type pred "linux-foo"))
     (should (equal (tty-find-type pred "xterm") "xterm"))
     (should (equal (tty-find-type pred "screen.xterm") "screen"))))
 

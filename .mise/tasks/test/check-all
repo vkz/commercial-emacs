@@ -5,6 +5,7 @@ set -euo pipefail
 #USAGE flag "-h --help" help="Print help"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
 #USAGE flag "-j --jobs <n>" help="make -j jobs (default: cpu count)" default=""
+#USAGE flag "-f --force" help="Force rebuilding test logs (pass -B to make)"
 
 if [[ "${usage_help:-false}" == "true" ]]; then
   mise tasks info "${MISE_TASK_NAME}"
@@ -15,8 +16,14 @@ project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
 cd "${project_root}"
 
 build_dir="${usage_build_dir}"
-if [[ ! -f "${build_dir}/Makefile" ]]; then
-  mise run -- configure:tty --build-dir "${build_dir}"
+if [[ ! -x "${build_dir}/src/emacs" ]]; then
+  mise run build -- --build-dir "${build_dir}"
+fi
+
+test_dir="${build_dir}/test"
+if [[ ! -f "${test_dir}/Makefile" ]]; then
+  echo "[test:check-all] missing ${test_dir}/Makefile; did configure succeed?" >&2
+  exit 1
 fi
 
 jobs="${usage_jobs:-}"
@@ -24,5 +31,9 @@ if [[ -z "${jobs}" ]]; then
   jobs="$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
 fi
 
-echo "[test:check-all] make -C ${build_dir} check-all (-j${jobs})"
-make -C "${build_dir}" -j"${jobs}" check-all
+echo "[test:check-all] make -C ${test_dir} check-all (-j${jobs})"
+if [[ "${usage_force:-false}" == "true" ]]; then
+  make -C "${test_dir}" -B -j"${jobs}" check-all
+else
+  make -C "${test_dir}" -j"${jobs}" check-all
+fi

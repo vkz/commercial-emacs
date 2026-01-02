@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Verify a TTY-only build and tests (for safe trimming)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
+#USAGE flag "-j --jobs <n>" help="make -j jobs (default: cpu count)" default=""
+#USAGE flag "-f --force" help="Force autogen/configure and rerun test logs"
+#USAGE flag "--level <level>" help="Verification level" default="fast" {
+#USAGE   choices "fast" "check" "check-all"
+#USAGE }
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+build_dir="${usage_build_dir}"
+jobs="${usage_jobs:-}"
+if [[ -z "${jobs}" ]]; then
+  jobs="$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
+fi
+
+level="${usage_level:-fast}"
+force="${usage_force:-false}"
+
+if [[ "${force}" == "true" ]]; then
+  mise run bootstrap -- --force
+  mise run configure:tty -- --build-dir "${build_dir}" --force
+else
+  mise run bootstrap
+  mise run configure:tty -- --build-dir "${build_dir}"
+fi
+
+mise run build -- --build-dir "${build_dir}" --jobs "${jobs}"
+
+echo "[verify] emacs --version"
+mise run run -- --build-dir "${build_dir}" --version
+
+if [[ -x "${build_dir}/lib-src/emacsclient" ]]; then
+  echo "[verify] emacsclient --version"
+  "${build_dir}/lib-src/emacsclient" --version
+else
+  echo "[verify] WARNING: missing ${build_dir}/lib-src/emacsclient" >&2
+fi
+
+if [[ "${force}" == "true" ]]; then
+  mise run test:smoke -- --build-dir "${build_dir}" --jobs "${jobs}" --force
+else
+  mise run test:smoke -- --build-dir "${build_dir}" --jobs "${jobs}"
+fi
+
+case "${level}" in
+  fast)
+    ;;
+  check)
+    if [[ "${force}" == "true" ]]; then
+      mise run test:check -- --build-dir "${build_dir}" --jobs "${jobs}" --force
+    else
+      mise run test:check -- --build-dir "${build_dir}" --jobs "${jobs}"
+    fi
+    ;;
+  check-all)
+    if [[ "${force}" == "true" ]]; then
+      mise run test:check -- --build-dir "${build_dir}" --jobs "${jobs}" --force
+      mise run test:check-all -- --build-dir "${build_dir}" --jobs "${jobs}" --force
+    else
+      mise run test:check -- --build-dir "${build_dir}" --jobs "${jobs}"
+      mise run test:check-all -- --build-dir "${build_dir}" --jobs "${jobs}"
+    fi
+    ;;
+  *)
+    echo "[verify] unknown level: ${level}" >&2
+    exit 2
+    ;;
+esac

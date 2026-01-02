@@ -44,9 +44,6 @@ LIBOBJS = @LIBOBJS@
 lib = ../lib
 libsrc = ../lib-src
 etc = ../etc
-oldXMenudir = ../oldXMenu
-lwlibdir = ../lwlib
-
 # Configuration files for .o files to depend on.
 config_h = config.h $(srcdir)/conf_post.h
 
@@ -622,13 +619,6 @@ $(LIBEGNU_ARCHIVE): $(config_h)
 ## This goes on to affect various things, and the emacs binary fails
 ## to start if Vinstallation_directory has the wrong value.
 
-## The following oldxmenu-related rules are only (possibly) used if
-## HAVE_X11 && !USE_GTK, but there is no harm in always defining them.
-$(lwlibdir)/liblw.a: $(config_h) globals.h lisp.h
-	$(MAKE) -C $(dir $@) $(notdir $@)
-$(oldXMenudir)/libXMenu11.a:
-	$(MAKE) -C $(dir $@) $(notdir $@)
-
 .PRECIOUS: ../config.status Makefile
 ../config.status: $(abs_top_srcdir)/configure.ac $(abs_top_srcdir)/m4/*.m4
 	$(MAKE) -C $(dir $@) $(notdir $@)
@@ -655,8 +645,7 @@ ctagsfiles3 = $(wildcard ${srcdir}/*.cc)
 ## because etags "--include" only includes a pointer to the file,
 ## rather than the file contents.
 TAGS: ${ETAGS} $(ctagsfiles1) $(ctagsfiles2)
-	$(AM_V_GEN)${ETAGS} --include=../lisp/TAGS --include=$(lwlibdir)/TAGS \
-	  --include=$(lib)/TAGS \
+	$(AM_V_GEN)${ETAGS} --include=../lisp/TAGS --include=$(lib)/TAGS \
 	  --regex='{c}/[ 	]*DEFVAR_[A-Z_ 	(]+"\([^"]+\)"/\1/' \
 	  --regex='{c}/[ 	]*DEFVAR_[A-Z_ 	(]+"[^"]+",[ 	]\([A-Za-z0-9_]+\)/\1/' \
 	  $(ctagsfiles1) \
@@ -665,13 +654,13 @@ TAGS: ${ETAGS} $(ctagsfiles1) $(ctagsfiles2)
 	  $(ctagsfiles2) \
 	  $(ctagsfiles3)
 
-## Arrange to make tags tables for ../lisp, ../lwlib and ../lib,
+## Arrange to make tags tables for ../lisp and ../lib,
 ## which the above TAGS file for the C files includes by reference.
-../lisp/TAGS $(lwlibdir)/TAGS $(lib)/TAGS:
+../lisp/TAGS $(lib)/TAGS:
 	$(MAKE) -C $(dir $@) $(notdir $@) ETAGS="$(ETAGS)"
 
 .PHONY: tags
-tags: TAGS ../lisp/TAGS $(lwlibdir)/TAGS $(lib)/TAGS
+tags: TAGS ../lisp/TAGS $(lib)/TAGS
 
 ### Flymake support (for C only)
 check-syntax:

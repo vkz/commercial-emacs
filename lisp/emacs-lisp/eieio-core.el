@@ -757,7 +757,7 @@ Argument FN is the function calling this verifier."
            (gv-setter eieio-oset))
   (cl-check-type slot symbol)
   (cond
-   ((cl-typep obj '(or eieio-object cl-structure-object))
+   ((eieio-object-p obj)
     (let* ((class (eieio--object-class obj))
            (c (eieio--slot-name-index class slot)))
       (if (not c)
@@ -770,7 +770,13 @@ Argument FN is the function calling this verifier."
 	    ;; to intercept missing slot definitions.  Since it is also the LAST
 	    ;; thing called in this fn, its return value would be retrieved.
 	    (slot-missing obj slot 'oref))
-	(eieio-barf-if-slot-unbound (aref obj c) obj slot 'oref))))
+		(eieio-barf-if-slot-unbound (aref obj c) obj slot 'oref))))
+   ((cl-typep obj 'cl-structure-object)
+    (let* ((struct-type (type-of obj))
+           (offset (cl-struct-slot-offset struct-type slot)))
+      (if (eq (cl-struct-sequence-type struct-type) 'list)
+          (nth offset obj)
+        (aref obj offset))))
    ((cl-typep obj 'oclosure) (oclosure--slot-value obj slot))
    (t
     (signal 'wrong-type-argument
@@ -824,7 +830,7 @@ Fills in CLASS's SLOT with its default value."
 Fills in OBJ's SLOT with VALUE."
   (cl-check-type slot symbol)
   (cond
-   ((cl-typep obj '(or eieio-object cl-structure-object))
+   ((eieio-object-p obj)
     (let* ((class (eieio--object-class obj))
            (c (eieio--slot-name-index class slot)))
       (if (not c)
@@ -841,6 +847,17 @@ Fills in OBJ's SLOT with VALUE."
 	    (slot-missing obj slot 'oset value))
 	(eieio--validate-slot-value class c value slot)
 	(aset obj c value))))
+   ((cl-typep obj 'cl-structure-object)
+    (let* ((struct-type (type-of obj))
+           (slot-info (assq slot (cl-struct-slot-info struct-type))))
+      (when (and slot-info (plist-get (cddr slot-info) :read-only))
+        (signal 'eieio-read-only (list slot)))
+      (let ((offset (cl-struct-slot-offset struct-type slot)))
+        (if (eq (cl-struct-sequence-type struct-type) 'list)
+            (progn
+              (setcar (nthcdr offset obj) value)
+              value)
+          (aset obj offset value)))))
    ((cl-typep obj 'oclosure) (oclosure--set-slot-value obj slot value))
    (t
     (signal 'wrong-type-argument

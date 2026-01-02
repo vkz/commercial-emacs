@@ -19,7 +19,12 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #ifndef MENU_H
 #define MENU_H
 
-#include "../lwlib/lwlib-widget.h"
+/* GUI/toolkit menu support is out of scope for this fork.
+   Keep `menu.h' usable in TTY-only builds without pulling GUI headers.  */
+#ifdef HAVE_EXT_MENU_BAR
+struct widget_value;
+typedef struct widget_value widget_value;
+#endif
 
 /* Bit fields used by terminal-specific menu_show_hook.  */
 

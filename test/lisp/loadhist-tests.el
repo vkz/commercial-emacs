@@ -42,7 +42,10 @@
   (should (eq (car (file-provides "loadhist")) 'loadhist)))
 
 (ert-deftest loadhist-tests-file-requires ()
-  (should-not (file-requires "loadhist")))
+  ;; Depending on whether `loadhist' is loaded from .el or .elc, the
+  ;; (eval-when-compile ...) dependencies may or may not be recorded.
+  (let ((req (file-requires "loadhist")))
+    (should (or (null req) (equal req '(cl-lib))))))
 
 (ert-deftest loadhist-tests-file-dependents ()
   (require 'dired-x)

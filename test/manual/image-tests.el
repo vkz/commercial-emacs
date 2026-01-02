@@ -46,9 +46,11 @@
     (svg . ,(find-image '((:file "splash.svg" :type svg))))
     (png . ,(find-image '((:file "splash.png" :type png))))
     (pbm . ,(find-image '((:file "splash.pbm" :type pbm))))
-    (tiff . ,(expand-file-name
-              "nextstep/GNUstep/Emacs.base/Resources/emacs.tiff"
-              source-directory))
+    ;; This fork is TTY-only and does not ship the Nextstep/GNUstep TIFF asset.
+    (tiff . ,(let ((candidate (expand-file-name "test/data/image/black.tiff"
+                                                source-directory)))
+               (when (file-readable-p candidate)
+                 candidate)))
     (webp . ,(expand-file-name "test/data/image/black.webp"
                                source-directory))
     (xbm . ,(find-image '((:file "gnus/gnus.xbm" :type xbm))))
@@ -67,6 +69,7 @@
                       (plist-get (cdr img) :file)
                     img))
             (noninteractive t))
+       (skip-unless (and file (file-readable-p file)))
        (find-file file))
      (should (equal major-mode 'image-mode))
      ;; Cleanup

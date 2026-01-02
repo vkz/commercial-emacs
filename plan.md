@@ -17,7 +17,9 @@ These are the only “claims” this plan relies on:
 - Tree-sitter support is wired into `configure.ac` behind `--with-tree-sitter` and checks for `tree-sitter = v0.20.10beta3`.
   - There is a test subtree `test/src/tree-sitter-*` and `test/src/tree-sitter-tests.el`.
   - We will keep the code around but default to `--with-tree-sitter=no` until we explicitly work on it.
-- The test harness is standard Emacs: `test/README` + `test/Makefile.in` using ERT selectors and `make -C test check` / `check-all` / file-specific targets.
+- The test harness is standard Emacs: `test/README` + `test/Makefile.in` using
+  ERT selectors and `make -C <build>/test check` / `check-all` / file-specific
+  targets (or, in this repo, `mise run test:*`).
 
 
 ## Constraints / Non-goals
@@ -30,7 +32,7 @@ Hard constraints
 Out of scope (for this plan revision)
 - Tree-sitter work (we will not improve it now; we’ll only avoid breaking it).
 - Moving GC work (we will not use it; SBCL GC is the path).
-- Emacs Lisp native compilation / JIT via libgccjit (we will disable it now and delete it later).
+- Emacs Lisp native compilation / JIT via libgccjit (out of scope; removed in this fork).
 - Browser-only frontend (future ambition; plan should not preclude it, but does not implement it).
 
 
@@ -63,24 +65,32 @@ Suggested baseline configure shape (exact flags may be adjusted after the first 
   - `--with-ns=no`
   - `--with-pgtk=no`
   - `--with-x-toolkit=no` (and, if supported by the generated `configure`, `--with-x=no`)
+- Disable dynamic modules (temporary; see note below):
+  - `--with-modules=no`
 - Reduce moving parts while we focus on the Lisp engine rewrite:
-  - `--without-native-compilation`
   - `--with-tree-sitter=no`
 
 Note on native compilation
 - Because the long-term direction is “Emacs Lisp implemented inside SBCL”, Emacs’s current ELisp
   native compilation (libgccjit producing `.eln`) is not a goal and does not make architectural
   sense long-term. We will:
-  - Always configure with `--without-native-compilation` during the prep phase.
   - Treat all `:nativecomp`-tagged tests as irrelevant for conformance (our conformance target is
     the SBCL-hosted engine, not libgccjit output).
-  - Plan to delete the native-comp feature and its codepaths once the SBCL engine work begins.
+  - Keep it deleted; ELisp runs as SBCL code in the long-term design.
+
+Note on dynamic modules (temporary)
+- This fork currently configures TTY builds with `--with-modules=no`.
+- Rationale: `src/emacs-module-tests` currently segfaults on macOS, and we
+  want a stable TTY editor baseline before investing time in module API
+  debugging.  Revisit once we have more rigorous debugging tooling.
 
 0.3 Run baseline tests
-- Use the stock harness: `make -C test check` (default selector excludes `:expensive-test`, `:unstable`, `:nativecomp`).
+- Use the stock harness via mise: `mise run test:check`.
 
 Acceptance criteria
-- From a clean checkout, we can build a TTY-only Emacs on macOS and run `make -C test check` with failures understood and recorded (if any are fork-related).
+- From a clean checkout, we can build a TTY-only Emacs on macOS and run
+  `mise run test:check` with failures understood and recorded (if any are
+  fork-related).
 
 
 ## Step 0a — Large Deletions (repo trim)
@@ -91,30 +101,22 @@ Important: This step should be done *after* Step 0 baseline, and in chunks that 
 
 ### 0a.1 Delete unsupported OS ports (definite)
 
-These are large, unambiguously out of scope for modern macOS/Linux/FreeBSD:
-
-- Windows / NT / Cygwin
-  - Directories: `nt/`, `admin/nt/`
-  - Build glue: `config.bat`
-  - `src/` objects and headers: `src/w32*`, `src/cygw32.*`, `src/w32*.h`
-  - Lisp: `lisp/w32-fns.el`, `lisp/w32-vars.el`, `lisp/dos-w32.el`, `lisp/term/w32-*.el`, `lisp/term/w32console.el`
-  - Docs: `doc/emacs/windows.texi`, `doc/lispref/windows.texi`, `doc/misc/efaq-w32.texi`
-
-- MS-DOS
-  - `src/` objects and headers: `src/msdos.*`, `src/dosfns.*`
-  - Lisp: `lisp/dos-fns.el`, `lisp/dos-vars.el`, and any remaining msdos-only helpers
-  - Docs: `doc/emacs/msdos.texi`, `doc/emacs/msdos-xtra.texi`
-
-- Haiku
-  - `src/`: `src/haiku*` (C and C++ sources/headers)
-  - Lisp: `lisp/term/haiku-win.el` (and any haiku-specific `declare-function` callers)
-  - Docs: `doc/emacs/haiku.texi`
+Reality check
+- This repo already appears to have most legacy OS port code removed (e.g.
+  we do not currently have the usual `src/w32*.c` or `src/msdos.c` files).
+- Treat “delete old ports” as an *invariant to maintain*, not a large new
+  deletion step.  Enforce via:
+  - grep-based guardrails (`mise run trim:check`)
+  - configure defaults that keep us on the TTY-only path
 
 Notes
-- Android port code does not appear to be present under `src/` in this repo; references in Lisp/docs are fine to prune later if desired, but don’t block the TTY/SBCL work.
+- `doc/emacs/windows.texi` is the Emacs “windows” chapter (not MS Windows).
+- If we later want to delete remaining documentation nodes about removed ports,
+  do it as a dedicated doc cleanup step (and be prepared to fix texinfo menus).
 
 Acceptance criteria
-- After each port deletion chunk, a TTY-only build still succeeds on macOS and the Step 1 “smoke tests” (defined below) still run.
+- After any trim chunk, a TTY-only build still succeeds on macOS and the Step 1
+  smoke tests (defined below) still run.
 
 ### 0a.2 Delete ELisp native compilation / JIT infrastructure (definite)
 
@@ -122,20 +124,17 @@ Rationale
 - With SBCL as the host runtime, “compiling and running Emacs Lisp” becomes compiling/running SBCL,
   so maintaining a parallel ELisp JIT (libgccjit -> `.eln`) is wasted effort and complexity.
 
-Planned removals (once we have the Step 0 baseline stable)
-- C sources:
-  - `src/comp.c`, `src/comp.h`
-  - Related build glue in `src/Makefile.in` (object lists, feature flags)
-- Emacs Lisp sources:
-  - `lisp/emacs-lisp/comp.el`
-  - `lisp/emacs-lisp/comp-common.el`
-  - `lisp/emacs-lisp/comp-cstr.el`
-- Tests:
-  - `test/src/comp-tests.el`
-  - `test/src/comp-resources/`
-- Configure/build system:
-  - Remove `--with-native-compilation` support and libgccjit probing from `configure.ac`.
-  - Remove references to `.eln` / `NATIVE_SUFFIX` where they become dead codepaths.
+Current state (this repo)
+- Native compilation is hard-disabled in `configure.ac` and stubbed in both C
+  (`src/comp.c`) and Lisp (`lisp/emacs-lisp/comp*.el`) so callers get a clear
+  failure or `nil` rather than partial behavior.
+- Tests that require native compilation are skipped (`:nativecomp` and explicit
+  guards).
+
+Optional future cleanup
+- If we want to reduce surface area further, we can delete additional native
+  compilation codepaths while keeping only the minimal compatibility stubs
+  required for upstream Lisp code to load cleanly.
 
 Acceptance criteria
 - `configure` has no native-compilation option, build does not mention libgccjit, and test selection
@@ -152,7 +151,7 @@ Recommended approach (two-phase, to reduce risk)
    - Keep the GUI directories in-tree temporarily but not compiled/linked.
 
 2) Physically delete GUI-only directories once stable
-   - Directories that become deletable once we truly stop building any GUI:
+   - Done in this fork:
      - `nextstep/` (NS/Cocoa port glue)
      - `lwlib/` and `oldXMenu/` (X11 GUI support)
    - `src/`: delete GUI-backend objects (and their makefile entries) such as:
@@ -168,9 +167,9 @@ Guardrail
 
 Acceptance criteria
 - `./configure` (or its `mise` wrapper) can produce a build with no GUI backends.
-- The resulting `src/emacs` runs in a terminal and can run batch tests (`make -C test check`).
+- The resulting `src/emacs` runs in a terminal and can run batch tests (`mise run test:check`).
 
-### 0a.3 Delete high-churn historical metadata (definite + optional)
+### 0a.4 Delete high-churn historical metadata (definite + optional)
 
 Definite (safe, not needed for building/running)
 - Component NEWS files in `etc/`: `etc/*-NEWS` (e.g. `EGLOT-NEWS`, `ERC-NEWS`, `CALC-NEWS`, `NXML-NEWS`, `ORG-NEWS`, `MH-E-NEWS`)
@@ -207,9 +206,9 @@ Proposed task namespace (sketch)
 - `lisp:autoloads` (runs the documented `make -C lisp autoloads` when needed)
 - `run` (runs the built TTY Emacs with a minimal environment)
 - `test:smoke` (fast, deterministic subset; see Step 1)
-- `test:check` (full default suite: `make -C test check`)
-- `test:check-all` (optional: `make -C test check-all`)
-- `test:file` (runs a specific `test/<path>.el` target via `make -C test <path>.log`)
+- `test:check` (full default suite: `make -C <build>/test check`)
+- `test:check-all` (optional: `make -C <build>/test check-all`)
+- `test:file` (runs a specific `test/<path>.el` target via `make -C <build>/test <path>.log`)
 - `clean` / `distclean` / `clobber` (with confirmation for destructive actions)
 
 Build directory convention (so incremental builds stay predictable)
@@ -235,9 +234,9 @@ Goal: make it obvious which test suites define “Emacs Lisp engine conformance�
 Facts we will leverage (already in tree)
 - `test/README` documents selectors and targets.
 - `test/Makefile.in` supports:
-  - `make -C test check` (default selector)
-  - `make -C test check-all`, `check-expensive`
-  - `make -C test <filename>.log` or `make -C test <dirname>`-scoped checks
+  - `make -C <build>/test check` (default selector)
+  - `make -C <build>/test check-all`, `check-expensive`
+  - `make -C <build>/test <filename>.log` or `make -C <build>/test <dirname>`-scoped checks
 
 ### 1.1 Define a *TTY + engine-focused* smoke suite
 
@@ -264,11 +263,11 @@ Deliverable
 ### 1.2 Define the “full suite” we claim conformance against
 
 Default full suite
-- `make -C test check`
+- `make -C <build>/test check` (or `mise run test:check`)
 
 Optional fuller suites (for later)
-- `make -C test check-all`
-- `make -C test check-expensive`
+- `make -C <build>/test check-all`
+- `make -C <build>/test check-expensive`
 
 Acceptance criteria
 - We can run smoke tests quickly and deterministically during development.
@@ -371,7 +370,7 @@ Milestones (suggested)
 - M1: Reader + printer parity for basic types; passes `test/src/lread-tests.el`
 - M2: Core eval/apply parity for special forms and function call; passes smoke suite subset (`eval-tests`, `macroexp-tests`)
 - M3: Bytecode execution parity (if we keep bytecode); passes `bytecomp-tests` / `byte-run-tests` as relevant
-- M4: Expand smoke suite; pass full `make -C test check` with a documented exception list (ideally empty)
+- M4: Expand smoke suite; pass full `make -C <build>/test check` with a documented exception list (ideally empty)
 
 Acceptance criteria
 - Each milestone gates on the corresponding test targets in Step 1.

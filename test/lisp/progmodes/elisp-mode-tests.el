@@ -410,20 +410,21 @@ to (xref-elisp-test-descr-to-target xref)."
 (require 'find-dired)
 (xref-elisp-deftest find-defs-defalias-defun-el
   (elisp--xref-find-definitions 'eshell/ff)
-  (list
-   (xref-make "(defalias eshell/ff)"
-	      (xref-make-elisp-location
-	       'eshell/ff 'defalias
-	       (expand-file-name (concat "../../../lisp/eshell/em-xtra"
-                                         (if (featurep 'native-compile)
-                                             ".eln"
-                                           ".elc"))
-                                 emacs-test-dir)))
-   (xref-make "(defun find-name-dired)"
-	      (xref-make-elisp-location
-	       'find-name-dired nil
-	       (expand-file-name "../../../lisp/find-dired.el"
-                                 emacs-test-dir)))))
+  (let* ((em-xtra-base (expand-file-name "../../../lisp/eshell/em-xtra" emacs-test-dir))
+         (em-xtra-file (cond
+                        ((featurep 'native-compile) (concat em-xtra-base ".eln"))
+                        ((file-exists-p (concat em-xtra-base ".elc")) (concat em-xtra-base ".elc"))
+                        (t (concat em-xtra-base ".el")))))
+    (list
+     (xref-make "(defalias eshell/ff)"
+		(xref-make-elisp-location
+		 'eshell/ff 'defalias
+		 em-xtra-file))
+     (xref-make "(defun find-name-dired)"
+		(xref-make-elisp-location
+		 'find-name-dired nil
+		 (expand-file-name "../../../lisp/find-dired.el"
+				   emacs-test-dir))))))
 
 ;; FIXME: defconst
 

@@ -148,9 +148,17 @@ KIND can be either `core' for core modules or `extension' for
 extension modules; if nil, KIND defaults to `extension'."
   ;; We're about to unload this module, but we need to remember whether
   ;; to print messages.
-  (let ((verbose eshell-module-loading-messages))
-    (dolist (module modules)
-      (let ((module-feature (intern (eshell-module--feature-name module kind))))
+  (let* ((verbose eshell-module-loading-messages)
+         ;; Precompute feature symbols so we don't depend on helpers after
+         ;; unloading `esh-module' itself.
+         (module-features
+          (mapcar (lambda (module)
+                    (cons module
+                          (intern (eshell-module--feature-name module kind))))
+                  modules)))
+    (dolist (pair module-features)
+      (let ((module (car pair))
+            (module-feature (cdr pair)))
         (when (featurep module-feature)
           (when verbose (message "Unloading %s..." module))
           (condition-case-unless-debug nil

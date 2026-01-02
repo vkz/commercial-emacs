@@ -78,7 +78,7 @@
                          (expand-file-name "src") nil "\\.*\\.c\\'")))
          ls-lisp-use-insert-directory-program buf)
     (unwind-protect
-        (let ((file1 "src/cygw32.c")
+        (let ((file1 "src/alloc.c")
               (file2 "src/atimer.c"))
           (setq buf (dired (nconc (list dir) files)))
           (dired-goto-file (expand-file-name file2 default-directory))

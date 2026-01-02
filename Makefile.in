@@ -298,10 +298,6 @@ all: ${SUBDIR} info $(gsettings_SCHEMAS:.xml=.valid) lisp ${OTHER_FILES}
 
 .PHONY: ${SUBDIR} blessmail epaths-force epaths-force-ns-self-contained etc-emacsver
 
-.PHONY: ns-app
-ns-app: | lisp
-	$(MAKE) -C nextstep all
-
 # If configure were to just generate emacsver.tex from emacsver.tex.in
 # in the normal way, the timestamp of emacsver.tex would always be
 # newer than that of the pdf files, which are prebuilt in release tarfiles.

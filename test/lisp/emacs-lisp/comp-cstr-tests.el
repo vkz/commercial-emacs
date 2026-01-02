@@ -43,6 +43,7 @@ The arg is an alist of: type specifier -> expected type specifier."
         for (type-spec . expected-type-spec) in typespec-tests-alist
         collect
         `(ert-deftest ,(intern (format "comp-cstr-test-%d" i)) ()
+          (skip-unless (native-comp-available-p))
           (should (equal (comp-cstr-test-ts ',type-spec)
                          ',expected-type-spec))))))
 

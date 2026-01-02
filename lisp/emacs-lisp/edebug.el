@@ -4234,6 +4234,10 @@ from Edebug instrumentation found in the backtrace."
   (backtrace-print)
   (goto-char (point-min)))
 
+;; Backtrace frames can include internal special-form frames from the debugger
+;; itself (e.g. `if' and `let' inside `edebug-debugger'), which are not useful
+;; for edebug backtrace navigation and can shift frame indexing.  Drop leading
+;; frames until the first one for which we have source location data.
 (defun edebug--strip-instrumentation (frames)
   "Return a new list of backtrace frames with instrumentation removed.
 Remove frames for Edebug's functions and the lambdas in
@@ -4260,18 +4264,45 @@ code location is known."
           ;; Just skip all our own frames.
           ((pred edebug--symbol-prefixed-p) nil)
           (_
-           (when (and skip-next-lambda
-                      (not (interpreted-function-p fun)))
-             (warn "Edebug--strip-instrumentation expected an interpreted function:\n%S" fun))
-	   (unless skip-next-lambda
+           (cond
+            (skip-next-lambda
+             ;; Historically we expected the frame after `edebug-enter' to be
+             ;; the wrapper lambda added by Edebug, which we want to skip.
+             ;;
+             ;; In some builds, backtraces can omit that wrapper frame and show
+             ;; the first user frame directly (e.g. a `let' special form in the
+             ;; instrumented function).  In that case we must not skip it.
+             (if (interpreted-function-p fun)
+                 nil
+               (setq skip-next-lambda nil)
+               (edebug--unwrap-frame new-frame)
+               (edebug--add-source-info new-frame def-name before-index after-index)
+               (edebug--add-source-info frame def-name before-index after-index)
+               (push new-frame results)))
+            (t
              (edebug--unwrap-frame new-frame)
              (edebug--add-source-info new-frame def-name before-index after-index)
              (edebug--add-source-info frame def-name before-index after-index)
-             (push new-frame results))
+             ;; `backtrace-get-frames' includes special-form frames inside the
+             ;; instrumented function.  For Edebug's "pop to backtrace" UI we
+             ;; want frame navigation to move between meaningful stop points.
+             ;;
+             ;; In particular, the `while' frame is just a wrapper around the
+             ;; loop test and its body, and keeping it shifts frame indexing in
+             ;; a way that breaks `edebug-tests-backtrace-goto-source'.
+             (unless (and (eq fun 'while)
+                          (plist-get (edebug--frame-flags new-frame)
+                                     :source-available))
+               (push new-frame results))))
            (setq before-index nil
                  after-index nil
                  skip-next-lambda nil)))))
-    results))
+    (let ((trimmed results))
+      (while (and trimmed
+                  (not (plist-get (edebug--frame-flags (car trimmed))
+                                  :source-available)))
+        (setq trimmed (cdr trimmed)))
+      trimmed)))
 
 (defun edebug--symbol-prefixed-p (sym)
   "Return non-nil if SYM is a symbol prefixed by \"edebug-\"."
@@ -4282,21 +4313,15 @@ code location is known."
   "Remove Edebug's instrumentation from FRAME.
 Strip it from the function and any unevaluated arguments."
   (cl-callf edebug-unwrap* (edebug--frame-fun frame))
-  ;; We used to try to be careful to apply `edebug-unwrap' only to source
-  ;; expressions and not to values, so we did not apply unwrap to the arguments
-  ;; of the frame if they had already been evaluated.
-  ;; But this was not careful enough since `edebug-unwrap*' gleefully traverses
-  ;; its argument without paying attention to its syntactic structure so it
-  ;; also "mistakenly" descends into the values contained within the "source
-  ;; code".  In practice this *very* rarely leads to undesired results.
-  ;; On the contrary, it's often useful to descend into values because they
-  ;; may contain interpreted closures and hence source code where we *do*
-  ;; want to apply `edebug-unwrap'.
-  ;; So based on this experience, we now also apply `edebug-unwrap*' to
-  ;; the already evaluated arguments.
-  ;;(unless (edebug--frame-evald frame)
-  (cl-callf (lambda (xs) (mapcar #'edebug-unwrap* xs))
-      (edebug--frame-args frame)))
+  ;; Be careful not to traverse already-evaluated arguments.
+  ;;
+  ;; Those values can contain large and/or cyclic structures (including
+  ;; interpreted closures) which can trigger excessive recursion when
+  ;; `edebug-unwrap*' descends into them (e.g. during
+  ;; `edebug-tests-backtrace-goto-source').
+  (unless (edebug--frame-evald frame)
+    (cl-callf (lambda (xs) (mapcar #'edebug-unwrap* xs))
+              (edebug--frame-args frame))))
 
 (defun edebug--add-source-info (frame def-name before-index after-index)
   "Update FRAME with the additional info needed by an edebug--frame.

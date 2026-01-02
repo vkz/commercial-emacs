@@ -39,9 +39,12 @@
                               image-tests--emacs-images-directory))
     (svg . ,(expand-file-name "splash.svg"
                               image-tests--emacs-images-directory))
-    (tiff . ,(expand-file-name
-              "nextstep/GNUstep/Emacs.base/Resources/emacs.tiff"
-              source-directory))
+    ;; Upstream uses a Nextstep/GNUstep TIFF asset.  This fork is TTY-only and
+    ;; does not ship that directory; keep the test optional if no TIFF exists.
+    (tiff . ,(let ((candidate (expand-file-name "test/data/image/black.tiff"
+                                                source-directory)))
+               (when (file-readable-p candidate)
+                 candidate)))
     (webp . ,(expand-file-name "test/data/image/black.webp"
                                source-directory))
     (xbm . ,(expand-file-name "gnus/gnus.xbm"
@@ -102,8 +105,16 @@
 
 (defun image-tests--type-from-file-header (type)
   "Test image-type-from-file-header."
-  (should (eq (if (image-type-available-p type) type)
-              (image-type-from-file-header (cdr (assq type image-tests--files))))))
+  (let ((file (cdr (assq type image-tests--files))))
+    (cond
+     ((and (stringp file) (file-readable-p file))
+      (should
+       (eq (if (image-type-available-p type) type)
+           (image-type-from-file-header file))))
+     ((eq type 'tiff)
+      (ert-skip "No TIFF test asset in this fork"))
+     (t
+      (should (and (stringp file) (file-readable-p file)))))))
 
 (ert-deftest image-type-from-file-header-test/gif ()
   (image-tests--type-from-file-header 'gif))
