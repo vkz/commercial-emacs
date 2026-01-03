@@ -36,5 +36,9 @@ lisp/emacs-lisp/gv.el 1
 lisp/emacs-lisp/cl-lib.el 1
 lisp/emacs-lisp/cl-macs.el 1
 
-# 2026-01-03: pdump entry; currently blocked on charset primitives, so skip for now.
-lisp/international/mule-conf.el
+# 2026-01-03: pdump entry; charset property plumbing bring-up.
+lisp/international/mule-conf.el 200
+
+# 2026-01-03: pdump candidates; small pure ELisp utilities.
+lisp/emacs-lisp/regexp-opt.el 1
+lisp/emacs-lisp/rx.el 1

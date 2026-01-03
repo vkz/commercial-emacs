@@ -625,7 +625,7 @@ Status (TODO, 2026-01-03)
   - Boundary: CL owns the value model + buffer representation; C provides only TTY + file + OS shims.
   - Deletion plan: timebox any compatibility shims and delete them once the CL implementation is feature-complete.
 - DONE (2026-01-03): Define a clemacs startup manifest + loader entrypoint:
-  - `clemacs/contract/startup.{smoke,check}.files` (monotonic list; currently 19 entries).
+  - `clemacs/contract/startup.{smoke,check}.files` (monotonic list; currently 21 entries).
   - `mise run clemacs:load:startup -- --level smoke|check`
 - DONE (2026-01-03): Add a startup delta report against the pdump load list:
   - `mise run clemacs:report:startup-delta` writes `build/clemacs/reports/startup-delta.md` (path configurable).
@@ -655,8 +655,12 @@ Status (TODO, 2026-01-03)
   - add `lisp/emacs-lisp/gv.el 1`,
   - add `lisp/emacs-lisp/cl-lib.el 1`,
   - add `lisp/emacs-lisp/cl-macs.el 1`.
-- DONE (2026-01-03): Start tracking startup-blocked entries in the allowed-skip list:
-  - `clemacs/contract/lisp.allowed-skip.files` now includes `lisp/international/mule-conf.el` (charset primitives pending).
+- DONE (2026-01-03): Unblock and start loading `mule-conf.el` in startup:
+  - add `lisp/international/mule-conf.el 200` (charset bring-up; before coding-system definitions),
+  - remove it from `clemacs/contract/lisp.allowed-skip.files`.
+- DONE (2026-01-03): Add more small pure ELisp utilities as early checkpoints:
+  - add `lisp/emacs-lisp/regexp-opt.el 1`,
+  - add `lisp/emacs-lisp/rx.el 1` (note: pdump list currently refers to `lisp/rx.el`; this repo has `lisp/emacs-lisp/rx.el`).
 - TODO: Grow the startup manifest toward the pdump bootstrap load list (`admin/pdump-common.el`),
   with explicit skip reasons (GUI/nativecomp/modules).
 - DONE (2026-01-03): Add a clemacs ERT gate based on upstream tests:
