@@ -629,6 +629,8 @@ Status (TODO, 2026-01-03)
   - add `lisp/emacs-lisp/byte-run.el 1` (defines `function-put` without running it yet).
 - DONE (2026-01-03): Add a 1-form startup checkpoint for `keymap.el`:
   - add `lisp/keymap.el 1` (defines `keymap--check` without pulling in key parsing yet).
+- DONE (2026-01-03): Add a 1-form startup checkpoint for `widget.el`:
+  - add `lisp/widget.el 1` (defines `define-widget-keywords` without pulling in wid-edit yet).
 - TODO: Grow the startup manifest toward the pdump bootstrap load list (`admin/pdump-common.el`),
   with explicit skip reasons (GUI/nativecomp/modules).
 - DONE (2026-01-03): Add a clemacs ERT gate based on upstream tests:

@@ -17,3 +17,6 @@ lisp/emacs-lisp/byte-run.el 1
 
 # 2026-01-03: pdump candidate; start with a 1-form checkpoint (defines keymap--check).
 lisp/keymap.el 1
+
+# 2026-01-03: pdump candidate; start with a 1-form checkpoint (defines define-widget-keywords).
+lisp/widget.el 1
