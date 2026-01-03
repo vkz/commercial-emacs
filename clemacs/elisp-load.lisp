@@ -1,6 +1,6 @@
 (in-package #:elisp)
 
-(define-condition elisp-load-error (error)
+(define-condition elisp-load-error (cl:error)
   ((path :initarg :path :reader elisp-load-error-path)
    (form-index :initarg :form-index :reader elisp-load-error-form-index)
    (form :initarg :form :reader elisp-load-error-form)
@@ -48,9 +48,9 @@
          (path (first parts))
          (max-forms (second parts)))
     (unless path
-      (error "Empty manifest entry"))
+      (cl:error "Empty manifest entry"))
     (when (and (third parts))
-      (error "Manifest entry has too many fields: ~S" line))
+      (cl:error "Manifest entry has too many fields: ~S" line))
     (cl:values path
                (cond
                 ((null max-forms) nil)
@@ -82,7 +82,7 @@ they are already absolute pathnames.
 If a file exists under PORTED-ROOT (relative to PROJECT-ROOT), load the
 ported copy instead of the original source tree path."
   (unless manifest
-    (error "ELISP:LOAD-ELISP-MANIFEST requires :manifest"))
+    (cl:error "ELISP:LOAD-ELISP-MANIFEST requires :manifest"))
   (let* ((project-root (uiop:ensure-directory-pathname project-root))
          (manifest (merge-pathnames manifest project-root))
          (skip-file (and skip-file (merge-pathnames skip-file project-root)))

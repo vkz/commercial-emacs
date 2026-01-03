@@ -47,14 +47,14 @@
              (loop
                for ch = (read-char stream nil nil t) do
                  (when (null ch)
-                   (error "EOF while reading string"))
+                   (cl:error "EOF while reading string"))
                  (cond
                   ((char= ch #\")
                    (return))
                   ((char= ch #\\)
                    (let ((e (read-char stream nil nil t)))
                      (when (null e)
-                       (error "EOF in string escape"))
+                       (cl:error "EOF in string escape"))
                      (case e
                        (#\n (write-char #\Newline out))
                        (#\t (write-char #\Tab out))
@@ -90,7 +90,7 @@
          #\]
          (lambda (stream char)
            (declare (ignore stream char))
-           (error "unexpected ]"))
+           (cl:error "unexpected ]"))
          nil
          rt)
         (set-macro-character
@@ -99,11 +99,11 @@
            (declare (ignore char))
            (let ((c (read-char stream nil nil t)))
              (when (null c)
-               (error "EOF after ?"))
+               (cl:error "EOF after ?"))
              (if (char= c #\\)
                  (let ((e (read-char stream nil nil t)))
                    (when (null e)
-                     (error "EOF in ?\\ escape"))
+                     (cl:error "EOF in ?\\ escape"))
                    (case e
                      (#\n (char-code #\Newline))
                      (#\t (char-code #\Tab))
@@ -127,11 +127,11 @@
               (incf form-index)
               (handler-case
                   (eval (%elisp-rewrite form))
-                (error (e)
+                (cl:error (e)
                   (let ((inv (inventory-entry-for-condition
                               e
                               :start-dir (uiop:pathname-directory-pathname path))))
-                    (error 'elisp-load-error
+                    (cl:error 'elisp-load-error
                            :path path
                            :form-index form-index
                            :form form

@@ -5,3 +5,11 @@
 lisp/subr.el 340
 lisp/emacs-lisp/backquote.el
 lisp/version.el 2
+# 2026-01-03: pdump candidate; should be dependency-free (errors only on use).
+lisp/emacs-lisp/debug-early.el
+
+# 2026-01-03: pdump candidate; start with a 1-form checkpoint (defines function-put).
+lisp/emacs-lisp/byte-run.el 1
+
+# 2026-01-03: pdump candidate; start with a 1-form checkpoint (defines keymap--check).
+lisp/keymap.el 1

@@ -1,6 +1,6 @@
 (in-package #:elisp)
 
-(define-condition ert-failure (error)
+(define-condition ert-failure (cl:error)
   ((form :initarg :form :reader ert-failure-form))
   (:report (lambda (c s)
              (format s "ERT failure: ~S" (ert-failure-form c)))))
@@ -19,7 +19,7 @@
 
 (cl:defmacro should (form)
   `(unless ,form
-     (error 'ert-failure :form ',form)))
+     (cl:error 'ert-failure :form ',form)))
 
 (cl:defun ert-run-tests-batch (&key (stream *standard-output*))
   (let ((total 0)
@@ -31,7 +31,7 @@
            (progn
              (cl:funcall fn)
              (format stream "ok  ~S~%" name))
-         (error (e)
+         (cl:error (e)
            (incf failed)
            (format stream "FAIL ~S: ~A~%" name e))))
      *ert-tests*)

@@ -51,6 +51,11 @@ Returns NIL if SYMBOL has no function cell value."
         (not (null value))
         (cl:fboundp symbol))))
 
+(cl:defun function-alias-p (_symbol)
+  "Bring-up stub for ELisp `function-alias-p'."
+  (declare (ignore _symbol))
+  nil)
+
 (cl:defun %resolve-function (fn &key (max-hops 16))
   (loop with cur = fn
         for hop from 0 below max-hops do
@@ -61,7 +66,7 @@ Returns NIL if SYMBOL has no function cell value."
            ((symbolp cur)
             (let ((next (symbol-function cur)))
               (when (null next)
-                (error 'undefined-function :name cur))
+                (signal 'void-function (list cur)))
               (setf cur next)))
            (t
             (error "ELISP: function cell is not callable: ~S" cur)))
@@ -148,7 +153,7 @@ This currently supports the patterns used early in `lisp/version.el`:
     (error "ELISP:STRING-TO-NUMBER expects string, got: ~S" string))
   (handler-case
       (parse-integer string :junk-allowed t)
-    (error () 0)))
+    (cl:error () 0)))
 
 (cl:defun copy-sequence (sequence)
   "ELisp-ish COPY-SEQUENCE."
@@ -486,15 +491,15 @@ Binds VAR (when non-nil) to a minimal \"Elisp error data\" cons:
          (err (or var (gensym "ERR"))))
     `(handler-case
          ,bodyform
-       (error (,e)
+       (cl:error (,e)
          (let ((,err (if (typep ,e 'elisp-signal)
                          (cons (elisp-signal-symbol ,e) (elisp-signal-data ,e))
                          (cons 'error (list ,e)))))
            ,(if handlers
                 `(progn ,@(cdr (car handlers)))
-                `(error ,e)))))))
+                `(cl:error ,e)))))))
 
-(define-condition elisp-signal (error)
+(define-condition elisp-signal (cl:error)
   ((symbol :initarg :symbol :reader elisp-signal-symbol)
    (data :initarg :data :reader elisp-signal-data)))
 
@@ -505,10 +510,63 @@ ERROR-SYMBOL is an error condition name (a symbol) and DATA is a list of
 arguments. We map this to a CL condition so `condition-case' can recover
 the original (SYMBOL . DATA) pair."
   (unless (symbolp error-symbol)
-    (error "ELISP:SIGNAL expected symbol, got: ~S" error-symbol))
+    (cl:error "ELISP:SIGNAL expected symbol, got: ~S" error-symbol))
   (unless (listp data)
-    (error "ELISP:SIGNAL expected list data, got: ~S" data))
+    (cl:error "ELISP:SIGNAL expected list data, got: ~S" data))
   (cl:error 'elisp-signal :symbol error-symbol :data data))
+
+(cl:defun %format-message (fmt args)
+  "Very small subset of ELisp `format' used for early error messages.
+
+Supports: %s, %S, %d, %c, and %%."
+  (unless (stringp fmt)
+    (cl:error "ELISP:ERROR expects a string format, got: ~S" fmt))
+  (let ((i 0)
+        (n (length fmt))
+        (rest args))
+    (with-output-to-string (out)
+      (loop while (< i n) do
+        (let ((ch (char fmt i)))
+          (if (char= ch #\%)
+              (progn
+                (incf i)
+                (when (>= i n)
+                  (write-char #\% out)
+                  (return))
+                (let* ((code (char fmt i))
+                       (arg-present (consp rest))
+                       (arg (if arg-present (pop rest) nil)))
+                  (case code
+                    (#\% (write-char #\% out))
+                    (#\s (when arg-present
+                           (write-string (cl:princ-to-string arg) out)))
+                    (#\S (when arg-present
+                           (write-string (cl:prin1-to-string arg) out)))
+                    (#\d (when arg-present
+                           (write-string (cl:princ-to-string arg) out)))
+                    (#\c (when arg-present
+                           (write-char (cond
+                                        ((characterp arg) arg)
+                                        ((integerp arg) (code-char arg))
+                                        (t (char (cl:princ-to-string arg) 0)))
+                                      out)))
+                    (otherwise
+                     (write-char #\% out)
+                     (write-char code out)))))
+              (write-char ch out)))
+        (incf i)))))
+
+(cl:defun format-message (fmt &rest args)
+  "Bring-up subset of ELisp `format-message'."
+  (%format-message fmt args))
+
+(cl:defun error (fmt &rest args)
+  "Signal an ELisp-style `error' with DATA = (MESSAGE).
+
+This is intentionally not CL:ERROR; it raises an `elisp-signal' so ELisp
+`handler-bind' and `condition-case' can recover the (SYMBOL . DATA) pair."
+  (let ((msg (if args (%format-message fmt args) fmt)))
+    (signal 'error (list msg))))
 
 (cl:defun %handler-bind-match-p (types err)
   (let ((sym (car err)))
@@ -544,7 +602,7 @@ Unlike CL:HANDLER-BIND, handlers receive an ELisp-style error datum:
          ,handlers
        ,@body)))
 
-(define-condition quit (error) ())
+(define-condition quit (cl:error) ())
 
 (cl:defmacro letrec (bindings &body body)
   "Bring-up subset of ELisp `letrec'.
@@ -555,25 +613,39 @@ Supports the common pattern of a self-referential closure (used by ERT)."
        ,@(mapcar (lambda (b) (list 'setq (car b) (cadr b))) bindings)
        ,@body)))
 
+(defvar *special-operator-subrs* nil)
+
 (cl:defun indirect-function (thing &optional noerror)
   "Bring-up subset of ELisp `indirect-function'."
   (handler-case
       (cond
-       ((symbolp thing) (symbol-function thing))
+       ((symbolp thing)
+        (or (gethash thing *special-operator-subrs*)
+            (symbol-function thing)))
        ((functionp thing) thing)
        (t (error "ELISP:INDIRECT-FUNCTION bad value: ~S" thing)))
-    (error (e)
-      (if noerror nil (error e)))))
+    (cl:error (e)
+      (if noerror nil (cl:error e)))))
 
-(cl:defun subrp (_object)
-  "Bring-up stub for ELisp `subrp'."
-  (declare (ignore _object))
-  nil)
+(defstruct elisp-subr
+  (arity (cons 0 0)))
 
-(cl:defun subr-arity (_object)
-  "Bring-up stub for ELisp `subr-arity'."
-  (declare (ignore _object))
-  nil)
+(defparameter *special-operator-subrs*
+  (let ((ht (cl:make-hash-table :test 'eq)))
+    ;; Enough to make upstream ERT's `ert--special-operator-p' treat these
+    ;; as special operators (so `should' can handle quoted forms).
+    (setf (gethash 'cl:quote ht) (make-elisp-subr :arity (cons 1 'unevalled)))
+    (setf (gethash 'cl:function ht) (make-elisp-subr :arity (cons 1 'unevalled)))
+    ht))
+
+(cl:defun subrp (object)
+  "Bring-up subset of ELisp `subrp'."
+  (and (typep object 'elisp-subr) t))
+
+(cl:defun subr-arity (object)
+  "Bring-up subset of ELisp `subr-arity'."
+  (when (typep object 'elisp-subr)
+    (elisp-subr-arity object)))
 
 (cl:defun %mode-hook-symbol (mode)
   (intern (concat (symbol-name mode) "-hook")))

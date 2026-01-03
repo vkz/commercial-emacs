@@ -581,7 +581,7 @@ Gate
 
 Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Load upstream `lisp/emacs-lisp/ert.el` and run at least one upstream test:
-  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 4 tests) via upstream `ert-run-test`.
+  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 8 tests) via upstream `ert-run-test`.
 - DONE (2026-01-03): Add an incremental upstream ERT load gate:
   - `mise run clemacs:test:load-ert` loads `lisp/emacs-lisp/ert.el` up to `clemacs/contract/ert.maxforms` (currently 182).
 - DONE (2026-01-03): Start with one upstream test file and grow from there (load gate first):
@@ -591,10 +591,9 @@ Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Add a delta report mode:
   - `mise run clemacs:report:ert-delta` compares the baseline `ert-tests.log` summary against the clemacs bring-up gate,
     and writes `build/clemacs/reports/ert-delta.md` (path configurable).
-- TODO: Expand the upstream ERT gate from "1 test" to an explicit, growing list:
-  - add `clemacs/contract/ert-upstream.tests` (must-pass test names),
-  - add `clemacs/contract/ert-upstream.known-fail.tests` (temporary tolerations, tracked),
-  - advance `clemacs/contract/ert-tests.maxforms` as those tests become runnable.
+- DONE (2026-01-03): Expand the upstream ERT gate to an explicit, growing list:
+  - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 8),
+  - `clemacs/contract/ert-upstream.known-fail.tests` (temporary tolerations; XPASS is a gate failure).
 
 ### Milestone B1-10: swap the ELisp engine in a running Emacs
 
@@ -624,11 +623,19 @@ Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Start growing the clemacs startup manifest toward pdump:
   - add `lisp/emacs-lisp/backquote.el`,
   - add `lisp/version.el` (first 2 forms only) to define `emacs-major-version` / `emacs-minor-version`.
+- DONE (2026-01-03): Continue growing the clemacs startup manifest toward pdump:
+  - add `lisp/emacs-lisp/debug-early.el`.
+- DONE (2026-01-03): Add a 1-form startup checkpoint for `byte-run.el`:
+  - add `lisp/emacs-lisp/byte-run.el 1` (defines `function-put` without running it yet).
+- DONE (2026-01-03): Add a 1-form startup checkpoint for `keymap.el`:
+  - add `lisp/keymap.el 1` (defines `keymap--check` without pulling in key parsing yet).
 - TODO: Grow the startup manifest toward the pdump bootstrap load list (`admin/pdump-common.el`),
   with explicit skip reasons (GUI/nativecomp/modules).
 - DONE (2026-01-03): Add a clemacs ERT gate based on upstream tests:
   - `mise run clemacs:test:ert-upstream` loads upstream `ert.el` + `ert-tests.el` and runs a must-pass list from `clemacs/contract/ert-upstream.tests`.
-- TODO: Expand the upstream ERT gate:
-  - grow `clemacs/contract/ert-upstream.tests` (pure/core tests first),
+- DONE (2026-01-03): Expand the upstream ERT gate to a small, meaningful core set:
+  - `clemacs/contract/ert-upstream.tests` currently has 8 must-pass tests.
+- TODO: Continue expanding the upstream ERT gate:
+  - keep growing `clemacs/contract/ert-upstream.tests` (pure/core tests first),
   - advance `clemacs/contract/ert-tests.maxforms` as those tests become runnable,
   - keep temporary failures in `clemacs/contract/ert-upstream.known-fail.tests` until fixed (XPASS is a gate failure).
