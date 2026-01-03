@@ -3,3 +3,6 @@
 # One relative path per line; comments allowed. Keep reasons and dates.
 # Use this for files that are intentionally out of scope (GUI/nativecomp/modules)
 # or temporarily blocked; prefer shrinking this list over time.
+
+# uses charset primitives not yet implemented (2026-01-03)
+lisp/international/mule-conf.el

@@ -581,19 +581,22 @@ Gate
 
 Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Load upstream `lisp/emacs-lisp/ert.el` and run at least one upstream test:
-  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 9 tests) via upstream `ert-run-test`.
+  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 15 tests) via upstream `ert-run-test`.
 - DONE (2026-01-03): Add an incremental upstream ERT load gate:
   - `mise run clemacs:test:load-ert` loads `lisp/emacs-lisp/ert.el` up to `clemacs/contract/ert.maxforms` (currently 182).
 - DONE (2026-01-03): Start with one upstream test file and grow from there (load gate first):
-  - `mise run clemacs:test:load-ert-tests` loads `test/lisp/emacs-lisp/ert-tests.el` up to `clemacs/contract/ert-tests.maxforms` (currently 20).
+  - `mise run clemacs:test:load-ert-tests` loads `test/lisp/emacs-lisp/ert-tests.el` up to `clemacs/contract/ert-tests.maxforms` (currently 42).
 - DONE (2026-01-03): Add a minimal upstream ERT bring-up gate (load + assert one test is registered):
   - `mise run clemacs:test:ert-upstream` (wired into `clemacs:test:contract -- --level check`).
 - DONE (2026-01-03): Add a delta report mode:
   - `mise run clemacs:report:ert-delta` compares the baseline `ert-tests.log` summary against the clemacs bring-up gate,
     and writes `build/clemacs/reports/ert-delta.md` (path configurable).
 - DONE (2026-01-03): Expand the upstream ERT gate to an explicit, growing list:
-  - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 9),
+  - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 15),
   - `clemacs/contract/ert-upstream.known-fail.tests` (temporary tolerations; XPASS is a gate failure).
+- DONE (2026-01-03): Make upstream ERT's `should-error` semantics runnable:
+  - seed C-defined error hierarchy properties (at least `error`, `arith-error`, `domain-error`, `singularity-error`),
+  - implement `cl-intersection` (used by `ert--should-error-handle-error`).
 
 ### Milestone B1-10: swap the ELisp engine in a running Emacs
 
@@ -622,7 +625,7 @@ Status (TODO, 2026-01-03)
   - Boundary: CL owns the value model + buffer representation; C provides only TTY + file + OS shims.
   - Deletion plan: timebox any compatibility shims and delete them once the CL implementation is feature-complete.
 - DONE (2026-01-03): Define a clemacs startup manifest + loader entrypoint:
-  - `clemacs/contract/startup.{smoke,check}.files` (monotonic list; currently seeded with `lisp/subr.el`).
+  - `clemacs/contract/startup.{smoke,check}.files` (monotonic list; currently 19 entries).
   - `mise run clemacs:load:startup -- --level smoke|check`
 - DONE (2026-01-03): Add a startup delta report against the pdump load list:
   - `mise run clemacs:report:startup-delta` writes `build/clemacs/reports/startup-delta.md` (path configurable).
@@ -641,12 +644,25 @@ Status (TODO, 2026-01-03)
   - add `lisp/env.el 1` (defines `read-envvar-name-history` only).
 - DONE (2026-01-03): Add a 2-form startup checkpoint for `format.el`:
   - add `lisp/format.el 2` (only `buffer-file-format` / `buffer-auto-save-file-format` props).
+- DONE (2026-01-03): Add more safe early startup checkpoints from the pdump list:
+  - add `lisp/custom.el 1` (require only),
+  - add `lisp/international/mule.el 4` (version constants only),
+  - add `lisp/bindings.el 1` (first defun only),
+  - add `lisp/window.el 1` (first defun only).
+- DONE (2026-01-03): Add more pdump candidates as early 1-form checkpoints:
+  - add `lisp/emacs-lisp/macroexp.el 1`,
+  - add `lisp/emacs-lisp/pcase.el 1`,
+  - add `lisp/emacs-lisp/gv.el 1`,
+  - add `lisp/emacs-lisp/cl-lib.el 1`,
+  - add `lisp/emacs-lisp/cl-macs.el 1`.
+- DONE (2026-01-03): Start tracking startup-blocked entries in the allowed-skip list:
+  - `clemacs/contract/lisp.allowed-skip.files` now includes `lisp/international/mule-conf.el` (charset primitives pending).
 - TODO: Grow the startup manifest toward the pdump bootstrap load list (`admin/pdump-common.el`),
   with explicit skip reasons (GUI/nativecomp/modules).
 - DONE (2026-01-03): Add a clemacs ERT gate based on upstream tests:
   - `mise run clemacs:test:ert-upstream` loads upstream `ert.el` + `ert-tests.el` and runs a must-pass list from `clemacs/contract/ert-upstream.tests`.
 - DONE (2026-01-03): Expand the upstream ERT gate to a small, meaningful core set:
-  - `clemacs/contract/ert-upstream.tests` currently has 9 must-pass tests (1 XFAIL).
+  - `clemacs/contract/ert-upstream.tests` currently has 15 must-pass tests (0 XFAIL).
 - TODO: Continue expanding the upstream ERT gate:
   - keep growing `clemacs/contract/ert-upstream.tests` (pure/core tests first),
   - advance `clemacs/contract/ert-tests.maxforms` as those tests become runnable,

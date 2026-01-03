@@ -22,3 +22,19 @@ lisp/env.el 1
 
 # 2026-01-03: pdump candidate; start with a 2-form checkpoint (buffer-file-format props only).
 lisp/format.el 2
+
+# 2026-01-03: pdump candidates; grow by safe early checkpoints.
+lisp/custom.el 1
+lisp/international/mule.el 4
+lisp/bindings.el 1
+lisp/window.el 1
+
+# 2026-01-03: pdump candidates; start with 1-form checkpoints where safe.
+lisp/emacs-lisp/macroexp.el 1
+lisp/emacs-lisp/pcase.el 1
+lisp/emacs-lisp/gv.el 1
+lisp/emacs-lisp/cl-lib.el 1
+lisp/emacs-lisp/cl-macs.el 1
+
+# 2026-01-03: pdump entry; currently blocked on charset primitives, so skip for now.
+lisp/international/mule-conf.el
