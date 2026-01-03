@@ -1,0 +1,3 @@
+# Upstream ERT tests that are currently known to fail under clemacs.
+#
+# Format: <test-name> # <reason> (YYYY-MM-DD)

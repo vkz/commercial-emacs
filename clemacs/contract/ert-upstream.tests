@@ -1,0 +1,5 @@
+# Upstream ERT tests that must pass under clemacs (names as in ert-tests.el).
+#
+# Keep this list monotonic during bring-up; move temporary failures to
+# `ert-upstream.known-fail.tests` with a short reason + date.
+ert-test-body-runs

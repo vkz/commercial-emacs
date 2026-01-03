@@ -22,7 +22,12 @@ if [[ -z "${cache_dir}" ]]; then
   cache_dir="${project_root}/${build_dir}/qlot-cache"
 fi
 
+home_dir="${project_root}/${build_dir}/home"
+mkdir -p "${home_dir}"
+export HOME="${home_dir}"
 export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+export XDG_CONFIG_HOME="${project_root}/${build_dir}/xdg-config"
+export XDG_DATA_HOME="${project_root}/${build_dir}/xdg-data"
 
 qlfile_src="${project_root}/clemacs/qlfile"
 qlfile_lock_src="${project_root}/clemacs/qlfile.lock"

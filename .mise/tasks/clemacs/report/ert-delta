@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Generate a clemacs vs baseline ERT delta report (experimental)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--baseline-build-dir <dir>" help="Out-of-tree baseline build directory for C-hosted Emacs tests" default="build/macos-tty"
+#USAGE flag "--out-dir <dir>" help="Output directory for report artifacts" default=""
+#USAGE flag "--report <path>" help="Markdown report path" default=""
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+baseline_build_dir="${usage_baseline_build_dir}"
+
+out_dir="${usage_out_dir:-}"
+if [[ -z "${out_dir}" ]]; then
+  out_dir="${project_root}/${build_dir}/reports"
+fi
+mkdir -p "${out_dir}"
+
+report_path="${usage_report:-}"
+if [[ -z "${report_path}" ]]; then
+  report_path="${out_dir}/ert-delta.md"
+fi
+
+baseline_task_log="${out_dir}/baseline-ert-tests.task.log"
+clemacs_task_log="${out_dir}/clemacs-ert-upstream.task.log"
+
+baseline_emacs="${project_root}/${baseline_build_dir}/src/emacs"
+if [[ ! -x "${baseline_emacs}" ]]; then
+  echo "[clemacs:report:ert-delta] building baseline (missing ${baseline_emacs})"
+  mise run build -- --build-dir "${baseline_build_dir}" >>"${baseline_task_log}" 2>&1 || true
+fi
+
+echo "[clemacs:report:ert-delta] running baseline (C-hosted) ert-tests.log"
+set +e
+mise run test:file -- --build-dir "${baseline_build_dir}" lisp/emacs-lisp/ert-tests >>"${baseline_task_log}" 2>&1
+baseline_status=$?
+set -e
+
+baseline_log="${project_root}/${baseline_build_dir}/test/lisp/emacs-lisp/ert-tests.log"
+baseline_summary=""
+if [[ -f "${baseline_log}" ]]; then
+  baseline_summary="$(
+    (rg -n "^Ran [0-9]+ tests" "${baseline_log}" || true) \
+      | tail -n 1 \
+      | sed 's/^[0-9]\+://'
+  )"
+fi
+
+echo "[clemacs:report:ert-delta] running clemacs upstream ERT bring-up gate"
+set +e
+mise run clemacs:test:ert-upstream -- --build-dir "${build_dir}" >"${clemacs_task_log}" 2>&1
+clemacs_status=$?
+set -e
+
+bootstrap_maxforms="$(tr -d ' \t\r\n' < clemacs/contract/bootstrap.maxforms 2>/dev/null || true)"
+ert_maxforms="$(tr -d ' \t\r\n' < clemacs/contract/ert.maxforms 2>/dev/null || true)"
+ert_tests_maxforms="$(tr -d ' \t\r\n' < clemacs/contract/ert-tests.maxforms 2>/dev/null || true)"
+
+clemacs_undefined_fn_lines="$(
+  (rg -n "Undefined function" "${clemacs_task_log}" 2>/dev/null || true) | wc -l | tr -d ' '
+)"
+clemacs_unbound_lines="$(
+  (rg -n "unbound" "${clemacs_task_log}" 2>/dev/null || true) | wc -l | tr -d ' '
+)"
+clemacs_caught_error_lines="$(
+  (rg -n "caught ERROR" "${clemacs_task_log}" 2>/dev/null || true) | wc -l | tr -d ' '
+)"
+
+now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+
+{
+  echo "# clemacs ERT delta report"
+  echo
+  echo "Generated: ${now_utc}"
+  echo
+  echo "## Baseline (C-hosted Emacs test harness)"
+  echo
+  echo "- Task: \`mise run test:file -- --build-dir ${baseline_build_dir} lisp/emacs-lisp/ert-tests\`"
+  echo "- Exit: ${baseline_status}"
+  echo "- Log: \`${baseline_log}\`"
+  if [[ -n "${baseline_summary}" ]]; then
+    echo "- Summary: ${baseline_summary}"
+  else
+    echo "- Summary: (not found; see log)"
+  fi
+  echo "- Task output: \`${baseline_task_log}\`"
+  echo
+  echo "## clemacs (SBCL-hosted bring-up)"
+  echo
+  echo "- Task: \`mise run clemacs:test:ert-upstream -- --build-dir ${build_dir}\`"
+  echo "- Exit: ${clemacs_status}"
+  echo "- Task output: \`${clemacs_task_log}\`"
+  echo
+  echo "Checkpoints:"
+  echo "- \`clemacs/contract/bootstrap.maxforms\`: ${bootstrap_maxforms:-\"(missing)\"}"
+  echo "- \`clemacs/contract/ert.maxforms\`: ${ert_maxforms:-\"(missing)\"}"
+  echo "- \`clemacs/contract/ert-tests.maxforms\`: ${ert_tests_maxforms:-\"(missing)\"}"
+  echo
+  echo "Diagnostics (from task output):"
+  echo "- \"Undefined function\" lines: ${clemacs_undefined_fn_lines}"
+  echo "- \"unbound\" lines: ${clemacs_unbound_lines}"
+  echo "- \"caught ERROR\" lines: ${clemacs_caught_error_lines}"
+  echo
+  echo "Notes:"
+  echo "- clemacs does not run upstream ERT yet; this report tracks load/registration progress."
+} >"${report_path}"
+
+echo "[clemacs:report:ert-delta] wrote ${report_path}"

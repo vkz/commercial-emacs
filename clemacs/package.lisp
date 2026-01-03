@@ -27,6 +27,7 @@
    #:buffer-move-vertical
    #:buffer-load-file
    #:buffer-save
+   #:run-upstream-ert-tests
    #:tty-main
    #:substrate-platform
    #:substrate-parse-int

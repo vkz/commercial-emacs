@@ -17,6 +17,12 @@ build_dir="${usage_build_dir}"
 mkdir -p "${build_dir}"
 
 export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+export XDG_CONFIG_HOME="${project_root}/${build_dir}/xdg-config"
+export XDG_DATA_HOME="${project_root}/${build_dir}/xdg-data"
+
+home_dir="${project_root}/${build_dir}/home"
+mkdir -p "${home_dir}"
+export HOME="${home_dir}"
 
 mise run clemacs:deps:install -- --build-dir "${build_dir}"
 
@@ -35,6 +41,52 @@ tests_eval="nil"
 f="${project_root}/clemacs/contract/ert-tests.maxforms"
 [[ -f "${f}" ]] && tests_eval="$(tr -d ' \t\r\n' < "${f}")"
 
+tests_manifest="${project_root}/clemacs/contract/ert-upstream.tests"
+known_fail_manifest="${project_root}/clemacs/contract/ert-upstream.known-fail.tests"
+
+names_lisp="(list"
+if [[ -f "${tests_manifest}" ]]; then
+  while IFS= read -r line; do
+    line="$(printf "%s" "${line}" | sed -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//')"
+    if [[ -z "${line}" ]]; then
+      continue
+    fi
+    if [[ "${line}" == \#* ]]; then
+      continue
+    fi
+    line="${line%%#*}"
+    line="$(printf "%s" "${line}" | sed -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//')"
+    if [[ -n "${line}" ]]; then
+      esc="${line//\"/\\\"}"
+      names_lisp="${names_lisp} \"${esc}\""
+    fi
+  done < "${tests_manifest}"
+fi
+names_lisp="${names_lisp})"
+if [[ "${names_lisp}" == "(list)" ]]; then
+  names_lisp='(list "ert-test-body-runs")'
+fi
+
+known_fail_lisp="(list"
+if [[ -f "${known_fail_manifest}" ]]; then
+  while IFS= read -r line; do
+    line="$(printf "%s" "${line}" | sed -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//')"
+    if [[ -z "${line}" ]]; then
+      continue
+    fi
+    if [[ "${line}" == \#* ]]; then
+      continue
+    fi
+    line="${line%%#*}"
+    line="$(printf "%s" "${line}" | sed -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//')"
+    if [[ -n "${line}" ]]; then
+      esc="${line//\"/\\\"}"
+      known_fail_lisp="${known_fail_lisp} \"${esc}\""
+    fi
+  done < "${known_fail_manifest}"
+fi
+known_fail_lisp="${known_fail_lisp})"
+
 cd "${deps_dir}"
 "${qlot_bin}" exec sbcl \
   --noinform \
@@ -48,4 +100,4 @@ cd "${deps_dir}"
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/subr.el\" :max-forms ${bootstrap_eval})" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert.el\" :max-forms ${ert_eval})" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-tests.el\" :max-forms ${tests_eval})" \
-  --eval "(uiop:quit (if (cl:get 'elisp::ert-test-body-runs 'elisp::ert--test) 0 1))"
+  --eval "(uiop:quit (clemacs:run-upstream-ert-tests :names ${names_lisp} :known-fail ${known_fail_lisp}))"

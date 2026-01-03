@@ -157,9 +157,13 @@ Currently does not load code; it only records FEATURE as provided."
   (declare (ignore _message _parent))
   name)
 
-(cl:defmacro cl-assert (&rest args)
-  "Minimal subset of cl-lib's `cl-assert'."
-  `(cl:assert ,@args))
+(cl:defmacro cl-assert (form &rest _args)
+  "Bring-up subset of cl-lib's `cl-assert'.
+
+Upstream ELisp often passes extra arguments (e.g. SHOW-ARGS, message
+formatting). We currently ignore them and delegate to CL:ASSERT on FORM."
+  (declare (ignore _args))
+  `(cl:assert ,form))
 
 (cl:defmacro cl-defmacro (name lambda-list &body body)
   "Minimal subset of cl-lib's `cl-defmacro'."
@@ -230,13 +234,327 @@ Currently does not load code; it only records FEATURE as provided."
 (defvar *global-map* nil)
 (defparameter minibuffer-local-map (make-elisp-keymap))
 (defparameter find-function-space-re "")
+(cl:defvar find-function-regexp-alist nil)
 (defparameter buffer-file-name nil)
 (defparameter noninteractive t)
 (defparameter current-load-list nil)
+(cl:defvar describe-symbol-backends nil)
+(cl:defvar minor-mode-alist nil)
+
+;; ---------------------------------------------------------------------------
+;; Minimal buffer/marker surface (enough for upstream ERT bring-up)
+;; ---------------------------------------------------------------------------
+
+(defstruct elisp-buffer
+  (name "" :type string)
+  (text "" :type string)
+  (point 1 :type integer))
+
+(defstruct elisp-marker
+  (buffer nil)
+  (position nil))
+
+(defvar *messages-buffer* (make-elisp-buffer :name "*Messages*"))
+(defvar *current-buffer* *messages-buffer*)
+(defparameter message-log-max t)
+
+(cl:defun current-buffer ()
+  *current-buffer*)
+
+(cl:defun messages-buffer ()
+  *messages-buffer*)
+
+(cl:defmacro with-current-buffer (buffer &body body)
+  `(let ((*current-buffer* ,buffer))
+     ,@body))
+
+(cl:defmacro with-temp-buffer (&body body)
+  `(with-current-buffer (make-elisp-buffer :name " *temp*")
+     ,@body))
+
+(cl:defmacro save-window-excursion (&body body)
+  `(progn ,@body))
+
+(cl:defun point ()
+  (elisp-buffer-point *current-buffer*))
+
+(cl:defun point-min ()
+  1)
+
+(cl:defun point-max ()
+  (1+ (length (elisp-buffer-text *current-buffer*))))
+
+(cl:defun goto-char (pos)
+  (unless (and (integerp pos) (<= (point-min) pos) (<= pos (point-max)))
+    (error "ELISP:GOTO-CHAR out of range: ~S" pos))
+  (setf (elisp-buffer-point *current-buffer*) pos)
+  pos)
+
+(cl:defun point-max-marker ()
+  (make-elisp-marker :buffer *current-buffer* :position (point-max)))
+
+(cl:defun set-marker (marker position &optional buffer)
+  (unless (elisp-marker-p marker)
+    (error "ELISP:SET-MARKER expected marker, got: ~S" marker))
+  (cond
+   ((null position)
+    (setf (elisp-marker-buffer marker) nil
+          (elisp-marker-position marker) nil))
+   (t
+    (unless (and (integerp position) (plusp position))
+      (error "ELISP:SET-MARKER bad position: ~S" position))
+    (setf (elisp-marker-buffer marker) (or buffer *current-buffer*)
+          (elisp-marker-position marker) position)))
+  marker)
+
+(cl:defun %pos (x)
+  (etypecase x
+    (integer x)
+    (elisp-marker (or (elisp-marker-position x) (error "Marker has no position")))))
+
+(cl:defun buffer-substring (start end)
+  (let* ((s (%pos start))
+         (e (%pos end))
+         (txt (elisp-buffer-text *current-buffer*)))
+    (when (> s e)
+      (error "ELISP:BUFFER-SUBSTRING start > end: ~S ~S" start end))
+    (subseq txt (1- s) (1- e))))
+
+(cl:defun delete-region (start end)
+  (let* ((s (%pos start))
+         (e (%pos end))
+         (txt (elisp-buffer-text *current-buffer*)))
+    (when (> s e)
+      (error "ELISP:DELETE-REGION start > end: ~S ~S" start end))
+    (setf (elisp-buffer-text *current-buffer*)
+          (concatenate 'string (subseq txt 0 (1- s)) (subseq txt (1- e))))
+    (when (> (point) (point-max))
+      (goto-char (point-max)))
+    nil))
+
+(cl:defun insert (&rest parts)
+  (let* ((s (with-output-to-string (out)
+              (dolist (p parts)
+                (typecase p
+                  (null nil)
+                  (string (write-string p out))
+                  (character (write-char p out))
+                  (t (write-string (princ-to-string p) out))))))
+         (txt (elisp-buffer-text *current-buffer*))
+         (idx (1- (point))))
+    (setf (elisp-buffer-text *current-buffer*)
+          (concatenate 'string (subseq txt 0 idx) s (subseq txt idx)))
+    (goto-char (+ (point) (length s)))
+    nil))
+
+(cl:defun natnump (x)
+  (and (integerp x) (not (minusp x)) t))
+
+(cl:defun message (format-string &rest args)
+  (let ((s (apply #'format nil format-string args)))
+    (with-current-buffer (messages-buffer)
+      (goto-char (point-max))
+      (insert s "\n"))
+    s))
+
+(cl:defun error-message-string (condition)
+  (princ-to-string condition))
 
 (cl:defun macroexp-file-name ()
   "Stub for ELisp `macroexp-file-name'."
   nil)
+
+(cl:defvar macroexpand-all-environment nil)
+
+(cl:defun macroexp-progn (body)
+  "Bring-up subset of ELisp `macroexp-progn'."
+  (cond
+   ((null body) nil)
+   ((null (cdr body)) (car body))
+   (t (cons 'progn body))))
+
+(cl:defmacro if-let (bindings then &optional else)
+  "Bring-up subset of subr-x `if-let'."
+  (let ((vars (mapcar #'car bindings)))
+    `(let* ,bindings
+       (if (and ,@vars) ,then ,else))))
+
+(cl:defmacro when-let (bindings &body body)
+  "Bring-up subset of subr-x `when-let'."
+  (let ((vars (mapcar #'car bindings)))
+    `(let* ,bindings
+       (when (and ,@vars)
+         ,@(or body '(nil))))))
+
+(cl:defun macroexp--fgrep (bindings sexp)
+  "Bring-up subset of `macroexp--fgrep'.
+
+Return non-nil if any bound symbols from BINDINGS appear in SEXP.
+This is sufficient for `letrec' in `lisp/subr.el' during ERT bring-up."
+  (let ((syms (mapcar #'car bindings)))
+    (labels ((seen (x)
+               (cond
+                ((null x) nil)
+                ((symbolp x) (and (member x syms :test #'eq) t))
+                ((atom x) nil)
+                ((and (consp x) (eq (car x) 'quote)) nil)
+                (t (or (seen (car x)) (seen (cdr x)))))))
+      (seen sexp))))
+
+(cl:defun macroexpand-all (form &optional env)
+  "Bring-up subset of ELisp `macroexpand-all'."
+  (declare (ignore env))
+  (cl:macroexpand form))
+
+(cl:defmacro condition-case (var bodyform &rest handlers)
+  "Bring-up subset of ELisp `condition-case'.
+
+Binds VAR (when non-nil) to a minimal \"Elisp error data\" cons:
+  (error . (CONDITION))."
+  (let* ((e (gensym "E"))
+         (err (or var (gensym "ERR"))))
+    `(handler-case
+         ,bodyform
+       (error (,e)
+         (let ((,err (cons 'error (list ,e))))
+           ,(if handlers
+                `(progn ,@(cdr (car handlers)))
+                `(error ,e)))))))
+
+(define-condition quit (error) ())
+
+(cl:defmacro letrec (bindings &body body)
+  "Bring-up subset of ELisp `letrec'.
+
+Supports the common pattern of a self-referential closure (used by ERT)."
+  (let ((vars (mapcar #'car bindings)))
+    `(let ,(mapcar (lambda (v) (list v nil)) vars)
+       ,@(mapcar (lambda (b) (list 'setq (car b) (cadr b))) bindings)
+       ,@body)))
+
+(cl:defun indirect-function (thing &optional noerror)
+  "Bring-up subset of ELisp `indirect-function'."
+  (handler-case
+      (cond
+       ((symbolp thing) (symbol-function thing))
+       ((functionp thing) thing)
+       (t (error "ELISP:INDIRECT-FUNCTION bad value: ~S" thing)))
+    (error (e)
+      (if noerror nil (error e)))))
+
+(cl:defun subrp (_object)
+  "Bring-up stub for ELisp `subrp'."
+  (declare (ignore _object))
+  nil)
+
+(cl:defun subr-arity (_object)
+  "Bring-up stub for ELisp `subr-arity'."
+  (declare (ignore _object))
+  nil)
+
+(cl:defun %mode-hook-symbol (mode)
+  (intern (concat (symbol-name mode) "-hook")))
+
+(cl:defun %mode-map-symbol (mode)
+  (intern (concat (symbol-name mode) "-map")))
+
+(cl:defun %key-id (key)
+  (typecase key
+    (string key)
+    (vector (write-to-string key :escape t))
+    (character (string key))
+    (integer (format nil "#<keycode ~D>" key))
+    (t (write-to-string key :escape t))))
+
+(cl:defun define-key (keymap key definition)
+  "Minimal stub for ELisp `define-key' on `elisp-keymap' objects."
+  (let ((km (if (symbolp keymap) (symbol-value keymap) keymap)))
+    (unless (typep km 'elisp-keymap)
+      (error "ELISP:DEFINE-KEY expected keymap, got: ~S" keymap))
+    (setf (gethash (%key-id key) (elisp-keymap-table km)) definition)
+    definition))
+
+(cl:defmacro define-derived-mode (child _parent _name &optional docstring &rest _body)
+  "Bring-up subset of ELisp `define-derived-mode'.
+
+For now we:
+- create CHILD-hook and CHILD-map variables (if not already bound),
+- define a no-op mode function CHILD.
+
+This is sufficient for many shipped Elisp files to load; it is not a full
+major-mode implementation."
+  (declare (ignore _parent _name _body))
+  (let ((hook (%mode-hook-symbol child))
+        (map (%mode-map-symbol child)))
+    `(progn
+       (cl:defvar ,hook nil)
+       (cl:defvar ,map (make-elisp-keymap))
+       (defun ,child (&rest _args)
+         ,@(when (stringp docstring) (list docstring))
+         (declare (ignore _args))
+         nil)
+       ',child)))
+
+(cl:defmacro easy-menu-define (symbol _keymap _doc menu)
+  "Bring-up stub for ELisp `easy-menu-define'."
+  (declare (ignore _keymap _doc))
+  `(progn
+     (cl:defvar ,symbol ,menu)
+     ',symbol))
+
+(cl:defun define-button-type (&rest _args)
+  "Bring-up stub for ELisp `define-button-type'."
+  (declare (ignore _args))
+  nil)
+
+(cl:defun add-hook (hook function &optional append _local)
+  "Bring-up subset of ELisp `add-hook'.
+
+HOOK is a symbol naming a hook variable whose value is a list of functions."
+  (declare (ignore _local))
+  (unless (symbolp hook)
+    (error "ELISP:ADD-HOOK expected a hook symbol, got: ~S" hook))
+  (let ((cur (if (cl:boundp hook) (symbol-value hook) nil)))
+    (unless (listp cur)
+      (set hook nil)
+      (setf cur nil))
+    (unless (member function cur :test #'equal)
+      (set hook (if append (append cur (list function)) (cons function cur)))))
+  t)
+
+(cl:defun remove-hook (hook function &optional _local)
+  "Bring-up subset of ELisp `remove-hook'."
+  (declare (ignore _local))
+  (unless (symbolp hook)
+    (error "ELISP:REMOVE-HOOK expected a hook symbol, got: ~S" hook))
+  (when (cl:boundp hook)
+    (let ((cur (symbol-value hook)))
+      (when (listp cur)
+        (set hook (remove function cur :test #'equal)))))
+  t)
+
+(cl:defun run-hooks (&rest hooks)
+  "Bring-up subset of ELisp `run-hooks'."
+  (dolist (hook hooks)
+    (when (and (symbolp hook) (cl:boundp hook))
+      (let ((cur (symbol-value hook)))
+        (when (listp cur)
+          (dolist (fn cur)
+            (ignore-errors (funcall fn)))))))
+  nil)
+
+(cl:defun add-to-list (list-var element &optional append _compare-fn)
+  "Bring-up subset of ELisp `add-to-list'."
+  (declare (ignore _compare-fn))
+  (unless (symbolp list-var)
+    (error "ELISP:ADD-TO-LIST expected a symbol, got: ~S" list-var))
+  (let ((cur (if (cl:boundp list-var) (symbol-value list-var) nil)))
+    (unless (listp cur)
+      (set list-var nil)
+      (setf cur nil))
+    (unless (member element cur :test #'equal)
+      (set list-var (if append (append cur (list element)) (cons element cur)))))
+  t)
 
 (cl:defun make-keymap ()
   "Extremely small stub for ELisp `make-keymap'."
@@ -255,15 +573,6 @@ Currently does not load code; it only records FEATURE as provided."
   "ELisp-ish ASET."
   (setf (aref array idx) value)
   value)
-
-(cl:defun define-key (keymap key definition)
-  "Extremely small stub for ELisp `define-key'.
-
-Stores DEFINITION verbatim; KEY can be a string or vector (and is stored as-is)."
-  (unless (typep keymap 'elisp-keymap)
-    (error "ELISP:DEFINE-KEY expected a keymap, got: ~S" keymap))
-  (setf (gethash key (elisp-keymap-table keymap)) definition)
-  definition)
 
 (cl:defun set-keymap-parent (keymap parent)
   "Extremely small stub for ELisp `set-keymap-parent'."

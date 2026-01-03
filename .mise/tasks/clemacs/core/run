@@ -22,6 +22,12 @@ if [[ ! -f "${core_path}" ]]; then
 fi
 
 export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+export XDG_CONFIG_HOME="${project_root}/${build_dir}/xdg-config"
+export XDG_DATA_HOME="${project_root}/${build_dir}/xdg-data"
+
+home_dir="${project_root}/${build_dir}/home"
+mkdir -p "${home_dir}"
+export HOME="${home_dir}"
 
 stale=false
 if find "${project_root}/clemacs" \

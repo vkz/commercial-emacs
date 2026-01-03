@@ -13,6 +13,7 @@
    (:file "elisp-compat")
    (:file "elisp-load")
    (:file "elisp-ert")
+   (:file "ert-upstream")
    (:file "main")
    (:file "substrate")
    (:file "tty")

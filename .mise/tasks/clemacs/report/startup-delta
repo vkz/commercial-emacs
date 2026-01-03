@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Report startup manifest vs admin/pdump-common.el (experimental)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--out-dir <dir>" help="Output directory for report artifacts" default=""
+#USAGE flag "--report <path>" help="Markdown report path" default=""
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+
+out_dir="${usage_out_dir:-}"
+if [[ -z "${out_dir}" ]]; then
+  out_dir="${project_root}/${build_dir}/reports"
+fi
+mkdir -p "${out_dir}"
+
+report_path="${usage_report:-}"
+if [[ -z "${report_path}" ]]; then
+  report_path="${out_dir}/startup-delta.md"
+fi
+
+export CLEMACS_REPORT_BUILD_DIR="${build_dir}"
+export CLEMACS_REPORT_OUT_DIR="${out_dir}"
+export CLEMACS_REPORT_PATH="${report_path}"
+
+python3 - <<'PY'
+import os
+import re
+from pathlib import Path
+
+project_root = Path(os.environ.get("MISE_PROJECT_ROOT") or os.getcwd())
+build_dir = Path(os.environ.get("CLEMACS_REPORT_BUILD_DIR") or "build/clemacs")
+out_dir = Path(os.environ.get("CLEMACS_REPORT_OUT_DIR") or (project_root / build_dir / "reports"))
+report_path = Path(os.environ.get("CLEMACS_REPORT_PATH") or (out_dir / "startup-delta.md"))
+
+pdump = project_root / "admin" / "pdump-common.el"
+startup_smoke = project_root / "clemacs" / "contract" / "startup.smoke.files"
+
+def read_manifest(path: Path):
+    out = []
+    if not path.exists():
+        return out
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        out.append(line.split()[0])
+    return out
+
+startup = read_manifest(startup_smoke)
+startup_set = set(startup)
+
+text = pdump.read_text(encoding="utf-8")
+loads = re.findall(r'\\(load\\s+"([^"]+)"', text)
+
+pdump_paths = []
+for name in loads:
+    if name.startswith("lisp/"):
+        rel = name
+    else:
+        rel = "lisp/" + name
+    if not rel.endswith(".el"):
+        rel = rel + ".el"
+    pdump_paths.append(rel)
+
+missing = [p for p in pdump_paths if p not in startup_set]
+present = [p for p in pdump_paths if p in startup_set]
+
+out_dir.mkdir(parents=True, exist_ok=True)
+
+def md_list(items, limit=30):
+    if not items:
+        return ["- (none)"]
+    out = []
+    for i, item in enumerate(items[:limit], start=1):
+        out.append(f"- {item}")
+    if len(items) > limit:
+        out.append(f"- ... ({len(items) - limit} more)")
+    return out
+
+lines = []
+lines.append("# clemacs startup delta report")
+lines.append("")
+lines.append(f"- pdump source: `{pdump}`")
+lines.append(f"- startup manifest: `{startup_smoke}`")
+lines.append("")
+lines.append("## Summary")
+lines.append(f"- pdump load entries: {len(pdump_paths)} (includes duplicates)")
+lines.append(f"- startup entries: {len(startup)}")
+lines.append(f"- present in startup: {len(present)}")
+lines.append(f"- missing from startup: {len(missing)}")
+lines.append("")
+lines.append("## Next candidates (pdump entries missing from startup)")
+lines.extend(md_list(missing, limit=40))
+lines.append("")
+
+report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+print(f"[clemacs:report:startup-delta] wrote {report_path}")
+PY
