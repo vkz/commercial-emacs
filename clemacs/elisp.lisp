@@ -39,6 +39,38 @@
 (cl:defun %ensure-elisp-readtable ()
   (or *elisp-readtable*
       (let ((rt (copy-readtable nil)))
+        (set-macro-character
+         #\"
+         (lambda (stream char)
+           (declare (ignore char))
+           (with-output-to-string (out)
+             (loop
+               for ch = (read-char stream nil nil t) do
+                 (when (null ch)
+                   (error "EOF while reading string"))
+                 (cond
+                  ((char= ch #\")
+                   (return))
+                  ((char= ch #\\)
+                   (let ((e (read-char stream nil nil t)))
+                     (when (null e)
+                       (error "EOF in string escape"))
+                     (case e
+                       (#\n (write-char #\Newline out))
+                       (#\t (write-char #\Tab out))
+                       (#\r (write-char #\Return out))
+                       (#\b (write-char (code-char 8) out))
+                       (#\f (write-char (code-char 12) out))
+                       (#\a (write-char (code-char 7) out))
+                       (#\e (write-char (code-char 27) out))
+                       (#\\ (write-char #\\ out))
+                       (#\" (write-char #\" out))
+                       (#\Newline nil) ; line continuation
+                       (otherwise (write-char e out)))))
+                  (t
+                   (write-char ch out))))))
+         nil
+         rt)
         (set-dispatch-macro-character
          #\#
          #\'

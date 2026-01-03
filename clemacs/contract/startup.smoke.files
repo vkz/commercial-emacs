@@ -7,3 +7,5 @@
 # 2026-01-03: seed with the current subr.el bootstrap checkpoint.
 
 lisp/subr.el 340
+lisp/emacs-lisp/backquote.el
+lisp/version.el 2

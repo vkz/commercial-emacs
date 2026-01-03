@@ -60,7 +60,8 @@ startup = read_manifest(startup_smoke)
 startup_set = set(startup)
 
 text = pdump.read_text(encoding="utf-8")
-loads = re.findall(r'\\(load\\s+"([^"]+)"', text)
+# Match forms like: (load "foo") or (load "foo" t)
+loads = re.findall(r'\(load\s+"([^"]+)"', text)
 
 pdump_paths = []
 for name in loads:

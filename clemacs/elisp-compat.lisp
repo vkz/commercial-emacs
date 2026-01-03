@@ -86,6 +86,70 @@ Returns NIL if SYMBOL has no function cell value."
         (character (write-char p out))
         (t (write-string (princ-to-string p) out))))))
 
+(cl:defvar emacs-version "31.0.50")
+
+(defvar *match-strings* nil)
+
+(cl:defun %match-leading-digits (s start)
+  (let ((i start))
+    (loop while (and (< i (length s))
+                     (digit-char-p (char s i)))
+          do (incf i))
+    (if (> i start) i nil)))
+
+(cl:defun string-match (regexp string &optional (start 0))
+  "Bring-up subset of ELisp `string-match'.
+
+This currently supports the patterns used early in `lisp/version.el`:
+- \"^[0-9]+\"\n- \"^[0-9]+\\\\.\\\\([0-9]+\\\\)\""
+  (unless (and (stringp regexp) (stringp string))
+    (error "ELISP:STRING-MATCH expects strings, got: ~S ~S" regexp string))
+  (let ((re regexp))
+    (cond
+     ((string= re "^[0-9]+")
+      (when (/= start 0) (return-from string-match nil))
+      (let ((end (%match-leading-digits string 0)))
+        (if end
+            (progn
+              (setf *match-strings* (list (subseq string 0 end)))
+              0)
+            (progn
+              (setf *match-strings* nil)
+              nil))))
+     ((string= re "^[0-9]+\\.\\([0-9]+\\)")
+      (when (/= start 0) (return-from string-match nil))
+      (let ((end1 (%match-leading-digits string 0)))
+        (if (and end1
+                 (< end1 (length string))
+                 (char= (char string end1) #\.))
+            (let* ((start2 (1+ end1))
+                   (end2 (%match-leading-digits string start2)))
+              (if end2
+                  (progn
+                    (setf *match-strings*
+                          (list (subseq string 0 end2)
+                                (subseq string start2 end2)))
+                    0)
+                  (progn (setf *match-strings* nil) nil)))
+            (progn (setf *match-strings* nil) nil))))
+     (t
+      (error "ELISP:STRING-MATCH unsupported regexp (bring-up): ~S" regexp)))))
+
+(cl:defun match-string (n &optional _string)
+  "Bring-up subset of ELisp `match-string'."
+  (declare (ignore _string))
+  (unless (and (integerp n) (<= 0 n))
+    (error "ELISP:MATCH-STRING expects non-negative integer, got: ~S" n))
+  (and *match-strings* (nth n *match-strings*)))
+
+(cl:defun string-to-number (string)
+  "Bring-up subset of ELisp `string-to-number'."
+  (unless (stringp string)
+    (error "ELISP:STRING-TO-NUMBER expects string, got: ~S" string))
+  (handler-case
+      (parse-integer string :junk-allowed t)
+    (error () 0)))
+
 (cl:defun copy-sequence (sequence)
   "ELisp-ish COPY-SEQUENCE."
   (typecase sequence

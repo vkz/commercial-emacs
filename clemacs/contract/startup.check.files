@@ -3,3 +3,5 @@
 # 2026-01-03: same as smoke; diverges once startup grows.
 
 lisp/subr.el 340
+lisp/emacs-lisp/backquote.el
+lisp/version.el 2

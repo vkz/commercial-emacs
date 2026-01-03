@@ -35,7 +35,7 @@
                  (setf start nil))))
       (loop for i from 0 below (length s) do
         (let ((ch (char s i)))
-          (if (find ch " \t" :test #'char=)
+          (if (or (char= ch #\Space) (char= ch #\Tab))
               (emit i)
               (unless start
                 (setf start i)))))

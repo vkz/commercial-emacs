@@ -621,6 +621,9 @@ Status (TODO, 2026-01-03)
   - `mise run clemacs:load:startup -- --level smoke|check`
 - DONE (2026-01-03): Add a startup delta report against the pdump load list:
   - `mise run clemacs:report:startup-delta` writes `build/clemacs/reports/startup-delta.md` (path configurable).
+- DONE (2026-01-03): Start growing the clemacs startup manifest toward pdump:
+  - add `lisp/emacs-lisp/backquote.el`,
+  - add `lisp/version.el` (first 2 forms only) to define `emacs-major-version` / `emacs-minor-version`.
 - TODO: Grow the startup manifest toward the pdump bootstrap load list (`admin/pdump-common.el`),
   with explicit skip reasons (GUI/nativecomp/modules).
 - DONE (2026-01-03): Add a clemacs ERT gate based on upstream tests:
