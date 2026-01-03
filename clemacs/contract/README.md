@@ -9,3 +9,4 @@ Contract levels:
 
 - `smoke`: fast and deterministic on macOS; should be run constantly.
 - `check`: slower gate; may grow over time.
+- `elisp-core`: inventory-driven ELisp-core bring-up gate (smoke plus inventory usage report).

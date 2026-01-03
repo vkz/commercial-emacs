@@ -20,6 +20,7 @@ build_dir="${usage_build_dir}"
 contract_dir="${project_root}/clemacs/contract"
 case "${level}" in
   smoke) manifest="${contract_dir}/smoke.tasks" ;;
+  elisp-core) manifest="${contract_dir}/elisp-core.tasks" ;;
   check) manifest="${contract_dir}/check.tasks" ;;
   *)
     echo "[clemacs:test:contract] unknown level: ${level}" >&2

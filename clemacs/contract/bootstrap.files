@@ -1,0 +1,7 @@
+lisp/subr.el
+lisp/emacs-lisp/cl-lib.el
+lisp/emacs-lisp/cl-macs.el
+lisp/emacs-lisp/macroexp.el
+lisp/emacs-lisp/pcase.el
+lisp/emacs-lisp/ert.el
+lisp/simple.el

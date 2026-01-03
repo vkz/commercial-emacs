@@ -510,13 +510,16 @@ Gate
   without modifying `lisp/` (prefer adding shims first).
 
 Status (TODO, 2026-01-03)
-- TODO: Create a clemacs-side inventory view:
-  - extract "used primitives" by scanning/evaluating a bootstrap set of `lisp/*.el`,
-  - cross-check against `inventory/runtime-subrs.json` and record missing coverage.
+- DONE (2026-01-03): Create a clemacs-side inventory view:
+  - `mise run clemacs:inventory:used` scans `clemacs/contract/bootstrap.files`
+    and reports which C-defined runtime subrs are referenced (writes
+    `build/clemacs/tmp/inventory-used.{json,txt}`).
+  - `mise run clemacs:test:contract -- --level elisp-core` runs smoke + tty + ERT
+    plus the inventory usage report as the "keep it honest" gate for this phase.
 - TODO: Implement CL symbol cells (value cell + function cell) and a basic `defun`/`fset` story.
 - TODO: Implement dynamic binding semantics needed by core libs (or document an explicit alternative).
 - TODO: Add a "missing primitive" error format that includes the inventory entry (name + source file).
-- TODO: Add a new clemacs contract level `elisp-core` (fast) that runs constantly during this phase.
+- DONE (2026-01-03): Add a new clemacs contract level `elisp-core` (fast-ish) that runs constantly during this phase.
 
 Guardrails
 - Keep ELisp native compilation disabled.

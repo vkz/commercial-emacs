@@ -1,0 +1,4 @@
+clemacs:test:smoke
+clemacs:test:tty
+clemacs:test:ert
+clemacs:inventory:used

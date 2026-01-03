@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Report C-defined ELisp primitive usage for a clemacs bootstrap set (inventory-driven)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--manifest <path>" help="Bootstrap file list (repo-relative)" default="clemacs/contract/bootstrap.files"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+manifest="${usage_manifest}"
+
+out_dir="${project_root}/${build_dir}/tmp"
+mkdir -p "${out_dir}"
+
+python3 - <<'PY'
+import json
+import os
+import re
+import sys
+from collections import Counter
+
+project_root = os.environ.get("MISE_PROJECT_ROOT") or os.getcwd()
+build_dir = os.environ.get("usage_build_dir") or "build/clemacs"
+manifest = os.environ.get("usage_manifest") or "clemacs/contract/bootstrap.files"
+out_dir = os.path.join(project_root, build_dir, "tmp")
+os.makedirs(out_dir, exist_ok=True)
+
+inv_path = os.path.join(project_root, "inventory", "runtime-subrs.json")
+if not os.path.exists(inv_path):
+    raise SystemExit(f"missing inventory: {inv_path}")
+
+runtime = json.load(open(inv_path, "r", encoding="utf-8"))
+subrs = set()
+for e in runtime:
+    n = e.get("lisp_name")
+    if isinstance(n, str) and n:
+        subrs.add(n)
+
+def tokenize_elisp(text: str):
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c.isspace():
+            i += 1
+            continue
+        if c == ';':
+            j = text.find('\n', i)
+            if j == -1:
+                return
+            i = j + 1
+            continue
+        if c == '"':
+            i += 1
+            while i < n:
+                if text[i] == '\\\\':
+                    i += 2
+                    continue
+                if text[i] == '"':
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c in '()[]{}':
+            i += 1
+            continue
+        if c in "'`,":
+            i += 1
+            if c == ',' and i < n and text[i] == '@':
+                i += 1
+            continue
+        if c == '#':
+            # Skip dispatch prefix and treat next as token boundary.
+            i += 1
+            continue
+        # symbol token: read until whitespace or delimiter
+        j = i
+        while j < n:
+            d = text[j]
+            if d.isspace() or d in '()[]{}' or d == ';' or d == '"':
+                break
+            if d in "'`,":
+                break
+            j += 1
+        tok = text[i:j]
+        i = j
+        if tok:
+            yield tok
+
+manifest_path = os.path.join(project_root, manifest)
+if not os.path.exists(manifest_path):
+    raise SystemExit(f"missing manifest: {manifest_path}")
+
+files = []
+for line in open(manifest_path, "r", encoding="utf-8"):
+    line = line.strip()
+    if not line or line.startswith("#"):
+        continue
+    files.append(line)
+
+missing_files = [f for f in files if not os.path.exists(os.path.join(project_root, f))]
+if missing_files:
+    raise SystemExit("missing files in manifest: " + ", ".join(missing_files))
+
+counts = Counter()
+file_hits = {}
+for rel in files:
+    p = os.path.join(project_root, rel)
+    text = open(p, "r", encoding="utf-8", errors="replace").read()
+    used = Counter()
+    for tok in tokenize_elisp(text):
+        if tok in subrs:
+            used[tok] += 1
+            counts[tok] += 1
+    file_hits[rel] = {"unique_subrs": len(used), "top": used.most_common(20)}
+
+out_json = os.path.join(out_dir, "inventory-used.json")
+out_txt = os.path.join(out_dir, "inventory-used.txt")
+
+report = {
+    "manifest": manifest,
+    "files": files,
+    "runtime_subrs_total": len(subrs),
+    "used_runtime_subrs_unique": len(counts),
+    "used_runtime_subrs_top": counts.most_common(50),
+    "per_file": file_hits,
+}
+
+open(out_json, "w", encoding="utf-8").write(json.dumps(report, indent=2, sort_keys=True) + "\n")
+
+with open(out_txt, "w", encoding="utf-8") as f:
+    f.write(f"manifest: {manifest}\n")
+    f.write(f"files: {len(files)}\n")
+    f.write(f"runtime subrs total: {len(subrs)}\n")
+    f.write(f"used runtime subrs (unique): {len(counts)}\n")
+    f.write("\nTop used runtime subrs:\n")
+    for name, c in counts.most_common(50):
+        f.write(f"  {c:6d}  {name}\n")
+
+print(f"[clemacs:inventory:used] wrote {out_json}")
+print(f"[clemacs:inventory:used] wrote {out_txt}")
+print(f"[clemacs:inventory:used] used runtime subrs (unique): {len(counts)} / {len(subrs)}")
+PY
