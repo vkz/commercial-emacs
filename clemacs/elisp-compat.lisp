@@ -415,41 +415,44 @@ an augmented SBCL lexical environment."
 This is intentionally narrow: it supports the temporary rebinding patterns
 we hit in upstream ERT bring-up (e.g. rebinding `(symbol-function 'message)`).
 Unsupported places error with a clear message."
-  (let ((steps nil))
-    (dolist (b bindings)
-      (destructuring-bind (place expr) b
-        (cond
-         ((and (consp place) (eq (car place) 'symbol-function) (= (length place) 2))
-          (let ((sym (gensym "SYM"))
-                (old (gensym "OLD"))
-                (new (gensym "NEW")))
-            (push `(let* ((,sym ,(cadr place))
-                          (,old (symbol-function ,sym))
-                          (,new ,expr))
-                     (unwind-protect
-                         (progn
-                           (fset ,sym ,new)
-                           ,@(or steps (list `(progn ,@body))))
-                       (fset ,sym ,old)))
-                  steps)))
-         ((and (consp place) (eq (car place) 'symbol-value) (= (length place) 2))
-          (let ((sym (gensym "SYM"))
-                (old (gensym "OLD"))
-                (new (gensym "NEW")))
-            (push `(let* ((,sym ,(cadr place))
-                          (,old (symbol-value ,sym))
-                          (,new ,expr))
-                     (unwind-protect
-                         (progn
-                           (set ,sym ,new)
-                           ,@(or steps (list `(progn ,@body))))
-                       (set ,sym ,old)))
-                  steps)))
-         (t
-          (cl:error "ELISP:CL-LETF* unsupported place: ~S" place)))))
-    (if steps
-        (car steps)
-        `(progn ,@body))))
+  (labels
+      ((expand (bs)
+         (if (null bs)
+             `(progn ,@body)
+             (destructuring-bind (place expr) (car bs)
+               (cond
+                ;; cl-letf* allows plain variable bindings.
+                ((symbolp place)
+                 `(let ((,place ,expr))
+                    ,(expand (cdr bs))))
+                ;; Limited generalized variable support.
+                ((and (consp place) (eq (car place) 'symbol-function) (= (length place) 2))
+                 (let ((sym (gensym "SYM"))
+                       (old (gensym "OLD"))
+                       (new (gensym "NEW")))
+                   `(let* ((,sym ,(cadr place))
+                           (,old (symbol-function ,sym))
+                           (,new ,expr))
+                      (unwind-protect
+                          (progn
+                            (fset ,sym ,new)
+                            ,(expand (cdr bs)))
+                        (fset ,sym ,old)))))
+                ((and (consp place) (eq (car place) 'symbol-value) (= (length place) 2))
+                 (let ((sym (gensym "SYM"))
+                       (old (gensym "OLD"))
+                       (new (gensym "NEW")))
+                   `(let* ((,sym ,(cadr place))
+                           (,old (symbol-value ,sym))
+                           (,new ,expr))
+                      (unwind-protect
+                          (progn
+                            (set ,sym ,new)
+                            ,(expand (cdr bs)))
+                        (set ,sym ,old)))))
+                (t
+                 (cl:error "ELISP:CL-LETF* unsupported place: ~S" place)))))))
+    (expand bindings)))
 
 (cl:defmacro cl-defstruct (&rest args)
   "Minimal subset of cl-lib's `cl-defstruct'."

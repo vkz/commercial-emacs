@@ -585,7 +585,7 @@ Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Add an incremental upstream ERT load gate:
   - `mise run clemacs:test:load-ert` loads `lisp/emacs-lisp/ert.el` up to `clemacs/contract/ert.maxforms` (currently 182).
 - DONE (2026-01-03): Start with one upstream test file and grow from there (load gate first):
-  - `mise run clemacs:test:load-ert-tests` loads `test/lisp/emacs-lisp/ert-tests.el` up to `clemacs/contract/ert-tests.maxforms` (currently 42).
+  - `mise run clemacs:test:load-ert-tests` loads `test/lisp/emacs-lisp/ert-tests.el` up to `clemacs/contract/ert-tests.maxforms` (currently 60).
 - DONE (2026-01-03): Add a minimal upstream ERT bring-up gate (load + assert one test is registered):
   - `mise run clemacs:test:ert-upstream` (wired into `clemacs:test:contract -- --level check`).
 - DONE (2026-01-03): Add a delta report mode:
