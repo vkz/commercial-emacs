@@ -3,7 +3,7 @@
 (define-condition ert-failure (cl:error)
   ((form :initarg :form :reader ert-failure-form))
   (:report (lambda (c s)
-             (format s "ERT failure: ~S" (ert-failure-form c)))))
+             (cl:format s "ERT failure: ~S" (ert-failure-form c)))))
 
 (defvar *ert-tests* (cl:make-hash-table :test 'eq))
 
@@ -30,11 +30,11 @@
        (handler-case
            (progn
              (cl:funcall fn)
-             (format stream "ok  ~S~%" name))
+             (cl:format stream "ok  ~S~%" name))
          (cl:error (e)
            (incf failed)
-           (format stream "FAIL ~S: ~A~%" name e))))
+           (cl:format stream "FAIL ~S: ~A~%" name e))))
      *ert-tests*)
-    (format stream "ert: ~D total, ~D failed~%" total failed)
+    (cl:format stream "ert: ~D total, ~D failed~%" total failed)
     (finish-output stream)
     (if (zerop failed) 0 1)))

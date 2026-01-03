@@ -91,6 +91,24 @@ Returns NIL if SYMBOL has no function cell value."
         (character (write-char p out))
         (t (write-string (princ-to-string p) out))))))
 
+(cl:defun downcase (s)
+  "Bring-up subset of ELisp `downcase'."
+  (unless (stringp s)
+    (error "ELISP:DOWNCASE expects a string, got: ~S" s))
+  (string-downcase s))
+
+(cl:defun upcase (s)
+  "Bring-up subset of ELisp `upcase'."
+  (unless (stringp s)
+    (error "ELISP:UPCASE expects a string, got: ~S" s))
+  (string-upcase s))
+
+(cl:defun capitalize (s)
+  "Bring-up subset of ELisp `capitalize'."
+  (unless (stringp s)
+    (error "ELISP:CAPITALIZE expects a string, got: ~S" s))
+  (string-capitalize s))
+
 (cl:defvar emacs-version "31.0.50")
 
 (defvar *match-strings* nil)
@@ -391,6 +409,48 @@ an augmented SBCL lexical environment."
   "Minimal subset of cl-lib's `cl-remprop'."
   (and (remprop symbol indicator) t))
 
+(cl:defmacro cl-letf* (bindings &body body)
+  "Bring-up subset of cl-lib's `cl-letf*'.
+
+This is intentionally narrow: it supports the temporary rebinding patterns
+we hit in upstream ERT bring-up (e.g. rebinding `(symbol-function 'message)`).
+Unsupported places error with a clear message."
+  (let ((steps nil))
+    (dolist (b bindings)
+      (destructuring-bind (place expr) b
+        (cond
+         ((and (consp place) (eq (car place) 'symbol-function) (= (length place) 2))
+          (let ((sym (gensym "SYM"))
+                (old (gensym "OLD"))
+                (new (gensym "NEW")))
+            (push `(let* ((,sym ,(cadr place))
+                          (,old (symbol-function ,sym))
+                          (,new ,expr))
+                     (unwind-protect
+                         (progn
+                           (fset ,sym ,new)
+                           ,@(or steps (list `(progn ,@body))))
+                       (fset ,sym ,old)))
+                  steps)))
+         ((and (consp place) (eq (car place) 'symbol-value) (= (length place) 2))
+          (let ((sym (gensym "SYM"))
+                (old (gensym "OLD"))
+                (new (gensym "NEW")))
+            (push `(let* ((,sym ,(cadr place))
+                          (,old (symbol-value ,sym))
+                          (,new ,expr))
+                     (unwind-protect
+                         (progn
+                           (set ,sym ,new)
+                           ,@(or steps (list `(progn ,@body))))
+                       (set ,sym ,old)))
+                  steps)))
+         (t
+          (cl:error "ELISP:CL-LETF* unsupported place: ~S" place)))))
+    (if steps
+        (car steps)
+        `(progn ,@body))))
+
 (cl:defmacro cl-defstruct (&rest args)
   "Minimal subset of cl-lib's `cl-defstruct'."
   `(cl:defstruct ,@args))
@@ -399,6 +459,66 @@ an augmented SBCL lexical environment."
   "ELisp-ish PUT for symbol plists."
   (setf (get symbol prop) value)
   value)
+
+(cl:defun getenv (var)
+  "Bring-up subset of ELisp `getenv'."
+  (unless (stringp var)
+    (error "ELISP:GETENV expects a string, got: ~S" var))
+  (let ((v (uiop:getenv var)))
+    (and v (stringp v) v)))
+
+(cl:defun make-list (length init)
+  "ELisp-ish MAKE-LIST."
+  (unless (and (integerp length) (>= length 0))
+    (error "ELISP:MAKE-LIST expects nonnegative integer length, got: ~S" length))
+  (cl:make-list length :initial-element init))
+
+(defvar *charset-aliases* (cl:make-hash-table :test 'eq))
+
+(cl:defun define-charset-alias (alias charset)
+  "Bring-up stub for ELisp `define-charset-alias'."
+  (unless (and (symbolp alias) (symbolp charset))
+    (error "ELISP:DEFINE-CHARSET-ALIAS expects symbols, got: ~S ~S" alias charset))
+  (setf (gethash alias *charset-aliases*) charset)
+  alias)
+
+(cl:defun %resolve-charset (sym &key (max-hops 16))
+  (loop with cur = sym
+        for hop from 0 below max-hops do
+          (multiple-value-bind (next presentp)
+              (gethash cur *charset-aliases*)
+            (cond
+             ((not presentp) (return cur))
+             ((not (symbolp next)) (return cur))
+             (t (setf cur next))))
+        finally
+          (return sym)))
+
+(cl:defun put-charset-property (charset prop value)
+  "Bring-up stub for ELisp `put-charset-property'."
+  (unless (and (symbolp charset) (symbolp prop))
+    (error "ELISP:PUT-CHARSET-PROPERTY expects symbols, got: ~S ~S" charset prop))
+  (put (%resolve-charset charset) prop value))
+
+(cl:defun unify-charset (charset)
+  "Bring-up stub for the C primitive `unify-charset'."
+  (unless (symbolp charset)
+    (error "ELISP:UNIFY-CHARSET expects a symbol, got: ~S" charset))
+  charset)
+
+(cl:defun define-charset (name _docstring &rest plist)
+  "Bring-up stub for ELisp `define-charset'.
+
+We currently represent charsets as symbols with properties."
+  (declare (ignore _docstring))
+  (unless (symbolp name)
+    (error "ELISP:DEFINE-CHARSET expects symbol, got: ~S" name))
+  (put name 'charsetp t)
+  (when (cl:oddp (length plist))
+    (error "ELISP:DEFINE-CHARSET odd keyword args: ~S" plist))
+  (loop for (k v) on plist by #'cddr do
+    (put name k v))
+  name)
 
 (defstruct elisp-keymap
   (table (cl:make-hash-table :test 'cl:equal))
@@ -447,6 +567,9 @@ an augmented SBCL lexical environment."
      ,@body))
 
 (cl:defmacro save-window-excursion (&body body)
+  `(progn ,@body))
+
+(cl:defmacro save-excursion (&body body)
   `(progn ,@body))
 
 (cl:defun point ()
@@ -525,7 +648,7 @@ an augmented SBCL lexical environment."
   (and (integerp x) (not (minusp x)) t))
 
 (cl:defun message (format-string &rest args)
-  (let ((s (apply #'format nil format-string args)))
+  (let ((s (apply #'format format-string args)))
     (with-current-buffer (messages-buffer)
       (goto-char (point-max))
       (insert s "\n"))
@@ -799,6 +922,10 @@ Supports: %s, %S, %d, %c, and %%."
   "Bring-up subset of ELisp `format-message'."
   (%format-message fmt args))
 
+(cl:defun format (fmt &rest args)
+  "Bring-up subset of ELisp `format'."
+  (%format-message fmt args))
+
 (cl:defun error (fmt &rest args)
   "Signal an ELisp-style `error' with DATA = (MESSAGE).
 
@@ -904,7 +1031,7 @@ Supports the common pattern of a self-referential closure (used by ERT)."
     (string key)
     (vector (write-to-string key :escape t))
     (character (string key))
-    (integer (format nil "#<keycode ~D>" key))
+    (integer (cl:format nil "#<keycode ~D>" key))
     (t (write-to-string key :escape t))))
 
 (cl:defun define-key (keymap key definition)

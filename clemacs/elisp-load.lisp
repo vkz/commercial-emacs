@@ -7,12 +7,12 @@
    (cause :initarg :cause :reader elisp-load-error-cause)
    (inventory-entry :initarg :inventory-entry :reader elisp-load-error-inventory-entry))
   (:report (lambda (c s)
-             (format s "ELisp load error in ~A (form ~D):~%  ~S~%~A~@[~%Inventory: ~A~]"
-                     (elisp-load-error-path c)
-                     (elisp-load-error-form-index c)
-                     (elisp-load-error-form c)
-                     (elisp-load-error-cause c)
-                     (elisp-load-error-inventory-entry c)))))
+             (cl:format s "ELisp load error in ~A (form ~D):~%  ~S~%~A~@[~%Inventory: ~A~]"
+                        (elisp-load-error-path c)
+                        (elisp-load-error-form-index c)
+                        (elisp-load-error-form c)
+                        (elisp-load-error-cause c)
+                        (elisp-load-error-inventory-entry c)))))
 
 (cl:defun %read-noncomment-lines (path)
   (let ((out nil))
@@ -95,7 +95,7 @@ ported copy instead of the original source tree path."
       (multiple-value-bind (rel-path entry-max-forms) (%parse-manifest-entry line)
         (cond
          ((gethash rel-path skips)
-          (format t "[clemacs:load] skip ~A~%" rel-path))
+          (cl:format t "[clemacs:load] skip ~A~%" rel-path))
          (t
           (let* ((src-path (merge-pathnames rel-path project-root))
                  (ported-path (merge-pathnames rel-path ported-root))

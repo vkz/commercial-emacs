@@ -70,12 +70,12 @@
 
 (cl:defun inventory-entry-string (entry)
   (when entry
-    (format nil "~A ~A (~A) @ ~A:~A"
-            (elisp-inventory-entry-kind entry)
-            (elisp-inventory-entry-lisp-name entry)
-            (elisp-inventory-entry-c-name entry)
-            (elisp-inventory-entry-source-path entry)
-            (elisp-inventory-entry-source-line entry))))
+    (cl:format nil "~A ~A (~A) @ ~A:~A"
+               (elisp-inventory-entry-kind entry)
+               (elisp-inventory-entry-lisp-name entry)
+               (elisp-inventory-entry-c-name entry)
+               (elisp-inventory-entry-source-path entry)
+               (elisp-inventory-entry-source-line entry))))
 
 (cl:defun inventory-entry-for-condition (condition &key (start-dir *default-pathname-defaults*))
   (labels ((lookup-symbol (sym)
