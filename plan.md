@@ -349,7 +349,9 @@ Status (DONE, 2026-01-02)
 - DONE: Gate passes: `mise run clemacs:run` prints banner and exits cleanly.
 - DONE: One-shot timing (warm): `mise run clemacs:run` ~0.12s real on this machine.
 - DONE (2026-01-03): One-shot timing (cold; cleared `build/clemacs/xdg-cache`): `mise run clemacs:bench:cold` ~31.24s real on this machine.
-- TODO: Decide whether a saved SBCL core is worth it for iteration speed.
+- DONE (2026-01-03): Add an optional saved-core path:
+  - Build: `mise run clemacs:core:build`
+  - Runs/tests use the core automatically when `build/clemacs/clemacs.core` exists.
 
 ### Milestone B1-1: substrate library callable from SBCL
 

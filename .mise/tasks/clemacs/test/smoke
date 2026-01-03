@@ -21,20 +21,32 @@ export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
 mise run clemacs:deps:install -- --build-dir "${build_dir}"
 mise run clemacs:substrate:build -- --build-dir "${build_dir}"
 
-deps_dir="${project_root}/${build_dir}/deps"
-qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
 substrate_dylib="${project_root}/${build_dir}/substrate/libemxsubstrate.dylib"
+core_path="${project_root}/${build_dir}/clemacs.core"
 
 export CLEMACS_SUBSTRATE_DYLIB="${substrate_dylib}"
 
-cd "${deps_dir}"
-"${qlot_bin}" exec sbcl \
-  --noinform \
-  --no-sysinit \
-  --no-userinit \
-  --non-interactive \
-  --disable-debugger \
-  --eval '(require :asdf)' \
-  --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
-  --eval '(asdf:load-system :clemacs)' \
-  --eval '(uiop:quit (clemacs.test:run-smoke))'
+if [[ -f "${core_path}" ]]; then
+  mise x -- sbcl \
+    --core "${core_path}" \
+    --noinform \
+    --disable-debugger \
+    --no-sysinit \
+    --no-userinit \
+    --eval '(sb-ext:exit :code (clemacs.test:run-smoke))'
+else
+  deps_dir="${project_root}/${build_dir}/deps"
+  qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+
+  cd "${deps_dir}"
+  "${qlot_bin}" exec sbcl \
+    --noinform \
+    --no-sysinit \
+    --no-userinit \
+    --non-interactive \
+    --disable-debugger \
+    --eval '(require :asdf)' \
+    --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
+    --eval '(asdf:load-system :clemacs)' \
+    --eval '(uiop:quit (clemacs.test:run-smoke))'
+fi

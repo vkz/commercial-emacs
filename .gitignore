@@ -146,6 +146,8 @@ stamp_BLD
 *.so
 *.dylib
 core
+!.mise/tasks/**/core/
+!.mise/tasks/**/core/**
 core.*[0-9]
 gmon.out
 oo/
