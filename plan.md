@@ -581,7 +581,7 @@ Gate
 
 Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Load upstream `lisp/emacs-lisp/ert.el` and run at least one upstream test:
-  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 17 tests) via upstream `ert-run-test`.
+  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 19 tests) via upstream `ert-run-test`.
 - DONE (2026-01-03): Add an incremental upstream ERT load gate:
   - `mise run clemacs:test:load-ert` loads `lisp/emacs-lisp/ert.el` up to `clemacs/contract/ert.maxforms` (currently 182).
 - DONE (2026-01-03): Start with one upstream test file and grow from there (load gate first):
@@ -592,7 +592,7 @@ Status (TODO, 2026-01-03)
   - `mise run clemacs:report:ert-delta` compares the baseline `ert-tests.log` summary against the clemacs bring-up gate,
     and writes `build/clemacs/reports/ert-delta.md` (path configurable).
 - DONE (2026-01-03): Expand the upstream ERT gate to an explicit, growing list:
-  - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 17),
+  - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 19),
   - `clemacs/contract/ert-upstream.known-fail.tests` (temporary tolerations; XPASS is a gate failure).
 - DONE (2026-01-03): Make upstream ERT's `should-error` semantics runnable:
   - seed C-defined error hierarchy properties (at least `error`, `arith-error`, `domain-error`, `singularity-error`),
@@ -677,7 +677,7 @@ Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Add a clemacs ERT gate based on upstream tests:
   - `mise run clemacs:test:ert-upstream` loads upstream `ert.el` + `ert-tests.el` and runs a must-pass list from `clemacs/contract/ert-upstream.tests`.
 - DONE (2026-01-03): Expand the upstream ERT gate to a small, meaningful core set:
-  - `clemacs/contract/ert-upstream.tests` currently has 17 must-pass tests (0 XFAIL).
+  - `clemacs/contract/ert-upstream.tests` currently has 19 must-pass tests (0 XFAIL).
 - TODO: Continue expanding the upstream ERT gate:
   - keep growing `clemacs/contract/ert-upstream.tests` (pure/core tests first),
   - advance `clemacs/contract/ert-tests.maxforms` as those tests become runnable,

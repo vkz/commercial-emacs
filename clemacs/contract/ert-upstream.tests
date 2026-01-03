@@ -19,3 +19,5 @@ ert-test-skip-when
 ert-test-skip-unless
 ert-test-deftest-lexical-binding-t
 ert-test-special-operator-p
+ert-test-list-of-should-forms
+ert-test-list-of-should-forms-observers-should-not-stack
