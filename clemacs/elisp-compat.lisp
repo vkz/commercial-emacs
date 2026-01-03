@@ -360,6 +360,13 @@ formatting). We currently ignore them and delegate to CL:ASSERT on FORM."
 (cl:defun error-message-string (condition)
   (princ-to-string condition))
 
+(cl:defun backtrace-get-frames (_debugfun)
+  "Bring-up stub for `backtrace-get-frames'.
+
+ERT uses this to capture a backtrace; we currently record none."
+  (declare (ignore _debugfun))
+  (list nil))
+
 (cl:defun macroexp-file-name ()
   "Stub for ELisp `macroexp-file-name'."
   nil)
@@ -416,10 +423,62 @@ Binds VAR (when non-nil) to a minimal \"Elisp error data\" cons:
     `(handler-case
          ,bodyform
        (error (,e)
-         (let ((,err (cons 'error (list ,e))))
+         (let ((,err (if (typep ,e 'elisp-signal)
+                         (cons (elisp-signal-symbol ,e) (elisp-signal-data ,e))
+                         (cons 'error (list ,e)))))
            ,(if handlers
                 `(progn ,@(cdr (car handlers)))
                 `(error ,e)))))))
+
+(define-condition elisp-signal (error)
+  ((symbol :initarg :symbol :reader elisp-signal-symbol)
+   (data :initarg :data :reader elisp-signal-data)))
+
+(cl:defun signal (error-symbol data)
+  "Bring-up subset of ELisp `signal'.
+
+ERROR-SYMBOL is an error condition name (a symbol) and DATA is a list of
+arguments. We map this to a CL condition so `condition-case' can recover
+the original (SYMBOL . DATA) pair."
+  (unless (symbolp error-symbol)
+    (error "ELISP:SIGNAL expected symbol, got: ~S" error-symbol))
+  (unless (listp data)
+    (error "ELISP:SIGNAL expected list data, got: ~S" data))
+  (cl:error 'elisp-signal :symbol error-symbol :data data))
+
+(cl:defun %handler-bind-match-p (types err)
+  (let ((sym (car err)))
+    (cond
+     ((eq types t) t)
+     ((symbolp types)
+      (or (eq sym types)
+          ;; Treat `error' as a catch-all for ELisp signals.
+          (eq types 'cl:error)
+          (eq types 'error)))
+     ((consp types)
+      (some (lambda (t0) (%handler-bind-match-p t0 err)) types))
+     (t nil))))
+
+(cl:defmacro handler-bind (bindings &body body)
+  "Bring-up subset of ELisp `handler-bind' (cl-lib style).
+
+Unlike CL:HANDLER-BIND, handlers receive an ELisp-style error datum:
+  (ERROR-SYMBOL . DATA)."
+  (let ((handlers
+          (mapcar
+           (lambda (b)
+             (destructuring-bind (types handler) b
+               (let ((c (gensym "C"))
+                     (err (gensym "ERR")))
+                 `(elisp-signal
+                   (lambda (,c)
+                     (let ((,err (cons (elisp-signal-symbol ,c) (elisp-signal-data ,c))))
+                       (when (%handler-bind-match-p ',types ,err)
+                         (funcall ,handler ,err))))))))
+           bindings)))
+    `(cl:handler-bind
+         ,handlers
+       ,@body)))
 
 (define-condition quit (error) ())
 

@@ -23,24 +23,15 @@
                   ((null else) (list 'cl:if (rw test) (rw then) nil))
                   ((null (cdr else)) (list 'cl:if (rw test) (rw then) (rw (car else))))
                   (t (list 'cl:if (rw test) (rw then) (cons 'progn (mapcar #'rw else)))))))
-              ;; Upstream ELisp sometimes uses HANDLER-BIND with a list of
-              ;; condition symbols (e.g. (error quit)). Rewrite to a CL type
-              ;; specifier that SBCL accepts (OR ...).
+              ;; Prefer an ELisp-aware HANDLER-BIND shim so handlers receive
+              ;; ELisp-style error data (SYMBOL . DATA), rather than CL
+              ;; condition objects.
               ((and (consp x) (eq (car x) 'cl:handler-bind))
                (destructuring-bind (op bindings &rest body) x
                  (declare (ignore op))
-                 (flet ((rw-binding (b)
-                          (destructuring-bind (type handler) b
-                            (let ((type (cond
-                                         ((and (consp type)
-                                               (not (null type))
-                                               (not (eq (car type) 'or)))
-                                          (cons 'or type))
-                                         (t type))))
-                              (list type (rw handler))))))
-                   (cons 'cl:handler-bind
-                         (cons (mapcar #'rw-binding bindings)
-                               (mapcar #'rw body))))))
+                 (cons 'elisp::handler-bind
+                       (cons (mapcar #'rw bindings)
+                             (mapcar #'rw body)))))
               ;; General cons rewrite: preserve dotted lists.
               (t (cons (rw (car x)) (rw (cdr x)))))))
     (rw form)))

@@ -5,3 +5,4 @@
 ert-test-body-runs
 ert-test-nested-test-body-runs
 ert-test-pass
+ert-test-fail
