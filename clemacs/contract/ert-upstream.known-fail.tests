@@ -1,3 +1,5 @@
 # Upstream ERT tests that are currently known to fail under clemacs.
 #
 # Format: <test-name> # <reason> (YYYY-MM-DD)
+
+ert-test-should-with-macrolet # macroexpand-all lacks macrolet env (2026-01-03)

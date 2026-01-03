@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Run the SBCL-hosted emacs executable (clemacs)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE arg "[args]" var=#true hide=#true
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+bin_dir="${project_root}/${build_dir}/bin"
+emacs_bin="${bin_dir}/emacs"
+
+declare -a usage_args
+
+stale=true
+if [[ -x "${emacs_bin}" ]]; then
+  stale=false
+  if find "${project_root}/clemacs" \
+      -type f \
+      \( -name '*.lisp' -o -name '*.asd' -o -name 'qlfile' -o -name 'qlfile.lock' \) \
+      -newer "${emacs_bin}" \
+      -print -quit | rg -q .; then
+    stale=true
+  fi
+fi
+
+if [[ "${stale}" == "true" ]]; then
+  mise run clemacs:emacs:build -- --build-dir "${build_dir}"
+fi
+
+export CLEMACS_SUBSTRATE_DYLIB="${bin_dir}/libemxsubstrate.dylib"
+
+if [[ "${#usage_args[@]}" -gt 0 ]]; then
+  exec "${emacs_bin}" "${usage_args[@]}"
+fi
+exec "${emacs_bin}"

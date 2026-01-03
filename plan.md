@@ -581,7 +581,7 @@ Gate
 
 Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Load upstream `lisp/emacs-lisp/ert.el` and run at least one upstream test:
-  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 8 tests) via upstream `ert-run-test`.
+  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 9 tests) via upstream `ert-run-test`.
 - DONE (2026-01-03): Add an incremental upstream ERT load gate:
   - `mise run clemacs:test:load-ert` loads `lisp/emacs-lisp/ert.el` up to `clemacs/contract/ert.maxforms` (currently 182).
 - DONE (2026-01-03): Start with one upstream test file and grow from there (load gate first):
@@ -592,7 +592,7 @@ Status (TODO, 2026-01-03)
   - `mise run clemacs:report:ert-delta` compares the baseline `ert-tests.log` summary against the clemacs bring-up gate,
     and writes `build/clemacs/reports/ert-delta.md` (path configurable).
 - DONE (2026-01-03): Expand the upstream ERT gate to an explicit, growing list:
-  - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 8),
+  - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 9),
   - `clemacs/contract/ert-upstream.known-fail.tests` (temporary tolerations; XPASS is a gate failure).
 
 ### Milestone B1-10: swap the ELisp engine in a running Emacs
@@ -614,8 +614,13 @@ Status (TODO, 2026-01-03)
   - Choose: SBCL-hosted `emacs` binary (SBCL main + C substrate).
   - Not chosen: transitional C-hosted shim (even if timeboxed).
   - Decision commit: `cd122ed451f` (this affects all B1-10 work from here on).
-- TODO: Write down the first C subsystem to migrate (buffers/windowing/keymaps/minibuffer),
-  with an explicit API boundary and deletion plan for shims.
+- DONE (2026-01-03): Scaffold an SBCL-hosted `emacs` executable for clemacs:
+  - Build: `mise run clemacs:emacs:build` (writes `build/clemacs/bin/emacs`).
+  - Run: `mise run clemacs:emacs:run` (sets `CLEMACS_SUBSTRATE_DYLIB` automatically).
+- DONE (2026-01-03): Pick the first subsystem to migrate behind the substrate boundary:
+  - Target: buffers + markers + text properties (enough for core `lisp/` + ERT).
+  - Boundary: CL owns the value model + buffer representation; C provides only TTY + file + OS shims.
+  - Deletion plan: timebox any compatibility shims and delete them once the CL implementation is feature-complete.
 - DONE (2026-01-03): Define a clemacs startup manifest + loader entrypoint:
   - `clemacs/contract/startup.{smoke,check}.files` (monotonic list; currently seeded with `lisp/subr.el`).
   - `mise run clemacs:load:startup -- --level smoke|check`
@@ -632,12 +637,16 @@ Status (TODO, 2026-01-03)
   - add `lisp/keymap.el 1` (defines `keymap--check` without pulling in key parsing yet).
 - DONE (2026-01-03): Add a 1-form startup checkpoint for `widget.el`:
   - add `lisp/widget.el 1` (defines `define-widget-keywords` without pulling in wid-edit yet).
+- DONE (2026-01-03): Add a 1-form startup checkpoint for `env.el`:
+  - add `lisp/env.el 1` (defines `read-envvar-name-history` only).
+- DONE (2026-01-03): Add a 2-form startup checkpoint for `format.el`:
+  - add `lisp/format.el 2` (only `buffer-file-format` / `buffer-auto-save-file-format` props).
 - TODO: Grow the startup manifest toward the pdump bootstrap load list (`admin/pdump-common.el`),
   with explicit skip reasons (GUI/nativecomp/modules).
 - DONE (2026-01-03): Add a clemacs ERT gate based on upstream tests:
   - `mise run clemacs:test:ert-upstream` loads upstream `ert.el` + `ert-tests.el` and runs a must-pass list from `clemacs/contract/ert-upstream.tests`.
 - DONE (2026-01-03): Expand the upstream ERT gate to a small, meaningful core set:
-  - `clemacs/contract/ert-upstream.tests` currently has 8 must-pass tests.
+  - `clemacs/contract/ert-upstream.tests` currently has 9 must-pass tests (1 XFAIL).
 - TODO: Continue expanding the upstream ERT gate:
   - keep growing `clemacs/contract/ert-upstream.tests` (pure/core tests first),
   - advance `clemacs/contract/ert-tests.maxforms` as those tests become runnable,

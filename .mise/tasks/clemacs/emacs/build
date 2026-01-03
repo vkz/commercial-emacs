@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Build an SBCL-hosted emacs executable (clemacs)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}"
+
+export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+export XDG_CONFIG_HOME="${project_root}/${build_dir}/xdg-config"
+export XDG_DATA_HOME="${project_root}/${build_dir}/xdg-data"
+
+home_dir="${project_root}/${build_dir}/home"
+mkdir -p "${home_dir}"
+export HOME="${home_dir}"
+
+mise run clemacs:deps:install -- --build-dir "${build_dir}"
+mise run clemacs:substrate:build -- --build-dir "${build_dir}"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+
+bin_dir="${project_root}/${build_dir}/bin"
+mkdir -p "${bin_dir}"
+
+emacs_bin="${bin_dir}/emacs"
+substrate_src="${project_root}/${build_dir}/substrate/libemxsubstrate.dylib"
+substrate_dst="${bin_dir}/libemxsubstrate.dylib"
+
+cd "${deps_dir}"
+"${qlot_bin}" exec sbcl \
+  --noinform \
+  --no-sysinit \
+  --no-userinit \
+  --non-interactive \
+  --disable-debugger \
+  --eval '(require :asdf)' \
+  --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
+  --eval '(asdf:load-system :clemacs)' \
+  --eval "(sb-ext:save-lisp-and-die \"${emacs_bin}\" :executable t :save-runtime-options t :compression t :toplevel (lambda () (sb-ext:exit :code (clemacs:emacs-main))))"
+
+cp -f "${substrate_src}" "${substrate_dst}"
+
+echo "[clemacs:emacs:build] wrote ${emacs_bin}"

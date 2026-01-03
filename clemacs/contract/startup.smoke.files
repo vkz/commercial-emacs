@@ -20,3 +20,9 @@ lisp/keymap.el 1
 
 # 2026-01-03: pdump candidate; start with a 1-form checkpoint (defines define-widget-keywords).
 lisp/widget.el 1
+
+# 2026-01-03: pdump candidate; start with a 1-form checkpoint (defines read-envvar-name-history).
+lisp/env.el 1
+
+# 2026-01-03: pdump candidate; start with a 2-form checkpoint (buffer-file-format props only).
+lisp/format.el 2

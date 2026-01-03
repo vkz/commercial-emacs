@@ -10,3 +10,4 @@ ert-test-error
 ert-test-should
 ert-test-should-not
 ert-test-should-value
+ert-test-should-with-macrolet

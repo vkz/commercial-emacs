@@ -4,7 +4,31 @@
 
 (defun substrate-dylib-path ()
   (or (uiop:getenv "CLEMACS_SUBSTRATE_DYLIB")
-      (error "CLEMACS_SUBSTRATE_DYLIB is not set")))
+      (let* ((posix-argv
+               (ignore-errors
+                (and (boundp 'sb-ext:*posix-argv*) sb-ext:*posix-argv*)))
+             (argv0 (or (ignore-errors (uiop:argv0))
+                        (cond
+                         ((and (vectorp posix-argv) (> (length posix-argv) 0))
+                          (aref posix-argv 0))
+                         ((consp posix-argv) (car posix-argv))
+                         (t nil))))
+             (exe (and argv0 (ignore-errors (uiop:truename* argv0))))
+             (dir (and exe (uiop:pathname-directory-pathname exe)))
+             (cwd (uiop:getcwd))
+             (candidates
+               (remove-if #'null
+                          (list
+                           (and dir (merge-pathnames "libemxsubstrate.dylib" dir))
+                           (merge-pathnames "libemxsubstrate.dylib" cwd)
+                           (merge-pathnames "build/clemacs/bin/libemxsubstrate.dylib" cwd)
+                           (merge-pathnames "build/clemacs/substrate/libemxsubstrate.dylib" cwd)))))
+        (dolist (p candidates)
+          (when (probe-file p)
+            (return-from substrate-dylib-path (namestring p))))
+        (error "CLEMACS_SUBSTRATE_DYLIB is not set and no default dylib found (argv0 ~S; tried: ~S)"
+               argv0
+               (mapcar #'namestring candidates)))))
 
 (defun ensure-substrate-loaded ()
   (unless *substrate-loaded*

@@ -29,6 +29,7 @@
    #:buffer-save
    #:run-upstream-ert-tests
    #:tty-main
+   #:emacs-main
    #:substrate-platform
    #:substrate-parse-int
    #:substrate-version))
