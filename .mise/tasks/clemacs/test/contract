@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Run clemacs contract gate (successor to Emacs test:smoke for clemacs)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--level <level>" help="Contract level: smoke|check" default="smoke"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+level="${usage_level}"
+build_dir="${usage_build_dir}"
+
+contract_dir="${project_root}/clemacs/contract"
+case "${level}" in
+  smoke) manifest="${contract_dir}/smoke.tasks" ;;
+  check) manifest="${contract_dir}/check.tasks" ;;
+  *)
+    echo "[clemacs:test:contract] unknown level: ${level}" >&2
+    exit 2
+    ;;
+esac
+
+if [[ ! -f "${manifest}" ]]; then
+  echo "[clemacs:test:contract] missing manifest: ${manifest}" >&2
+  exit 2
+fi
+
+while IFS= read -r task; do
+  [[ -z "${task}" ]] && continue
+  [[ "${task}" =~ ^# ]] && continue
+  mise run "${task}" -- --build-dir "${build_dir}"
+done < "${manifest}"

@@ -448,6 +448,17 @@ Gate
 - Start running a curated subset of Emacs lisp shipped in this repo (ported or
   mechanically rewritten) and pass an expanding clemacs smoke suite.
 
+Status (DONE, 2026-01-03)
+- DONE (2026-01-03): Introduce a CL buffer object with stable operations:
+  insert/delete, point motion, and extraction to/from UTF-8 files.
+- DONE (2026-01-03): Switch the TTY loop to use the buffer object (instead of raw strings).
+- DONE (2026-01-03): Add buffer-focused tests to `clemacs:test:smoke`.
+- DONE (2026-01-03): Introduce a minimal keymap/command dispatch layer:
+  - represent key sequences (including prefix keys),
+  - map to command functions,
+  - keep editor logic in CL.
+- DONE (2026-01-03): Add a minimal minibuffer-ish prompt surface (save-as prompt when buffer has no path).
+
 ### Milestone B1-6: converge on the existing test contract
 
 Deliverables
@@ -458,3 +469,16 @@ Deliverables
 Gate
 - `mise run test:smoke` (or an agreed successor contract) passes under clemacs
   with an explicit, justified skip list.
+
+Status (DONE, 2026-01-03)
+- DONE (2026-01-03): Write and maintain a clemacs compatibility report:
+  - what Elisp forms are supported,
+  - what semantics are intentionally different,
+  - mechanical migration guidance.
+- DONE (2026-01-03): Define a clemacs-specific contract gate (successor to `mise run test:smoke`)
+  with explicit data for must-pass / allowed-skip / known-fail.
+- DONE (2026-01-03): Add `mise` entrypoints to run that gate at levels `smoke` and `check`.
+- DONE (2026-01-03): Prototype an ERT runner strategy (incremental):
+  - implement a tiny ERT-like harness in the `ELISP` package,
+  - run a handful of ERT-style tests from `clemacs/contract/ert-smoke.el` via `mise run clemacs:test:ert`,
+  - include it in the `check` contract level (`mise run clemacs:test:contract -- --level check`).

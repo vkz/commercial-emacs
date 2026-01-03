@@ -101,6 +101,11 @@ alongside the baseline C-hosted Emacs build.
   - `mise run clemacs:test:tty`
 - One-command gate:
   - `mise run clemacs:verify`
+- clemacs contract gate (successor to Emacs contract for clemacs):
+  - `mise run clemacs:test:contract -- --level smoke`
+  - `mise run clemacs:test:contract -- --level check` (includes `clemacs:test:ert`)
+  - `mise run clemacs:test:ert` (ERT-style smoke, ELISP package)
+  - Compatibility report: `plans/clemacs-compat.md`
 - Timing (iteration cost signal):
   - `mise run clemacs:bench:cold`
 

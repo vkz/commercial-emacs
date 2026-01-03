@@ -14,5 +14,4 @@ build_dir="${usage_build_dir}"
 
 mise run clemacs:build -- --build-dir "${build_dir}"
 mise run clemacs:run -- --build-dir "${build_dir}"
-mise run clemacs:test:smoke -- --build-dir "${build_dir}"
-mise run clemacs:test:tty -- --build-dir "${build_dir}"
+mise run clemacs:test:contract -- --level check --build-dir "${build_dir}"

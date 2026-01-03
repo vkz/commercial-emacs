@@ -3,6 +3,14 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (require "SB-CLTL2"))
 
+(defun equal (a b)
+  (cond
+   ((and (vectorp a) (vectorp b))
+    (and (= (length a) (length b))
+         (loop for i from 0 below (length a)
+               always (equal (aref a i) (aref b i)))))
+   (t (cl:equal a b))))
+
 (defun %lexical-variable-p (symbol env)
   (multiple-value-bind (kind)
       (sb-cltl2:variable-information symbol env)

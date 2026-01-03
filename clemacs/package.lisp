@@ -13,6 +13,20 @@
    #:handle-table
    #:make-handle-table
    #:main
+   #:make-buffer
+   #:buffer
+   #:buffer-path
+   #:buffer-text
+   #:buffer-point
+   #:buffer-length
+   #:buffer-insert-char
+   #:buffer-insert-string
+   #:buffer-delete-backward
+   #:buffer-forward-char
+   #:buffer-backward-char
+   #:buffer-move-vertical
+   #:buffer-load-file
+   #:buffer-save
    #:tty-main
    #:substrate-platform
    #:substrate-parse-int
@@ -24,8 +38,13 @@
 
 (defpackage #:elisp
   (:use #:cl)
-  (:shadow #:setq)
+  (:shadow #:setq #:equal)
   (:export
+   #:equal
    #:load-elisp-file
+   #:ert-deftest
+   #:ert-run-tests-batch
+   #:ert-reset
+   #:should
    #:plist-get
    #:plist-put))

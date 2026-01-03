@@ -64,6 +64,33 @@
       (fiveam:is (eql h3 h1))
       (fiveam:is (eql (clemacs:handle-get table h3) 'c)))))
 
+(fiveam:test buffer-edit-basics
+  (let ((b (clemacs:make-buffer :content "")))
+    (fiveam:is (= (clemacs:buffer-length b) 0))
+    (clemacs:buffer-insert-string b "abc")
+    (fiveam:is (string= (clemacs:buffer-text b) "abc"))
+    (fiveam:is (= (clemacs:buffer-point b) 3))
+    (clemacs:buffer-backward-char b)
+    (clemacs:buffer-insert-char b #\X)
+    (fiveam:is (string= (clemacs:buffer-text b) "abXc"))
+    (fiveam:is (= (clemacs:buffer-point b) 3))
+    (clemacs:buffer-delete-backward b)
+    (fiveam:is (string= (clemacs:buffer-text b) "abc"))
+    (fiveam:is (= (clemacs:buffer-point b) 2))
+    (values)))
+
+(fiveam:test buffer-vertical-motion
+  (let* ((b (clemacs:make-buffer :content (format nil "abc~%line2")))
+         (initial-point (clemacs:buffer-point b)))
+    (fiveam:is (= initial-point 9))
+    (multiple-value-bind (b2 goal)
+        (clemacs:buffer-move-vertical b -1 :goal-column nil)
+      (declare (ignore b2))
+      (fiveam:is (= goal 5)))
+    (multiple-value-bind (line col) (clemacs::buffer-line-column b)
+      (fiveam:is (= line 0))
+      (fiveam:is (= col 3)))))
+
 (fiveam:test elisp-compat
   (let ((exprs '(("(progn (setq x 1) x)" . "1")
                  ("(let ((p nil)) (setq p (plist-put p 'a 1)) (plist-get p 'a))" . "1")
