@@ -3,3 +3,5 @@
 # Keep this list monotonic during bring-up; move temporary failures to
 # `ert-upstream.known-fail.tests` with a short reason + date.
 ert-test-body-runs
+ert-test-nested-test-body-runs
+ert-test-pass
