@@ -86,6 +86,15 @@ Returns NIL if SYMBOL has no function cell value."
         (character (write-char p out))
         (t (write-string (princ-to-string p) out))))))
 
+(cl:defun copy-sequence (sequence)
+  "ELisp-ish COPY-SEQUENCE."
+  (typecase sequence
+    (null nil)
+    (cons (copy-list sequence))
+    (string (copy-seq sequence))
+    (vector (copy-seq sequence))
+    (t (error "ELISP:COPY-SEQUENCE unsupported type: ~S" (type-of sequence)))))
+
 (cl:defun make-hash-table (&rest args &key (test 'eql) &allow-other-keys)
   "ELisp-ish MAKE-HASH-TABLE.
 
@@ -221,6 +230,13 @@ Currently does not load code; it only records FEATURE as provided."
 (defvar *global-map* nil)
 (defparameter minibuffer-local-map (make-elisp-keymap))
 (defparameter find-function-space-re "")
+(defparameter buffer-file-name nil)
+(defparameter noninteractive t)
+(defparameter current-load-list nil)
+
+(cl:defun macroexp-file-name ()
+  "Stub for ELisp `macroexp-file-name'."
+  nil)
 
 (cl:defun make-keymap ()
   "Extremely small stub for ELisp `make-keymap'."
@@ -452,3 +468,30 @@ buffer-local values yet)."
   (let ((p plist))
     (setf (getf p prop) value)
     p))
+
+(cl:defun setcdr (cell newcdr)
+  "ELisp-ish SETCDR."
+  (unless (consp cell)
+    (error "ELISP:SETCDR expected cons, got: ~S" cell))
+  (setf (cdr cell) newcdr)
+  newcdr)
+
+(cl:defun car-safe (x)
+  "ELisp-ish CAR-SAFE."
+  (if (consp x) (car x) nil))
+
+(cl:defun cdr-safe (x)
+  "ELisp-ish CDR-SAFE."
+  (if (consp x) (cdr x) nil))
+
+(cl:defun assq (key alist)
+  "ELisp-ish ASSQ."
+  (dolist (cell alist nil)
+    (when (and (consp cell) (eq (car cell) key))
+      (return cell))))
+
+(cl:defun rassq (value alist)
+  "ELisp-ish RASSQ."
+  (dolist (cell alist nil)
+    (when (and (consp cell) (eq (cdr cell) value))
+      (return cell))))

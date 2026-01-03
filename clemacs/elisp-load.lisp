@@ -14,9 +14,9 @@
                      (elisp-load-error-cause c)
                      (elisp-load-error-inventory-entry c)))))
 
-(cl:defun %read-manifest-lines (manifest)
+(cl:defun %read-noncomment-lines (path)
   (let ((out nil))
-    (with-open-file (in manifest :external-format :utf-8)
+    (with-open-file (in path :external-format :utf-8)
       (loop for line = (read-line in nil nil)
             while line do
               (let ((line (string-trim '(#\Space #\Tab #\Return #\Newline) line)))
@@ -25,11 +25,47 @@
                   (push line out)))))
     (nreverse out)))
 
+(cl:defun %split-whitespace (s)
+  (let ((tokens nil)
+        (start nil))
+    (labels ((emit (end)
+               (when start
+                 (let ((tok (subseq s start end)))
+                   (push tok tokens))
+                 (setf start nil))))
+      (loop for i from 0 below (length s) do
+        (let ((ch (char s i)))
+          (if (find ch " \t" :test #'char=)
+              (emit i)
+              (unless start
+                (setf start i)))))
+      (emit (length s)))
+    (nreverse tokens)))
+
+(cl:defun %parse-manifest-entry (line)
+  "Parse LINE as: <path> [<max-forms>]."
+  (let* ((parts (%split-whitespace line))
+         (path (first parts))
+         (max-forms (second parts)))
+    (unless path
+      (error "Empty manifest entry"))
+    (when (and (third parts))
+      (error "Manifest entry has too many fields: ~S" line))
+    (cl:values path
+               (cond
+                ((null max-forms) nil)
+                ((string= max-forms "-") nil)
+                (t
+                 (let ((n (parse-integer max-forms :junk-allowed nil)))
+                   (and (plusp n) n)))))))
+
 (cl:defun %read-skip-lines (skip-file)
   (let ((out (make-hash-table :test 'cl:equal)))
     (when (and skip-file (probe-file skip-file))
-      (dolist (line (%read-manifest-lines skip-file))
-        (setf (gethash line out) t)))
+      (dolist (line (%read-noncomment-lines skip-file))
+        (multiple-value-bind (path _max) (%parse-manifest-entry line)
+          (declare (ignore _max))
+          (setf (gethash path out) t))))
     out))
 
 (cl:defun load-elisp-manifest (&key (project-root (uiop:getcwd))
@@ -53,18 +89,20 @@ ported copy instead of the original source tree path."
          (ported-root (merge-pathnames ported-root project-root))
          (skips (%read-skip-lines skip-file))
          (loaded 0))
-    (dolist (line (%read-manifest-lines manifest))
+    (dolist (line (%read-noncomment-lines manifest))
       (when (and limit (>= loaded limit))
         (return))
-      (cond
-       ((gethash line skips)
-        (format t "[clemacs:load] skip ~A~%" line))
-       (t
-        (let* ((src-path (merge-pathnames line project-root))
-               (ported-path (merge-pathnames line ported-root))
-               (path (if (probe-file ported-path) ported-path src-path)))
-          (load-elisp-file path :max-forms max-forms)
-          (incf loaded)))))
+      (multiple-value-bind (rel-path entry-max-forms) (%parse-manifest-entry line)
+        (cond
+         ((gethash rel-path skips)
+          (format t "[clemacs:load] skip ~A~%" rel-path))
+         (t
+          (let* ((src-path (merge-pathnames rel-path project-root))
+                 (ported-path (merge-pathnames rel-path ported-root))
+                 (path (if (probe-file ported-path) ported-path src-path))
+                 (eff-max-forms (or entry-max-forms max-forms)))
+            (load-elisp-file path :max-forms eff-max-forms)
+            (incf loaded))))))
     0))
 
 (cl:defun load-bootstrap-set (&key (project-root (uiop:getcwd))

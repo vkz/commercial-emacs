@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Load upstream lisp/emacs-lisp/ert-tests.el to a fixed max-forms checkpoint"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--bootstrap-max-forms <n>" help="Stop after N forms in subr.el (0 = use bootstrap.maxforms, empty = no limit)" default="0"
+#USAGE flag "--ert-max-forms <n>" help="Stop after N forms in ert.el (0 = use ert.maxforms, empty = no limit)" default="0"
+#USAGE flag "--tests-max-forms <n>" help="Stop after N forms in ert-tests.el (0 = use ert-tests.maxforms, empty = no limit)" default="0"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}"
+
+export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+
+mise run clemacs:deps:install -- --build-dir "${build_dir}"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+
+bootstrap_max_forms="${usage_bootstrap_max_forms}"
+ert_max_forms="${usage_ert_max_forms}"
+tests_max_forms="${usage_tests_max_forms}"
+
+bootstrap_eval="nil"
+if [[ "${bootstrap_max_forms}" == "0" ]]; then
+  f="${project_root}/clemacs/contract/bootstrap.maxforms"
+  [[ -f "${f}" ]] && bootstrap_eval="$(tr -d ' \t\r\n' < "${f}")"
+elif [[ -n "${bootstrap_max_forms}" ]]; then
+  bootstrap_eval="${bootstrap_max_forms}"
+fi
+
+ert_eval="nil"
+if [[ "${ert_max_forms}" == "0" ]]; then
+  f="${project_root}/clemacs/contract/ert.maxforms"
+  [[ -f "${f}" ]] && ert_eval="$(tr -d ' \t\r\n' < "${f}")"
+elif [[ -n "${ert_max_forms}" ]]; then
+  ert_eval="${ert_max_forms}"
+fi
+
+tests_eval="nil"
+if [[ "${tests_max_forms}" == "0" ]]; then
+  f="${project_root}/clemacs/contract/ert-tests.maxforms"
+  [[ -f "${f}" ]] && tests_eval="$(tr -d ' \t\r\n' < "${f}")"
+elif [[ -n "${tests_max_forms}" ]]; then
+  tests_eval="${tests_max_forms}"
+fi
+
+cd "${deps_dir}"
+"${qlot_bin}" exec sbcl \
+  --noinform \
+  --no-sysinit \
+  --no-userinit \
+  --non-interactive \
+  --disable-debugger \
+  --eval '(require :asdf)' \
+  --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
+  --eval '(asdf:load-system :clemacs)' \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/subr.el\" :max-forms ${bootstrap_eval})" \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert.el\" :max-forms ${ert_eval})" \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-tests.el\" :max-forms ${tests_eval})" \
+  --eval '(uiop:quit 0)'

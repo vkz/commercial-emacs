@@ -527,12 +527,16 @@ Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Add a new clemacs contract level `elisp-core` (fast-ish) that runs constantly during this phase.
 - DONE (2026-01-03): Add a monotonic loader checkpoint gate:
   - `mise run clemacs:test:load-bootstrap` loads `lisp/subr.el` up to `clemacs/contract/bootstrap.maxforms`.
-- DONE (2026-01-03): Advance `clemacs/contract/bootstrap.maxforms` to 300 (subr.el form checkpoint).
+- DONE (2026-01-03): Advance `clemacs/contract/bootstrap.maxforms` to 340 (subr.el form checkpoint).
 
 Guardrails
 - Keep ELisp native compilation disabled.
 - Do not reintroduce GUI backends, dynamic modules, or X11/NS backends.
 - Any temporary B2-like bridge must be explicitly timeboxed in the plan and removed.
+- Decision checkpoint (must ask the user):
+  - If/when we hit a point where clemacs must diverge from upstream ELisp
+    syntax or semantics (beyond mechanical rewrites), stop and ask for an
+    explicit decision with concrete examples and tradeoffs.
 
 ### Milestone B1-8: load the shipped `lisp/` tree under clemacs
 
@@ -576,7 +580,8 @@ Status (TODO, 2026-01-03)
 - TODO: Replace the ERT prototype with a compatibility layer that can load and run upstream `lisp/emacs-lisp/ert.el`.
 - DONE (2026-01-03): Add an incremental upstream ERT load gate:
   - `mise run clemacs:test:load-ert` loads `lisp/emacs-lisp/ert.el` up to `clemacs/contract/ert.maxforms` (currently 40).
-- TODO: Start with one upstream test file (e.g. `lisp/emacs-lisp/ert-tests.el`) and grow from there.
+- DONE (2026-01-03): Start with one upstream test file and grow from there (load gate first):
+  - `mise run clemacs:test:load-ert-tests` loads `test/lisp/emacs-lisp/ert-tests.el` up to `clemacs/contract/ert-tests.maxforms` (currently 20).
 - TODO: Add a delta report mode:
   - compare clemacs results against `emacs -Q --batch` when available,
   - record divergences in `plans/clemacs-compat.md`.
@@ -605,5 +610,5 @@ Status (TODO, 2026-01-03)
   - start from `lisp/loadup.el` (preferred) or a smaller curated list that grows monotonically.
   - define an explicit `allowed-skip` list with reasons/dates (GUI/nativecomp/modules).
 - TODO: Add a clemacs ERT gate based on upstream tests:
-  - first file target: `lisp/emacs-lisp/ert-tests.el` under `mise run clemacs:test:ert-upstream`.
+  - first file target: `test/lisp/emacs-lisp/ert-tests.el` under `mise run clemacs:test:ert-upstream`.
   - contract tracking: must-pass / allowed-skip / known-fail as data under `clemacs/contract/`.

@@ -3,3 +3,5 @@ clemacs:test:tty
 clemacs:test:ert
 clemacs:inventory:used
 clemacs:test:load-bootstrap
+clemacs:test:load-ert
+clemacs:test:load-ert-tests
