@@ -164,6 +164,11 @@ alongside the baseline C-hosted Emacs build.
 - `mise run clean` / `mise run clean -- --distclean`
 - `mise run clobber` (dry-run) / `mise run clobber -- --yes`
 
+### mise trust warnings
+
+If `mise` prints "Config files ... are not trusted", run `mise trust` once in
+this repo to suppress the warnings (this is a per-user setting).
+
 ### Manuals (opt-in)
 
 Manual builds are intentionally opt-in and kept out of the core build/test
