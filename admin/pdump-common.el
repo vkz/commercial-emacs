@@ -45,11 +45,16 @@
       (parent-dir (file-name-directory (car load-path))))
   ;; Without benefit of startup.el's command line processing,
   ;; we brutally hardcode load-path for the pre-dump.
-  (setq load-path (nconc (mapcar (function
-                                  (lambda (subdir)
-                                    (expand-file-name subdir parent-dir)))
-                                 subdirs)
-                         load-path)))
+  (let ((prefix nil)
+        (tail nil))
+    (while subdirs
+      (let ((entry (list (expand-file-name (car subdirs) parent-dir))))
+        (if prefix
+            (setcdr tail entry)
+          (setq prefix entry))
+        (setq tail entry))
+      (setq subdirs (cdr subdirs)))
+    (setq load-path (nconc prefix load-path))))
 
 ;; For the post-dump, the load-path is hacked together by
 ;; `update-subdirs`, a `make` target dating back to 1997.
@@ -74,8 +79,25 @@
 (load "subr")
 (load "keymap")
 
+(defun pdump--after-load-gc (_file)
+  (garbage-collect))
+
+(defun pdump--warn-advised (f)
+  (when (advice--p (symbol-function f))
+    ;; Don't make it an error because it's not serious enough and it can be
+    ;; annoying during development.  Also there are still circumstances where
+    ;; we use advice on preloaded functions.
+    (message "Warning: Advice installed on preloaded function %S" f)))
+
+(defun pdump--path-length< (a b)
+  (< (length a) (length b)))
+
+(defun pdump--save-subr-arity (f)
+  (when (subr-primitive-p (symbol-function f))
+    (puthash f (func-arity f) comp-subr-arities-h)))
+
 ;; subr.el defines after-load-functions and add-hook
-(add-hook 'after-load-functions (lambda (_) (garbage-collect)))
+(add-hook 'after-load-functions #'pdump--after-load-gc)
 
 (load "version")
 
@@ -114,13 +136,24 @@
 (load "rx")
 
 ;; Two poorly named files defining autoloaded functions.
-(if pdumper--pure-pool
-    (load "loaddefs")
-  (load "ldefs-boot"))
+;;
+;; This fork prefers staying buildable/bootstrappable without requiring
+;; `make -C lisp autoloads` to succeed in a fresh checkout, so we always load
+;; the checked-in snapshot `ldefs-boot.el`.
+;;
+;; If `loaddefs.el` exists (generated), we can optionally load it later, but
+;; it must not be required for the pdump build to succeed.
+(load "ldefs-boot")
+(when pdumper--pure-pool
+  (load "loaddefs" t))
 
 (load "button")                  ;After loaddefs, because of define-minor-mode!
+(load "emacs-lisp/gv")           ;Provides `setf` early for bootstrap loads.
+(load "emacs-lisp/cl-lib")       ;cl-seq (and cl-generic) need runtime cl-lib.
+(load "emacs-lisp/cl-macs")      ;Provides `cl-function` needed by cl-generic.
 (load "emacs-lisp/cl-preloaded")
 (load "emacs-lisp/oclosure")          ;Used by cl-generic
+(load "emacs-lisp/cl-seq")            ;Provides `cl-member` used by cl-generic.
 (load "obarray")        ;abbrev.el is implemented in terms of obarrays.
 (load "abbrev")         ;lisp-mode.el and simple.el use define-abbrev-table.
 
@@ -153,6 +186,7 @@
 (load "jit-lock")
 
 (load "mouse")
+(load "fringe")                   ; Provides `define-fringe-bitmap' stub in TTY builds.
 (if (boundp 'x-toolkit-scroll-bars)
     (load "scroll-bar"))
 (load "select")
@@ -179,7 +213,6 @@
 
 (if (fboundp 'x-create-frame)
     (progn
-      (load "fringe")
       ;; Needed by `imagemagick-register-types'
       (load "image")
       (load "international/fontset")
@@ -293,13 +326,7 @@
 ;; - advices in Emacs's core are generally considered bad style;
 ;; - `Snarf-documentation' looses docstrings of primitives advised
 ;;   during preload (bug#66032#20).
-(mapatoms
- (lambda (f)
-   (and (advice--p (symbol-function f))
-        ;; Don't make it an error because it's not serious enough and
-        ;; it can be annoying during development.  Also there are still
-        ;; circumstances where we use advice on preloaded functions.
-        (message "Warning: Advice installed on preloaded function %S" f))))
+(mapatoms #'pdump--warn-advised)
 
 ;; Make sure default-directory is unibyte when dumping.  This is
 ;; because we cannot decode and encode it correctly (since the locale
@@ -315,12 +342,17 @@
   (setq emacs-repository-version (ignore-errors (emacs-repository-get-version))
         emacs-repository-branch (ignore-errors (emacs-repository-get-branch))
         emacs-repository-get-tag (ignore-errors (emacs-repository-get-tag)))
+  ;; Avoid lexical closures here during pdump bootstrap; they can trigger
+  ;; costly closure conversion and deep generic dispatch when the interpreter
+  ;; is still in a fragile state.
   (let* ((base (concat "emacs-" emacs-version "."))
-	 (versions (mapcar (lambda (name)
-                             (string-to-number
-                              (substring name (length base)
-                                         (when (eq system-type 'windows-nt) -4))))
-			   (file-name-all-completions base default-directory))))
+         (completions (file-name-all-completions base default-directory))
+         (versions nil))
+    (dolist (name completions)
+      (push (string-to-number
+             (substring name (length base)
+                        (when (eq system-type 'windows-nt) -4)))
+            versions))
     ;; Unless --dumping-overwrite, multiple binaries cumulate, each
     ;; distinguished by a "build number" suffix.
     (defconst emacs-build-number
@@ -347,25 +379,28 @@
 (setq custom-current-group-alist nil)
 
 (setq preloaded-file-list
-      (delq
-       nil
-       (mapcar
-        (lambda (file)
-          (catch 'relative-name
-            (dolist (path (sort (copy-sequence load-path)
-                                (lambda (a b) (< (length a) (length b)))))
-              (let ((rx (format "^%s\\(\\S-+\\)"
-                                (regexp-quote
-                                 (file-name-as-directory path)))))
-                (save-match-data
-                  (when (string-match rx file)
-                    (throw 'relative-name (file-name-sans-extension
-                                           (match-string 1 file)))))))))
-        (mapcar #'car load-history))))
+      (let* ((sorted-load-path (sort (copy-sequence load-path)
+                                     #'pdump--path-length<))
+             (result nil))
+        (dolist (file (mapcar #'car load-history))
+          (let ((relative-name nil))
+            (catch 'found
+              (dolist (path sorted-load-path)
+                (let ((rx (format "^%s\\(\\S-+\\)"
+                                  (regexp-quote
+                                   (file-name-as-directory path)))))
+                  (save-match-data
+                    (when (string-match rx file)
+                      (setq relative-name
+                            (file-name-sans-extension (match-string 1 file)))
+                      (throw 'found t))))))
+            (when relative-name
+              (push relative-name result))))
+        (nreverse result)))
 
 (set-buffer-modified-p nil)
 
-(remove-hook 'after-load-functions (lambda (_) (garbage-collect)))
+(remove-hook 'after-load-functions #'pdump--after-load-gc)
 (setq inhibit-load-charset-map nil)
 
 (clear-charset-maps)
@@ -378,9 +413,7 @@
 (when (featurep 'native-compile)
   ;; Save the arity for all primitives so the compiler can always
   ;; retrieve it even in case of redefinition.
-  (mapatoms (lambda (f)
-              (when (subr-primitive-p (symbol-function f))
-                (puthash f (func-arity f) comp-subr-arities-h)))))
+  (mapatoms #'pdump--save-subr-arity))
 
 ;; Local Variables:
 ;; no-byte-compile: t

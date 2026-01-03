@@ -703,11 +703,14 @@ are subsets of LEXVARS and DYNVARS, respectively."
      `#'(lambda () ,form) ; requires "simple lambda" wrapper
      (mapcar (lambda (v) (list v nil nil nil nil)) lexvars))
     (setf cconv--fv-alist (nreverse cconv--fv-alist))
-    (cl-destructuring-bind (_body . fvs)
-        (cl-first cconv--fv-alist)
-      (cons (nreverse fvs)
-            (seq-keep (lambda (var) (car (memq var dynvars)))
-                      cconv--dynvars-seen)))))
+      (cl-destructuring-bind (_body . fvs)
+          (cl-first cconv--fv-alist)
+      (let ((dynv nil))
+        (dolist (var cconv--dynvars-seen)
+          (when (memq var dynvars)
+            (push var dynv)))
+        (cons (nreverse fvs)
+              (nreverse dynv))))))
 
 (defun cconv-make-interpreted-closure (args body env docstring iform)
   "Make a closure for the interpreter at runtime.

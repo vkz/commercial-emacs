@@ -53,4 +53,14 @@ ensure_symlink_tree "${project_root}/leim" "${build_dir}/leim"
 ensure_symlink_tree "${project_root}/admin" "${build_dir}/admin"
 ensure_symlink_tree "${project_root}/admin/charsets" "${build_dir}/admin/charsets"
 
+# `src/emacs` still expects a `loaddefs.el` file in the source tree during
+# build-time batch invocations (e.g. `src/Makefile`'s relative-lisp-files
+# plumbing), but we intentionally avoid requiring `make -C lisp autoloads`
+# to succeed in a fresh checkout.
+#
+# Use the checked-in snapshot `ldefs-boot.el` as the default `loaddefs.el`.
+if [[ ! -f "${project_root}/lisp/loaddefs.el" ]]; then
+  cp -f "${project_root}/lisp/ldefs-boot.el" "${project_root}/lisp/loaddefs.el"
+fi
+
 make -C "${build_dir}" -j"${jobs}" src

@@ -163,7 +163,10 @@ compile: $(COMPILER_EL:.el=.$(TARGET_EXT)) \
 
 .PHONY: bootstrap-clean
 bootstrap-clean:
-	find . -name '*.elc' $(FIND_DELETE)
+	@# This build uses a symlink tree for lisp/, so we need to follow
+	@# symlinks during cleanup.  macOS `find` forbids `-delete` with `-L`,
+	@# so use `-exec rm` here explicitly.
+	find -L . -name '*.elc' -exec rm -f '{}' +
 
 # ldefs-boot.el is merely the last working loaddefs.el that was manually
 # checked in.  It acts as a stopgap for the bootstrap pdump until
