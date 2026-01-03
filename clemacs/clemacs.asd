@@ -7,6 +7,8 @@
   ((:file "package")
    (:file "errors")
    (:file "handles")
+   (:file "elisp")
+   (:file "elisp-compat")
    (:file "main")
    (:file "substrate")
    (:file "tests")))

@@ -404,6 +404,12 @@ Gate
 - A small compatibility test suite runs under SBCL and cross-checks a handful of
   expressions against the baseline C-hosted `emacs -Q --batch`.
 
+Status (DONE, 2026-01-03)
+- DONE: Add an `ELISP` package and a restricted reader (supports `[]` vectors and `?x` chars).
+- DONE: Add initial compat shims: `plist-get`, `plist-put`.
+- DONE: Extend `clemacs:test:smoke` to evaluate a handful of ELisp forms and cross-check against `emacs -Q --batch` when `emacs` is on PATH.
+- TODO: Decide how we want to handle CL compiler warnings for Elisp-style global `setq` (e.g. treat unknown globals as special).
+
 ### Milestone B1-4: hello TTY command loop
 
 Deliverables

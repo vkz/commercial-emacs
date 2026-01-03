@@ -20,3 +20,10 @@
 (defpackage #:clemacs.test
   (:use #:cl)
   (:export #:run-smoke))
+
+(defpackage #:elisp
+  (:use #:cl)
+  (:export
+   #:load-elisp-file
+   #:plist-get
+   #:plist-put))
