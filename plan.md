@@ -610,9 +610,9 @@ Acceptance criteria
 - `mise run test:smoke` (or an agreed successor contract) passes with an explicit skip list.
 
 Status (TODO, 2026-01-03)
-- TODO: Decide the concrete integration shape for "running Emacs" on this branch:
-  - SBCL-hosted `emacs` binary (SBCL main + C substrate), or
-  - transitional C-hosted shim (explicitly timeboxed) to reach parity faster.
+- DONE (2026-01-03): Decide the concrete integration shape for "running Emacs" on this branch:
+  - Choose: SBCL-hosted `emacs` binary (SBCL main + C substrate).
+  - Not chosen: transitional C-hosted shim (even if timeboxed).
 - TODO: Write down the first C subsystem to migrate (buffers/windowing/keymaps/minibuffer),
   with an explicit API boundary and deletion plan for shims.
 - DONE (2026-01-03): Define a clemacs startup manifest + loader entrypoint:
