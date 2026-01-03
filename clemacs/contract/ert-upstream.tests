@@ -11,3 +11,9 @@ ert-test-should
 ert-test-should-not
 ert-test-should-value
 ert-test-should-with-macrolet
+ert-test-should-error
+ert-test-should-error-subtypes
+ert-test-should-error-argument
+ert-test-should-error-macroexpansion
+ert-test-skip-when
+ert-test-skip-unless

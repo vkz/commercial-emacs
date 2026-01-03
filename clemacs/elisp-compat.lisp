@@ -221,10 +221,51 @@ Currently does not load code; it only records FEATURE as provided."
   (declare (ignore _spec _docstring _args))
   `(progn ',face))
 
-(cl:defun define-error (name _message &optional _parent)
-  "Stub for ELisp `define-error'."
-  (declare (ignore _message _parent))
-  name)
+(cl:defun define-error (name message &optional parent)
+  "Bring-up subset of ELisp `define-error'.
+
+Records enough symbol properties for upstream ERT's `should-error':
+- `error-message'
+- `error-conditions' (a list of symbols, rooted at `error')."
+  (unless (symbolp name)
+    (cl:error "ELISP:DEFINE-ERROR expected symbol NAME, got: ~S" name))
+  (unless (stringp message)
+    (cl:error "ELISP:DEFINE-ERROR expected string MESSAGE, got: ~S" message))
+  (unless (or (null parent) (symbolp parent))
+    (cl:error "ELISP:DEFINE-ERROR expected symbol PARENT or nil, got: ~S" parent))
+  (let* ((parent (or parent 'error))
+         (parent-conds (get parent 'error-conditions)))
+    (unless (and (listp parent-conds) (member parent parent-conds :test #'eq))
+      ;; Seed `error' if it wasn't populated yet.
+      (setf parent-conds (list parent))
+      (setf (get parent 'error-conditions) parent-conds))
+    (setf (get name 'error-message) message)
+    (setf (get name 'error-conditions)
+          (cons name parent-conds))
+    name))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Emacs seeds these in C (data.c / Fsignal setup).  Upstream ELisp
+  ;; `define-error' (in lisp/subr.el) assumes they already exist, and ERT's
+  ;; `ert--should-error-handle-error' asserts it can read them.
+  (flet ((seed (sym conds message)
+           (unless (get sym 'error-conditions)
+             (setf (get sym 'error-conditions) conds))
+           (unless (get sym 'error-message)
+             (setf (get sym 'error-message) message))))
+    (seed 'error
+          (list 'error)
+          "Error")
+    ;; Minimal arithmetic hierarchy used by upstream ERT tests.
+    (seed 'arith-error
+          (list 'arith-error 'error)
+          "Arithmetic error")
+    (seed 'domain-error
+          (list 'domain-error 'arith-error 'error)
+          "Arithmetic domain error")
+    (seed 'singularity-error
+          (list 'singularity-error 'domain-error 'arith-error 'error)
+          "Arithmetic singularity error")))
 
 (cl:defmacro cl-assert (form &rest _args)
   "Bring-up subset of cl-lib's `cl-assert'.
@@ -246,9 +287,60 @@ formatting). We currently ignore them and delegate to CL:ASSERT on FORM."
   "Minimal subset of cl-lib's `cl-destructuring-bind'."
   `(cl:destructuring-bind ,lambda-list ,expr ,@body))
 
-(cl:defmacro cl-macrolet (bindings &body body)
-  "Minimal subset of cl-lib's `cl-macrolet'."
-  `(cl:macrolet ,bindings ,@body))
+(cl:defmacro cl-macrolet (bindings &body body &environment env0)
+  "Bring-up subset of cl-lib's `cl-macrolet'.
+
+ERT's `should' macro calls `macroexpand-all' and passes
+`macroexpand-all-environment'.  In Emacs, `cl-macrolet' extends that
+environment with its locally-bound macros.
+
+In CL, the body is macroexpanded/compiled before any runtime LET bindings
+exist, so we do the binding at macroexpansion time and pre-expand BODY under
+an augmented SBCL lexical environment."
+  (labels
+      ((normalize-lambda-list (lambda-list)
+         (labels ((rw (xs)
+                    (cond
+                     ((null xs) nil)
+                     ((and (consp xs) (eq (car xs) '&body))
+                      (cons '&rest (rw (cdr xs))))
+                     (t (cons (car xs) (rw (cdr xs)))))))
+           (rw lambda-list)))
+       (strip-environment (lambda-list)
+         (let ((out nil)
+               (env-var nil))
+           (loop while lambda-list do
+             (let ((x (pop lambda-list)))
+               (cond
+                ((eq x '&environment)
+                 (setf env-var (pop lambda-list)))
+                (t
+                 (push x out)))))
+           (cl:values (nreverse out) env-var)))
+       (binding->macro (binding)
+         (destructuring-bind (name lambda-list &rest mbody) binding
+           (let* ((lambda-list (normalize-lambda-list lambda-list)))
+             (multiple-value-bind (lambda-list env-var)
+                 (strip-environment lambda-list)
+               (let ((body-form (if env-var
+                                    `(let ((,env-var env)) (progn ,@mbody))
+                                    `(progn ,@mbody))))
+                 (list name
+                       (eval `(lambda (form env)
+                                (declare (ignorable form env))
+                                (let ((args (cdr form)))
+                                  (declare (ignorable args))
+                                  (destructuring-bind ,lambda-list args
+                                    ,body-form)))))))))))
+    (let* ((macro-defs (mapcar #'binding->macro bindings))
+           (env1 (sb-cltl2:augment-environment env0 :macro macro-defs)))
+      (let ((macroexpand-all-environment env1))
+        (declare (special macroexpand-all-environment))
+        ;; Keep expansion shallow: we only need to macroexpand top-level forms
+        ;; so ERT's `should' macro sees `macroexpand-all-environment'.  A deep
+        ;; walker can easily break code that relies on backquote internals.
+        (let ((expanded-body (mapcar (lambda (f) (cl:macroexpand f env1)) body)))
+          `(progn ,@expanded-body))))))
 
 (cl:defmacro cl-flet (bindings &body body)
   "Minimal subset of cl-lib's `cl-flet'."
@@ -281,6 +373,19 @@ formatting). We currently ignore them and delegate to CL:ASSERT on FORM."
 (cl:defmacro cl-ecase (keyform &rest clauses)
   "Minimal subset of cl-lib's `cl-ecase'."
   `(cl:ecase ,keyform ,@clauses))
+
+(cl:defun cl-intersection (list1 list2 &rest args &key (test 'eql) key &allow-other-keys)
+  "Bring-up subset of cl-lib's `cl-intersection'."
+  (declare (ignore args))
+  (let ((test-fn
+          (cond
+           ((or (eq test 'eq) (eq test 'cl:eq)) #'cl:eq)
+           ((or (eq test 'eql) (eq test 'cl:eql)) #'cl:eql)
+           ((or (eq test 'equal) (eq test 'cl:equal)) #'cl:equalp)
+           ((or (eq test 'equalp) (eq test 'cl:equalp)) #'cl:equalp)
+           ((functionp test) test)
+           (t (cl:error "ELISP:CL-INTERSECTION unsupported :test: ~S" test)))))
+    (cl:intersection list1 list2 :test test-fn :key key)))
 
 (cl:defun cl-remprop (symbol indicator)
   "Minimal subset of cl-lib's `cl-remprop'."
@@ -442,6 +547,95 @@ ERT uses this to capture a backtrace; we currently record none."
 
 (cl:defvar macroexpand-all-environment nil)
 
+(cl:defun %macroexpand-all--normalize-lambda-list (lambda-list)
+  (labels ((rw (xs)
+             (cond
+              ((null xs) nil)
+              ;; `destructuring-bind' doesn't understand &body in all lisps;
+              ;; treat it as &rest for our bring-up needs.
+              ((and (consp xs) (eq (car xs) '&body))
+               (cons '&rest (rw (cdr xs))))
+              (t (cons (car xs) (rw (cdr xs)))))))
+    (rw lambda-list)))
+
+(cl:defun %macroexpand-all--strip-environment (lambda-list)
+  "Return (values LAMBDA-LIST* ENV-VAR).
+
+If LAMBDA-LIST contains &environment VAR, remove it and return VAR."
+  (let ((out nil)
+        (env-var nil))
+    (loop while lambda-list do
+      (let ((x (pop lambda-list)))
+        (cond
+         ((eq x '&environment)
+          (setf env-var (pop lambda-list)))
+         (t
+          (push x out)))))
+    (cl:values (nreverse out) env-var)))
+
+(cl:defun %macroexpand-all--macro-arg-bindings (lambda-list args)
+  "Build a LET binding list for a macro lambda list and an argument list.
+
+This is intentionally a small subset sufficient for bring-up; it supports:
+- required args (symbols),
+- &optional (symbols only; defaults to NIL),
+- &rest / &body (single symbol; binds remaining args list)."
+  (let ((bindings nil)
+        (mode :required))
+    (labels ((emit (var value)
+               (unless (symbolp var)
+                 (cl:error "ELISP:MACROEXPAND-ALL unsupported macro var: ~S" var))
+               (push (list var value) bindings)))
+      (loop while lambda-list do
+        (let ((x (pop lambda-list)))
+          (cond
+           ((eq x '&optional)
+            (setf mode :optional))
+           ((or (eq x '&rest) (eq x '&body))
+            (let ((rest-var (pop lambda-list)))
+              (emit rest-var args)
+              (setf args nil)
+              (setf lambda-list nil)))
+           ((or (eq x '&key) (eq x '&allow-other-keys) (eq x '&aux))
+            (cl:error "ELISP:MACROEXPAND-ALL macro lambda-list keyword unsupported: ~S" x))
+           ((consp x)
+            (cl:error "ELISP:MACROEXPAND-ALL destructuring macro args unsupported: ~S" x))
+           (t
+            (case mode
+              (:required (emit x (if (consp args) (pop args) nil)))
+              (:optional (emit x (if (consp args) (pop args) nil)))
+              (otherwise
+               (cl:error "ELISP:MACROEXPAND-ALL internal mode bug: ~S" mode))))))))
+      (nreverse bindings)))
+
+(cl:defun %macroexpand-all--macroexpand-1-local (form env)
+  "Try to expand FORM using ENV (a cl-macrolet-style binding list).
+
+Return (values EXPANDED EXPANDEDP)."
+  (when (and (consp form) (symbolp (car form)) (listp env))
+    (let ((binding (find (car form) env :key #'car :test #'eq)))
+      (when (and binding (consp binding) (symbolp (car binding)))
+        (destructuring-bind (name lambda-list &rest body) binding
+          (declare (ignore name))
+          (let* ((lambda-list (%macroexpand-all--normalize-lambda-list lambda-list)))
+            (multiple-value-bind (lambda-list env-var)
+                (%macroexpand-all--strip-environment lambda-list)
+              (let* ((args (cdr form))
+                     (arg-bindings (%macroexpand-all--macro-arg-bindings lambda-list args))
+                     (env-bindings (if env-var (list (list env-var env)) nil))
+                     (expanded
+                       (eval `(let ,(append env-bindings arg-bindings)
+                                ,(macroexp-progn body)))))
+                (cl:values expanded t))))))))
+  (cl:values form nil))
+
+(cl:defun %macroexpand-all--macroexpand-1 (form env)
+  (multiple-value-bind (expanded expandedp)
+      (%macroexpand-all--macroexpand-1-local form env)
+    (if expandedp
+        (cl:values expanded t)
+        (cl:macroexpand-1 form (and (not (listp env)) env)))))
+
 (cl:defun macroexp-progn (body)
   "Bring-up subset of ELisp `macroexp-progn'."
   (cond
@@ -462,6 +656,28 @@ ERT uses this to capture a backtrace; we currently record none."
        (when (and ,@vars)
          ,@(or body '(nil))))))
 
+(cl:defmacro pcase-exhaustive (expr &rest clauses)
+  "Bring-up subset of ELisp `pcase-exhaustive'.
+
+Supports only `(pred <fn>)' patterns (sufficient for upstream ERT bring-up)."
+  (let ((v (gensym "PCASE-")))
+    `(let ((,v ,expr))
+       (cond
+        ,@(mapcar
+           (lambda (clause)
+             (destructuring-bind (pattern &rest body) clause
+               (cond
+                ((and (consp pattern) (eq (car pattern) 'pred) (= (length pattern) 2))
+                 (let ((pred (cadr pattern)))
+                   `((,pred ,v) (progn ,@body))))
+                ((eq pattern '_)
+                 `(t (progn ,@body)))
+                (t
+                 (cl:error "ELISP:PCASE-EXHAUSTIVE unsupported pattern: ~S" pattern)))))
+           clauses)
+        (t
+         (error "pcase-exhaustive: no match for %S" ,v))))))
+
 (cl:defun macroexp--fgrep (bindings sexp)
   "Bring-up subset of `macroexp--fgrep'.
 
@@ -479,8 +695,31 @@ This is sufficient for `letrec' in `lisp/subr.el' during ERT bring-up."
 
 (cl:defun macroexpand-all (form &optional env)
   "Bring-up subset of ELisp `macroexpand-all'."
-  (declare (ignore env))
-  (cl:macroexpand form))
+  ;; Do not recurse into subforms yet: SBCL macroexpansions can include
+  ;; internal/circular structures, and ERT bring-up only requires expanding
+  ;; the top-level macro call (e.g. (foo) => (progn ...)).
+  (let ((cur form)
+        (expandedp t)
+        (guard 0))
+    (loop while expandedp do
+      (incf guard)
+      (when (> guard 200)
+        (cl:error "ELISP:MACROEXPAND-ALL appears to loop on: ~S" cur))
+      (let ((prev cur))
+        (multiple-value-setq (cur expandedp)
+          (%macroexpand-all--macroexpand-1 cur env))
+        (when (and expandedp (eq cur prev))
+          (setf expandedp nil))))
+    cur))
+
+;; Upstream ERT exposes `skip-when' and `skip-unless' inside `ert-deftest'
+;; bodies.  For bring-up, also provide them as global macros so test bodies
+;; that close over them in lambdas still macroexpand under SBCL.
+(cl:defmacro skip-when (form)
+  `(ert--skip-when ,form))
+
+(cl:defmacro skip-unless (form)
+  `(ert--skip-unless ,form))
 
 (cl:defmacro condition-case (var bodyform &rest handlers)
   "Bring-up subset of ELisp `condition-case'.
@@ -636,6 +875,13 @@ Supports the common pattern of a self-referential closure (used by ERT)."
     ;; as special operators (so `should' can handle quoted forms).
     (setf (gethash 'cl:quote ht) (make-elisp-subr :arity (cons 1 'unevalled)))
     (setf (gethash 'cl:function ht) (make-elisp-subr :arity (cons 1 'unevalled)))
+    (setf (gethash 'cl:progn ht) (make-elisp-subr :arity (cons 0 'unevalled)))
+    (setf (gethash 'cl:if ht) (make-elisp-subr :arity (cons 2 'unevalled)))
+    (setf (gethash 'cl:let ht) (make-elisp-subr :arity (cons 1 'unevalled)))
+    (setf (gethash 'cl:let* ht) (make-elisp-subr :arity (cons 1 'unevalled)))
+    (setf (gethash 'cl:catch ht) (make-elisp-subr :arity (cons 1 'unevalled)))
+    (setf (gethash 'cl:throw ht) (make-elisp-subr :arity (cons 2 'unevalled)))
+    (setf (gethash 'cl:unwind-protect ht) (make-elisp-subr :arity (cons 1 'unevalled)))
     ht))
 
 (cl:defun subrp (object)
