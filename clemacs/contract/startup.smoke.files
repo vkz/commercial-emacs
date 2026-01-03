@@ -1,0 +1,9 @@
+# clemacs startup manifest (smoke)
+#
+# This list is data and should grow monotonically. It is the clemacs-side
+# equivalent of "what we load at editor startup" (eventually driven by
+# lisp/loadup.el or a close analogue).
+#
+# 2026-01-03: seed with the current subr.el bootstrap checkpoint.
+
+lisp/subr.el 340

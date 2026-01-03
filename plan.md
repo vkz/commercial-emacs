@@ -582,6 +582,8 @@ Status (TODO, 2026-01-03)
   - `mise run clemacs:test:load-ert` loads `lisp/emacs-lisp/ert.el` up to `clemacs/contract/ert.maxforms` (currently 40).
 - DONE (2026-01-03): Start with one upstream test file and grow from there (load gate first):
   - `mise run clemacs:test:load-ert-tests` loads `test/lisp/emacs-lisp/ert-tests.el` up to `clemacs/contract/ert-tests.maxforms` (currently 20).
+- DONE (2026-01-03): Add a minimal upstream ERT bring-up gate (load + assert one test is registered):
+  - `mise run clemacs:test:ert-upstream` (wired into `clemacs:test:contract -- --level check`).
 - TODO: Add a delta report mode:
   - compare clemacs results against `emacs -Q --batch` when available,
   - record divergences in `plans/clemacs-compat.md`.
@@ -606,9 +608,11 @@ Status (TODO, 2026-01-03)
   - transitional C-hosted shim (explicitly timeboxed) to reach parity faster.
 - TODO: Write down the first C subsystem to migrate (buffers/windowing/keymaps/minibuffer),
   with an explicit API boundary and deletion plan for shims.
-- TODO: Define an end-to-end clemacs startup manifest:
-  - start from `lisp/loadup.el` (preferred) or a smaller curated list that grows monotonically.
-  - define an explicit `allowed-skip` list with reasons/dates (GUI/nativecomp/modules).
+- DONE (2026-01-03): Define a clemacs startup manifest + loader entrypoint:
+  - `clemacs/contract/startup.{smoke,check}.files` (monotonic list; currently seeded with `lisp/subr.el`).
+  - `mise run clemacs:load:startup -- --level smoke|check`
+- TODO: Grow the startup manifest toward `lisp/loadup.el` (or an equivalent monotonic list),
+  with explicit skip reasons (GUI/nativecomp/modules).
 - TODO: Add a clemacs ERT gate based on upstream tests:
   - first file target: `test/lisp/emacs-lisp/ert-tests.el` under `mise run clemacs:test:ert-upstream`.
   - contract tracking: must-pass / allowed-skip / known-fail as data under `clemacs/contract/`.

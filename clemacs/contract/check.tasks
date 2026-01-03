@@ -1,3 +1,4 @@
 clemacs:test:smoke
 clemacs:test:tty
 clemacs:test:ert
+clemacs:test:ert-upstream

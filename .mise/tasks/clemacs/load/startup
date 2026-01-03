@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Load the clemacs startup manifest under SBCL (experimental)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--level <level>" help="Manifest level: smoke|check" default="smoke"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--limit <n>" help="Load only the first N manifest entries" default="0"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+level="${usage_level}"
+build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}"
+
+export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+
+mise run clemacs:deps:install -- --build-dir "${build_dir}"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+limit="${usage_limit}"
+
+manifest_rel="clemacs/contract/startup.${level}.files"
+case "${level}" in
+  smoke|check) ;;
+  *)
+    echo "[clemacs:load:startup] unknown level: ${level}" >&2
+    exit 2
+    ;;
+esac
+
+manifest_path="${project_root}/${manifest_rel}"
+if [[ ! -f "${manifest_path}" ]]; then
+  echo "[clemacs:load:startup] missing manifest: ${manifest_path}" >&2
+  exit 2
+fi
+
+skip_rel="clemacs/contract/lisp.allowed-skip.files"
+
+limit_eval="nil"
+if [[ "${limit}" != "0" ]]; then
+  limit_eval="${limit}"
+fi
+
+cd "${deps_dir}"
+"${qlot_bin}" exec sbcl \
+  --noinform \
+  --no-sysinit \
+  --no-userinit \
+  --non-interactive \
+  --disable-debugger \
+  --eval '(require :asdf)' \
+  --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
+  --eval '(asdf:load-system :clemacs)' \
+  --eval "(uiop:quit (elisp:load-elisp-manifest :project-root #p\"${project_root}/\" :manifest #p\"${manifest_rel}\" :skip-file #p\"${skip_rel}\" :limit ${limit_eval}))"

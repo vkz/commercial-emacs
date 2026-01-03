@@ -1,0 +1,5 @@
+# clemacs startup manifest (check)
+#
+# 2026-01-03: same as smoke; diverges once startup grows.
+
+lisp/subr.el 340
