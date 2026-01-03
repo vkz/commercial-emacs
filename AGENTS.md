@@ -86,6 +86,8 @@ alongside the baseline C-hosted Emacs build.
   - `mise run clemacs:substrate:build`
 - One-command gate:
   - `mise run clemacs:verify`
+- Timing (iteration cost signal):
+  - `mise run clemacs:bench:cold`
 
 ### Canonical build flow (macOS TTY)
 

@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Install clemacs Common Lisp deps (qlot + qlfile.lock, out-of-tree)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--qlot-version <ver>" help="Qlot version tag" default="1.8.2"
+#USAGE flag "--cache-dir <dir>" help="Qlot cache directory (avoid global ~/.cache/qlot)" default=""
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+qlot_version="${usage_qlot_version}"
+
+export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+
+cache_dir="${usage_cache_dir:-}"
+if [[ -z "${cache_dir}" ]]; then
+  cache_dir="${project_root}/${build_dir}/qlot-cache"
+fi
+
+tools_dir="${project_root}/${build_dir}/tools"
+qlot_dir="${tools_dir}/qlot"
+deps_dir="${project_root}/${build_dir}/deps"
+
+qlfile_src="${project_root}/clemacs/qlfile"
+qlfile_lock_src="${project_root}/clemacs/qlfile.lock"
+
+if [[ ! -f "${qlfile_src}" ]]; then
+  echo "[clemacs:deps:install] missing ${qlfile_src}" >&2
+  exit 1
+fi
+
+mkdir -p "${tools_dir}"
+
+if [[ ! -d "${qlot_dir}/.git" ]]; then
+  rm -rf "${qlot_dir}"
+  echo "[clemacs:deps:install] fetching qlot ${qlot_version} into ${qlot_dir}"
+  git clone --depth 1 --branch "${qlot_version}" https://github.com/fukamachi/qlot.git "${qlot_dir}"
+fi
+
+export LISP=sbcl
+
+if [[ ! -f "${qlot_dir}/.bundle-libs/setup.lisp" && ! -f "${qlot_dir}/.qlot/setup.lisp" ]]; then
+  echo "[clemacs:deps:install] bootstrapping qlot (project-local quicklisp under ${qlot_dir}/.qlot)"
+  (cd "${qlot_dir}" && ./scripts/setup.sh)
+fi
+
+mkdir -p "${deps_dir}"
+ln -sf "${qlfile_src}" "${deps_dir}/qlfile"
+if [[ -f "${qlfile_lock_src}" ]]; then
+  ln -sf "${qlfile_lock_src}" "${deps_dir}/qlfile.lock"
+fi
+
+mkdir -p "${cache_dir}"
+
+stamp_file="${deps_dir}/.deps-stamp"
+stamp_input="${qlot_version}"$'\n'
+stamp_input+=$(cat "${qlfile_src}")$'\n'
+if [[ -f "${qlfile_lock_src}" ]]; then
+  stamp_input+=$(cat "${qlfile_lock_src}")$'\n'
+fi
+stamp="$(printf "%s" "${stamp_input}" | shasum -a 256 | awk '{print $1}')"
+
+if [[ -f "${deps_dir}/.qlot/setup.lisp" && -f "${stamp_file}" ]]; then
+  old_stamp="$(cat "${stamp_file}" || true)"
+  if [[ "${old_stamp}" == "${stamp}" ]]; then
+    echo "[clemacs:deps:install] deps up to date (stamp match)"
+    exit 0
+  fi
+fi
+
+echo "[clemacs:deps:install] installing deps into ${deps_dir}/.qlot (cache: ${cache_dir})"
+(cd "${deps_dir}" && "${qlot_dir}/bin/qlot" install --cache "${cache_dir}")
+
+printf "%s\n" "${stamp}" > "${stamp_file}"

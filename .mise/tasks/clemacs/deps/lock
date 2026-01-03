@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="(Re)generate clemacs/qlfile.lock using qlot (writes to source tree)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--qlot-version <ver>" help="Qlot version tag" default="1.8.2"
+#USAGE flag "--cache-dir <dir>" help="Qlot cache directory (avoid global ~/.cache/qlot)" default=""
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+qlot_version="${usage_qlot_version}"
+cache_dir="${usage_cache_dir:-}"
+if [[ -z "${cache_dir}" ]]; then
+  cache_dir="${project_root}/${build_dir}/qlot-cache"
+fi
+
+export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+
+qlfile_src="${project_root}/clemacs/qlfile"
+qlfile_lock_src="${project_root}/clemacs/qlfile.lock"
+
+if [[ ! -f "${qlfile_src}" ]]; then
+  echo "[clemacs:deps:lock] missing ${qlfile_src}" >&2
+  exit 1
+fi
+
+tools_dir="${project_root}/${build_dir}/tools"
+qlot_dir="${tools_dir}/qlot"
+tmp_deps_dir="${project_root}/${build_dir}/deps-lock"
+
+mkdir -p "${tools_dir}"
+if [[ ! -d "${qlot_dir}/.git" ]]; then
+  rm -rf "${qlot_dir}"
+  echo "[clemacs:deps:lock] fetching qlot ${qlot_version} into ${qlot_dir}"
+  git clone --depth 1 --branch "${qlot_version}" https://github.com/fukamachi/qlot.git "${qlot_dir}"
+fi
+
+export LISP=sbcl
+if [[ ! -f "${qlot_dir}/.bundle-libs/setup.lisp" && ! -f "${qlot_dir}/.qlot/setup.lisp" ]]; then
+  echo "[clemacs:deps:lock] bootstrapping qlot (project-local quicklisp under ${qlot_dir}/.qlot)"
+  (cd "${qlot_dir}" && ./scripts/setup.sh)
+fi
+
+mkdir -p "${cache_dir}"
+rm -rf "${tmp_deps_dir}"
+mkdir -p "${tmp_deps_dir}"
+
+if [[ ! -f "${qlfile_lock_src}" ]]; then
+  : > "${qlfile_lock_src}"
+fi
+
+ln -sf "${qlfile_src}" "${tmp_deps_dir}/qlfile"
+ln -sf "${qlfile_lock_src}" "${tmp_deps_dir}/qlfile.lock"
+
+echo "[clemacs:deps:lock] generating qlfile.lock via qlot (cache: ${cache_dir})"
+(cd "${tmp_deps_dir}" && "${qlot_dir}/bin/qlot" install --cache "${cache_dir}")
+
+echo "[clemacs:deps:lock] qlfile.lock updated at ${qlfile_lock_src}"

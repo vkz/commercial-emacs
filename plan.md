@@ -348,7 +348,8 @@ Status (DONE, 2026-01-02)
   - `clemacs:test:smoke`
 - DONE: Gate passes: `mise run clemacs:run` prints banner and exits cleanly.
 - DONE: One-shot timing (warm): `mise run clemacs:run` ~0.12s real on this machine.
-- TODO: Capture a cold-start timing (after clearing `build/clemacs/xdg-cache`) and decide whether a saved SBCL core is worth it.
+- DONE (2026-01-03): One-shot timing (cold; cleared `build/clemacs/xdg-cache`): `mise run clemacs:bench:cold` ~31.24s real on this machine.
+- TODO: Decide whether a saved SBCL core is worth it for iteration speed.
 
 ### Milestone B1-1: substrate library callable from SBCL
 
@@ -371,7 +372,7 @@ Status (DONE, 2026-01-03)
   - `clemacs:verify` (one-command gate for bring-up)
 - DONE: Implement substrate dylib API: `emx_substrate_version`, `emx_substrate_platform`.
 - DONE: Implement CL-side CFFI bindings + smoke test gate (`mise run clemacs:test:smoke`).
-- TODO: Make dependency install quieter/faster (e.g. skip `qlot install` if lock unchanged).
+- DONE: Make dependency install faster: `clemacs:deps:install` skips `qlot install` when qlfile/lock stamp matches.
 
 ### Milestone B1-2: stable handle table + error model
 

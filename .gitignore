@@ -120,6 +120,8 @@ lisp/subdirs.el
 
 # Dependencies.
 deps/
+!.mise/tasks/**/deps/
+!.mise/tasks/**/deps/**
 
 # Out-of-tree builds used by clmacs.
 /build/
