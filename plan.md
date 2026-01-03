@@ -693,9 +693,8 @@ Status (TODO, 2026-01-03)
   - expand `clemacs/contract/ert-upstream.tests` to 30 tests (22 pass + 8 XFAIL),
   - track temporary failures in `clemacs/contract/ert-upstream.known-fail.tests`
     (XPASS is a gate failure).
-- TODO: Reduce upstream ERT XFAILs by implementing missing core helpers / parity:
-  - fix `cl-defstruct` constructor parity where tests depend on it,
-  - implement enough of explainers (`ert--explain-equal*` path) to clear
-    `ert-test-get-explainer` and plist explanation tests,
-  - implement `with-demoted-errors` (or a faithful substitute) for `ert-test-with-demoted-errors`,
-  - re-run `mise run clemacs:test:ert-upstream` and shrink `ert-upstream.known-fail.tests` monotonically.
+- DONE (2026-01-03): Reduce upstream ERT XFAILs by implementing missing core helpers / parity:
+  - fix `condition-case` semantics so handler bodies don't get re-caught (unblocks `should-error`),
+  - fix `cl-loop` BY `#'` interop (unblocks plist tests),
+  - add/adjust compat shims used by ERT explainers and helpers (`memq`, `substring`, `cl-position`, `equal-including-properties`, `type-of`, `string=`/`string-equal`, `with-demoted-errors`),
+  - re-run `mise run clemacs:test:ert-upstream` and shrink `clemacs/contract/ert-upstream.known-fail.tests` to empty (no XPASS/XFAIL).

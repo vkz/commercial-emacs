@@ -19,9 +19,9 @@ This is a pragmatic compatibility shim, not a full obarray model."
 (cl:defmacro function (arg)
   "ELisp-ish FUNCTION.
 
-This differs from CL:FUNCTION by allowing symbol references to be resolved
-at call time (via ELISP:FUNCALL), which makes bootstrapping and forward
-references less strict than CL."
+Emacs Lisp's `function' special form is more of a \"function designator\"
+than a strict CL:FUNCTION: for symbols, it yields the symbol (resolved later
+by `funcall' / `apply')."
   (cond
    ((symbolp arg)
     `(quote ,arg))
@@ -51,10 +51,30 @@ Returns NIL if SYMBOL has no function cell value."
         (not (null value))
         (cl:fboundp symbol))))
 
-(cl:defun function-alias-p (_symbol)
-  "Bring-up stub for ELisp `function-alias-p'."
-  (declare (ignore _symbol))
-  nil)
+(cl:defun function-alias-p (symbol)
+  "Bring-up subset of ELisp `function-alias-p'.
+
+Returns a list of alias targets for SYMBOL's function cell, following chains
+like: (defalias 'string= 'string-equal)."
+  (unless (symbolp symbol)
+    (return-from function-alias-p nil))
+  (let ((seen (list symbol))
+        (cur symbol)
+        (out nil))
+    (loop repeat 16 do
+      (let ((next (handler-case
+                      (symbol-function cur)
+                    (elisp-signal (e)
+                      (if (eq (elisp-signal-symbol e) 'void-function)
+                          nil
+                          (cl:error e))))))
+        (unless (and (symbolp next) (not (eq next cur)))
+          (return (nreverse out)))
+        (when (member next seen :test #'eq)
+          (return (nreverse out)))
+        (push next seen)
+        (push next out)
+        (setf cur next)))))
 
 (cl:defun %resolve-function (fn &key (max-hops 16))
   (loop with cur = fn
@@ -103,11 +123,44 @@ Returns NIL if SYMBOL has no function cell value."
     (error "ELISP:UPCASE expects a string, got: ~S" s))
   (string-upcase s))
 
+(cl:defun string= (a b)
+  "ELisp-ish STRING=.
+
+Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
+`string=')."
+  (let ((a (if (symbolp a) (symbol-name a) a))
+        (b (if (symbolp b) (symbol-name b) b)))
+    (unless (and (stringp a) (stringp b))
+      (error "ELISP:STRING= expects strings or symbols, got: ~S ~S" a b))
+    (cl:string= a b)))
+
+(cl:defun string-equal (a b)
+  "ELisp-ish STRING-EQUAL (case-sensitive; alias of `string=')."
+  (string= a b))
+
 (cl:defun capitalize (s)
   "Bring-up subset of ELisp `capitalize'."
   (unless (stringp s)
     (error "ELISP:CAPITALIZE expects a string, got: ~S" s))
   (string-capitalize s))
+
+(cl:defun substring (s from &optional to)
+  "Bring-up subset of ELisp `substring' for strings.
+
+Supports negative indices and TO = nil (meaning end of string)."
+  (unless (stringp s)
+    (error "ELISP:SUBSTRING expects a string, got: ~S" s))
+  (unless (integerp from)
+    (error "ELISP:SUBSTRING expects integer FROM, got: ~S" from))
+  (let* ((n (length s))
+         (start (if (minusp from) (+ n from) from))
+         (end (cond
+               ((null to) n)
+               ((integerp to) (if (minusp to) (+ n to) to))
+               (t (error "ELISP:SUBSTRING expects integer or nil TO, got: ~S" to)))))
+    (when (or (< start 0) (> start n) (< end 0) (> end n) (< end start))
+      (signal 'args-out-of-range (list s from to)))
+    (subseq s start end)))
 
 (cl:defvar emacs-version "31.0.50")
 
@@ -200,7 +253,7 @@ match to Elisp than CL:EQUAL."
             ((or (eq test 'equalp) (eq test 'cl:equalp)) 'cl:equalp)
             (t (error "ELISP:MAKE-HASH-TABLE unsupported :test: ~S" test))))
          (remapped-args
-           (loop for (k v) on args by #'cddr
+           (loop for (k v) on args by (cl:function cl:cddr)
                  collect k
                  collect (if (eq k :test) mapped-test v))))
     (apply #'cl:make-hash-table remapped-args)))
@@ -561,7 +614,25 @@ an augmented SBCL lexical environment."
 
 (cl:defmacro cl-loop (&rest clauses)
   "Minimal subset of cl-lib's `cl-loop'."
-  `(cl:loop ,@clauses))
+  (labels ((rewrite-by (x)
+             (if (and (consp x) (eq (car x) 'function) (= (length x) 2))
+                 (let ((arg (cadr x)))
+                   (cond
+                    ((symbolp arg) `(cl:function ,arg))
+                    ((and (consp arg) (eq (car arg) 'lambda)) `(cl:function ,arg))
+                    (t x)))
+                 x))
+           (walk (xs)
+             (cond
+              ((null xs) nil)
+              ((eq (car xs) 'by)
+               (cons 'by (cons (rewrite-by (cadr xs)) (walk (cddr xs)))))
+              (t (cons (car xs) (walk (cdr xs)))))))
+    `(cl:loop ,@(walk clauses))))
+
+(cl:defmacro cl-etypecase (keyform &rest clauses)
+  "Bring-up subset of cl-lib's `cl-etypecase'."
+  `(cl:etypecase ,keyform ,@clauses))
 
 (cl:defmacro cl-incf (place &optional (delta 1))
   "Minimal subset of cl-lib's `cl-incf'."
@@ -587,6 +658,11 @@ an augmented SBCL lexical environment."
   "Minimal subset of cl-lib's `cl-ecase'."
   `(cl:ecase ,keyform ,@clauses))
 
+(cl:defun cl-struct-p (_x)
+  "Bring-up stub for cl-lib's `cl-struct-p'."
+  (declare (ignore _x))
+  nil)
+
 (cl:defun cl-intersection (list1 list2 &rest args &key (test 'eql) key &allow-other-keys)
   "Bring-up subset of cl-lib's `cl-intersection'."
   (declare (ignore args))
@@ -599,6 +675,39 @@ an augmented SBCL lexical environment."
            ((functionp test) test)
            (t (cl:error "ELISP:CL-INTERSECTION unsupported :test: ~S" test)))))
     (cl:intersection list1 list2 :test test-fn :key key)))
+
+(cl:defun cl-set-difference (list1 list2 &rest args &key (test 'eql) key &allow-other-keys)
+  "Bring-up subset of cl-lib's `cl-set-difference'."
+  (declare (ignore args))
+  (let ((test-fn
+          (cond
+           ((or (eq test 'eq) (eq test 'cl:eq)) #'cl:eq)
+           ((or (eq test 'eql) (eq test 'cl:eql)) #'cl:eql)
+           ((or (eq test 'equal) (eq test 'cl:equal)) #'cl:equalp)
+           ((or (eq test 'equalp) (eq test 'cl:equalp)) #'cl:equalp)
+           ((functionp test) test)
+           (t (cl:error "ELISP:CL-SET-DIFFERENCE unsupported :test: ~S" test)))))
+    (cl:set-difference list1 list2 :test test-fn :key key)))
+
+(cl:defun cl-position (item sequence &rest args)
+  "Bring-up subset of cl-lib's `cl-position'."
+  (let* ((item (if (and (integerp item) (stringp sequence))
+                   (or (code-char item) item)
+                   item))
+         (test (getf args :test 'eql))
+         (test-fn
+           (cond
+            ((or (eq test 'eq) (eq test 'cl:eq)) #'cl:eq)
+            ((or (eq test 'eql) (eq test 'cl:eql)) #'cl:eql)
+            ((or (eq test 'equal) (eq test 'cl:equal)) #'cl:equalp)
+            ((or (eq test 'equalp) (eq test 'cl:equalp)) #'cl:equalp)
+            ((functionp test) test)
+            (t (cl:error "ELISP:CL-POSITION unsupported :test: ~S" test))))
+         (remapped-args
+           (loop for (k v) on args by (cl:function cl:cddr)
+                 collect k
+                 collect (if (eq k :test) test-fn v))))
+    (apply #'cl:position item sequence remapped-args)))
 
 (cl:defun cl-gensym (&optional prefix)
   "Bring-up subset of cl-lib's `cl-gensym'."
@@ -631,6 +740,19 @@ whereas CL:COERCE expects CL type names."
            ((functionp test) test)
            (t (cl:error "ELISP:CL-SEARCH unsupported :test: ~S" test)))))
     (cl:search sequence1 sequence2 :test test-fn)))
+
+(cl:defun cl-mismatch (sequence1 sequence2 &rest args &key (test 'eql) &allow-other-keys)
+  "Bring-up subset of cl-lib's `cl-mismatch'."
+  (declare (ignore args))
+  (let ((test-fn
+          (cond
+           ((or (eq test 'eq) (eq test 'cl:eq)) #'cl:eq)
+           ((or (eq test 'eql) (eq test 'cl:eql)) #'cl:eql)
+           ((or (eq test 'equal) (eq test 'cl:equal)) #'cl:equalp)
+           ((or (eq test 'equalp) (eq test 'cl:equalp)) #'cl:equalp)
+           ((functionp test) test)
+           (t (cl:error "ELISP:CL-MISMATCH unsupported :test: ~S" test)))))
+    (cl:mismatch sequence1 sequence2 :test test-fn)))
 
 (cl:defun cl-remprop (symbol indicator)
   "Minimal subset of cl-lib's `cl-remprop'."
@@ -765,7 +887,7 @@ We currently represent charsets as symbols with properties."
   (put name 'charsetp t)
   (when (cl:oddp (length plist))
     (error "ELISP:DEFINE-CHARSET odd keyword args: ~S" plist))
-  (loop for (k v) on plist by #'cddr do
+  (loop for (k v) on plist by (cl:function cl:cddr) do
     (put name k v))
   name)
 
@@ -781,6 +903,7 @@ We currently represent charsets as symbols with properties."
 (defparameter buffer-file-name nil)
 (defparameter noninteractive t)
 (defparameter current-load-list nil)
+(cl:defvar load-history nil)
 (cl:defvar describe-symbol-backends nil)
 (cl:defvar minor-mode-alist nil)
 
@@ -1028,6 +1151,30 @@ Return (values EXPANDED EXPANDEDP)."
        (when (and ,@vars)
          ,@(or body '(nil))))))
 
+(cl:defmacro pcase (expr &rest clauses)
+  "Bring-up subset of ELisp `pcase'.
+
+This is a compatibility stub for early bootstrapping. It supports:
+- `_` (default)
+- (pred FN)
+- (or PAT1 PAT2 ...) by expanding into multiple clauses.
+
+If no clause matches, returns nil."
+  (labels ((expand-or (pat body)
+             (cond
+              ((and (consp pat) (eq (car pat) 'or))
+               (mapcan (lambda (p) (expand-or p body)) (cdr pat)))
+              (t (list (cons pat body))))))
+    (let* ((expanded
+             (mapcan
+              (lambda (clause)
+                (destructuring-bind (pat &rest body) clause
+                  (expand-or pat body)))
+              clauses))
+           (has-default (some (lambda (cl) (eq (car cl) '_)) expanded))
+           (final (if has-default expanded (append expanded (list (list '_ nil))))))
+      `(pcase-exhaustive ,expr ,@final))))
+
 (cl:defmacro pcase-exhaustive (expr &rest clauses)
   "Bring-up subset of ELisp `pcase-exhaustive'.
 
@@ -1124,19 +1271,67 @@ This is sufficient for `letrec' in `lisp/subr.el' during ERT bring-up."
 (cl:defmacro condition-case (var bodyform &rest handlers)
   "Bring-up subset of ELisp `condition-case'.
 
-Binds VAR (when non-nil) to a minimal \"Elisp error data\" cons:
-  (error . (CONDITION))."
-  (let* ((e (gensym "E"))
-         (err (or var (gensym "ERR"))))
-    `(handler-case
-         ,bodyform
-       (cl:error (,e)
-         (let ((,err (if (typep ,e 'elisp-signal)
-                         (cons (elisp-signal-symbol ,e) (elisp-signal-data ,e))
-                         (cons 'error (list ,e)))))
-           ,(if handlers
-                `(progn ,@(cdr (car handlers)))
-                `(cl:error ,e)))))))
+Binds VAR (when non-nil) to an ELisp-style error datum:
+  (ERROR-SYMBOL . DATA)."
+  (let* ((tag (gensym "CC-CATCH-"))
+         (out (gensym "CC-OUT-"))
+         (e (gensym "CC-E-"))
+         (err (or var (gensym "CC-ERR-")))
+         (success-clause (find :success handlers :key #'car))
+         (error-clauses (remove :success handlers :key #'car)))
+    (labels ((matchp-form (types sym)
+               (cond
+                ((eq types t) t)
+                ((and (symbolp types) (eq types 'error)) t)
+                ((symbolp types)
+                 `(let ((conds (get ,sym 'error-conditions)))
+                    (and (listp conds) (member ',types conds :test #'eq))))
+                ((consp types)
+                 `(let ((conds (get ,sym 'error-conditions)))
+                    (and (listp conds)
+                         (some (lambda (t0) (member t0 conds :test #'eq)) ',types))))
+                (t nil)))
+             (expand-clauses (err-sym)
+               (let ((sym `(car ,err-sym)))
+                 `(cond
+                   ,@(mapcar
+                      (lambda (clause)
+                        (destructuring-bind (types &rest body) clause
+                          `(,(matchp-form types sym)
+                            ,(if var
+                                 `(let ((,var ,err-sym)) (progn ,@body))
+                                 `(progn ,@body)))))
+                      error-clauses)
+                   ;; No matching handler: re-signal the original error.
+                   (t (signal (car ,err-sym) (cdr ,err-sym)))))))
+      `(let ((,out
+              (catch ',tag
+                (cl:handler-bind
+                    ((elisp-signal
+                       (lambda (,e)
+                         (throw ',tag
+                           (list :err
+                                 (cons (elisp-signal-symbol ,e)
+                                       (elisp-signal-data ,e))))))
+                     (cl:error
+                       (lambda (,e)
+                         (unless (typep ,e 'elisp-signal)
+                           (throw ',tag (list :err (cons 'error (list ,e))))))))
+                  (list :ok ,bodyform)))))
+         (cond
+          ((and (consp ,out) (eq (car ,out) :ok))
+           (let ((res (cadr ,out)))
+             ,(if success-clause
+                  (destructuring-bind (_ &rest body) success-clause
+                    (declare (ignore _))
+                    (if var
+                        `(let ((,var res)) (progn ,@body))
+                        `(progn ,@body)))
+                  'res)))
+          ((and (consp ,out) (eq (car ,out) :err))
+           (let ((,err (cadr ,out)))
+             ,(expand-clauses err)))
+          (t ,out))))))
 
 (define-condition elisp-signal (cl:error)
   ((symbol :initarg :symbol :reader elisp-signal-symbol)
@@ -1514,6 +1709,28 @@ trying to redefine locked symbols while loading upstream ELisp)."
                always (equal (aref a i) (aref b i)))))
    (t (cl:equal a b))))
 
+(cl:defun equal-including-properties (a b)
+  "Bring-up stub for ELisp `equal-including-properties'.
+
+clemacs does not yet model text properties, so this currently behaves like
+`equal'."
+  (equal a b))
+
+(cl:defun type-of (object)
+  "ELisp-ish `type-of'.
+
+This deliberately returns coarse ELisp-style type names, not CL's
+implementation-specific ones."
+  (cond
+   ((null object) 'symbol)
+   ((symbolp object) 'symbol)
+   ((consp object) 'cons)
+   ((integerp object) 'integer)
+   ((stringp object) 'string)
+   ((vectorp object) 'vector)
+   ((hash-table-p object) 'hash-table)
+   (t (cl:type-of object))))
+
 (cl:defun %lexical-variable-p (symbol env)
   (multiple-value-bind (kind)
       (sb-cltl2:variable-information symbol env)
@@ -1572,6 +1789,21 @@ fail until proper autoload support exists."
   (fset function (list 'autoload file))
   function)
 
+(cl:defun symbol-file (_symbol &optional _type)
+  "Bring-up stub for ELisp `symbol-file'."
+  (declare (ignore _symbol _type))
+  nil)
+
+(cl:defmacro with-demoted-errors (_format &rest body)
+  "Bring-up subset of ELisp `with-demoted-errors'.
+
+Evaluate BODY, but if an error is signaled, demote it and return nil."
+  (declare (ignore _format))
+  (let ((err (gensym "ERR")))
+    `(condition-case ,err
+         (progn ,@body)
+       (error nil))))
+
 (cl:defun make-variable-buffer-local (variable)
   "Stub for ELisp `make-variable-buffer-local'."
   variable)
@@ -1601,7 +1833,7 @@ buffer-local values yet)."
     (error "ELISP:SETQ expects an even number of arguments"))
 
   (let ((forms nil))
-    (loop for (var val) on pairs by #'cddr do
+    (loop for (var val) on pairs by (cl:function cl:cddr) do
       (unless (symbolp var)
         (error "ELISP:SETQ only supports symbol variables, got: ~S" var))
       (push (if (%lexical-variable-p var env)
@@ -1664,3 +1896,49 @@ buffer-local values yet)."
   (dolist (cell alist nil)
     (when (and (consp cell) (eq (cdr cell) value))
       (return cell))))
+
+(cl:defun memq (elt list)
+  "ELisp-ish MEMQ."
+  (loop for tail on list
+        when (eq elt (car tail)) do (return tail)
+        finally (return nil)))
+
+(cl:defun proper-list-p (x)
+  "Bring-up subset of ELisp `proper-list-p'.
+
+Returns the length of X if it is a proper list, otherwise nil."
+  (cond
+   ((null x) 0)
+   ((not (consp x)) nil)
+   (t
+    (let ((slow x)
+          (fast x)
+          (len 0))
+      (loop
+        ;; Step FAST once.
+        (cond
+         ((null fast) (return len))
+         ((not (consp fast)) (return nil))
+         (t
+          (incf len)
+          (setf fast (cdr fast))))
+        ;; Cycle check.
+        (when (eq fast slow) (return nil))
+        ;; Step FAST again; step SLOW once.
+        (cond
+         ((null fast) (return len))
+         ((not (consp fast)) (return nil))
+         (t
+          (incf len)
+          (setf fast (cdr fast))
+          (setf slow (cdr slow))))
+        (when (eq fast slow) (return nil)))))))
+
+(cl:defun recordp (_x)
+  "Bring-up stub for ELisp `recordp'."
+  (declare (ignore _x))
+  nil)
+
+(eval-when (:load-toplevel :execute)
+  ;; Upstream expects `string=' to be an alias for `string-equal' (used by ERT).
+  (defalias 'string= 'string-equal))

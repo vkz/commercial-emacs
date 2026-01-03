@@ -1,11 +1,4 @@
 # Upstream ERT tests that are currently known to fail under clemacs.
 #
 # Format: <test-name> # <reason> (YYYY-MM-DD)
-ert-test-abbreviate-string # behavior mismatch; investigate format/prin1 details (2026-01-03)
-ert-test-deftest # macro semantics mismatch; investigate ert-deftest + cl-defstruct parity (2026-01-03)
-ert-test-get-explainer # missing explainer plumbing / explain-equal subset (2026-01-03)
-ert-test-plist-difference-explanation # missing explainer plumbing / plist diff helpers (2026-01-03)
-ert-test-significant-plist-keys # missing plist helpers / symbol plist semantics (2026-01-03)
-ert-test-stats-set-test-and-result # failing assertion; stats/result structs not yet parity (2026-01-03)
-ert-test-string-first-line # string newline/format behavior mismatch (2026-01-03)
-ert-test-with-demoted-errors # missing/partial with-demoted-errors semantics (2026-01-03)
+# (empty as of 2026-01-03)
