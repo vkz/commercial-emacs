@@ -4,7 +4,7 @@ set -euo pipefail
 #MISE description="Run the built clmacs binary (TTY-only)"
 #USAGE flag "-h --help" help="Print help"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree build directory" default="build/macos-tty"
-#USAGE arg "[args]" var=#true hide=#true
+#USAGE arg "[emacs_args]" var=#true hide=#true
 
 if [[ "${usage_help:-false}" == "true" ]]; then
   mise tasks info "${MISE_TASK_NAME}"
@@ -21,4 +21,24 @@ if [[ ! -x "${bin}" ]]; then
   mise run build -- --build-dir "${build_dir}"
 fi
 
-exec "${bin}" "$@"
+emacs_args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      shift
+      ;;
+    --build-dir)
+      shift
+      shift
+      ;;
+    --build-dir=*)
+      shift
+      ;;
+    *)
+      emacs_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+exec "${bin}" "${emacs_args[@]}"
