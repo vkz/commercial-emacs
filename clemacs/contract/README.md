@@ -16,3 +16,4 @@ Data files:
 - `bootstrap.files`: the source-of-truth ELisp bootstrap manifest (relative to repo root).
   It is used by `clemacs:inventory:used` and the experimental loader task
   `clemacs:load:bootstrap`.
+- `bootstrap.maxforms`: monotonic checkpoint for `clemacs:load:bootstrap -- --limit 1`.

@@ -85,6 +85,9 @@ Returns NIL if SYMBOL has no function cell value."
   (table (make-hash-table :test 'cl:equal))
   (parent nil))
 
+(defparameter system-type 'darwin)
+(defvar *global-map* nil)
+
 (cl:defun make-keymap ()
   "Extremely small stub for ELisp `make-keymap'."
   (make-elisp-keymap))
@@ -94,19 +97,61 @@ Returns NIL if SYMBOL has no function cell value."
   (declare (ignore _name))
   (make-elisp-keymap))
 
+(cl:defun make-vector (length init)
+  "ELisp-ish MAKE-VECTOR."
+  (make-array length :initial-element init))
+
+(cl:defun aset (array idx value)
+  "ELisp-ish ASET."
+  (setf (aref array idx) value)
+  value)
+
 (cl:defun define-key (keymap key definition)
   "Extremely small stub for ELisp `define-key'.
 
-Only supports string KEYs, and stores DEFINITION verbatim."
+Stores DEFINITION verbatim; KEY can be a string or vector (and is stored as-is)."
   (unless (typep keymap 'elisp-keymap)
     (error "ELISP:DEFINE-KEY expected a keymap, got: ~S" keymap))
-  (unless (stringp key)
-    (error "ELISP:DEFINE-KEY only supports string keys for now, got: ~S" key))
   (setf (gethash key (elisp-keymap-table keymap)) definition)
   definition)
 
+(cl:defun use-global-map (keymap)
+  "Extremely small stub for ELisp `use-global-map'."
+  (setf *global-map* keymap)
+  keymap)
+
+(cl:defun current-global-map ()
+  "Extremely small stub for ELisp `current-global-map'."
+  *global-map*)
+
 (cl:defun make-obsolete (&rest _args)
   "Stub for ELisp `make-obsolete'."
+  (declare (ignore _args))
+  nil)
+
+(cl:defmacro defconst (name value &optional docstring)
+  "ELisp-ish DEFCONST (currently just DEFPARAMETER).
+
+If NAME lives in the CL package, ignore the definition."
+  (declare (ignore docstring))
+  (if (and (symbolp name) (eq (symbol-package name) (find-package "CL")))
+      `(progn ',name)
+      `(defparameter ,name ,value)))
+
+(defparameter -c-@ 0)
+
+(cl:defmacro with-suppressed-warnings (_spec &body body)
+  "Compatibility shim; ignores suppression spec."
+  (declare (ignore _spec))
+  `(progn ,@body))
+
+(cl:defun set-advertised-calling-convention (&rest _args)
+  "Stub for ELisp `set-advertised-calling-convention'."
+  (declare (ignore _args))
+  nil)
+
+(cl:defun make-obsolete-variable (&rest _args)
+  "Stub for ELisp `make-obsolete-variable'."
   (declare (ignore _args))
   nil)
 
@@ -146,6 +191,48 @@ trying to redefine locked symbols while loading upstream ELisp)."
       (sb-cltl2:variable-information symbol env)
     (eq kind :lexical)))
 
+(defvar *elisp-variable-aliases* (make-hash-table :test 'eq))
+
+(cl:defun %resolve-variable-alias (symbol &key (max-hops 16))
+  (loop with cur = symbol
+        for hop from 0 below max-hops do
+          (multiple-value-bind (next presentp)
+              (gethash cur *elisp-variable-aliases*)
+            (cond
+             ((not presentp) (return cur))
+             ((not (symbolp next)) (return cur))
+             (t (setf cur next))))
+        finally
+          (return symbol)))
+
+(cl:defun symbol-value (symbol)
+  "ELisp-ish SYMBOL-VALUE (respects `defvaralias')."
+  (cl:symbol-value (%resolve-variable-alias symbol)))
+
+(cl:defun set (symbol value)
+  "ELisp-ish SET (respects `defvaralias')."
+  (let ((sym (%resolve-variable-alias symbol)))
+    (setf (cl:symbol-value sym) value)
+    value))
+
+(cl:defun defvaralias (new-alias base-variable &optional _docstring)
+  "ELisp-ish DEFVARALIAS."
+  (declare (ignore _docstring))
+  (setf (gethash new-alias *elisp-variable-aliases*) base-variable)
+  new-alias)
+
+(cl:defun define-obsolete-variable-alias (obsolete-name current-name &optional _since)
+  "Stub for ELisp `define-obsolete-variable-alias'."
+  (declare (ignore _since))
+  (defvaralias obsolete-name current-name)
+  obsolete-name)
+
+(cl:defun define-obsolete-function-alias (obsolete-name current-definition &optional _since _docstring)
+  "Stub for ELisp `define-obsolete-function-alias'."
+  (declare (ignore _since _docstring))
+  (defalias obsolete-name current-definition)
+  obsolete-name)
+
 (cl:defmacro setq (&environment env &rest pairs)
   (unless (evenp (length pairs))
     (error "ELISP:SETQ expects an even number of arguments"))
@@ -156,7 +243,7 @@ trying to redefine locked symbols while loading upstream ELisp)."
         (error "ELISP:SETQ only supports symbol variables, got: ~S" var))
       (push (if (%lexical-variable-p var env)
                 `(cl:setq ,var ,val)
-                `(setf (symbol-value ',var) ,val))
+                `(set ',var ,val))
             forms))
     `(progn ,@(nreverse forms))))
 

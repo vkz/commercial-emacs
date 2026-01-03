@@ -108,7 +108,8 @@ alongside the baseline C-hosted Emacs build.
   - `mise run clemacs:test:ert` (ERT-style smoke, ELISP package)
   - Compatibility report: `plans/clemacs-compat.md`
 - Experimental ELisp loader bring-up:
-  - `mise run clemacs:load:bootstrap -- --limit 1` (loads the first entry in `clemacs/contract/bootstrap.files`)
+  - `mise run clemacs:load:bootstrap -- --limit 1` (loads the first entry in `clemacs/contract/bootstrap.files` up to `clemacs/contract/bootstrap.maxforms`)
+  - Gate: `mise run clemacs:test:load-bootstrap` (checkpointed loader)
 - Timing (iteration cost signal):
   - `mise run clemacs:bench:cold`
 

@@ -522,6 +522,8 @@ Status (TODO, 2026-01-03)
 - TODO: Implement dynamic binding semantics needed by core libs (or document an explicit alternative).
 - DONE (2026-01-03): Add a "missing primitive" load error that includes the inventory entry (name + source file).
 - DONE (2026-01-03): Add a new clemacs contract level `elisp-core` (fast-ish) that runs constantly during this phase.
+- DONE (2026-01-03): Add a monotonic loader checkpoint gate:
+  - `mise run clemacs:test:load-bootstrap` loads `lisp/subr.el` up to `clemacs/contract/bootstrap.maxforms`.
 
 Guardrails
 - Keep ELisp native compilation disabled.

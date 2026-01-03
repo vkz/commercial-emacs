@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Load clemacs bootstrap set to a fixed max-forms checkpoint"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}"
+
+export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+
+mise run clemacs:load:bootstrap -- --build-dir "${build_dir}" --limit 1
+
+echo "clemacs bootstrap load: ok"

@@ -39,7 +39,8 @@
 (defpackage #:elisp
   (:use #:cl)
   (:shadow #:defmacro #:defun #:equal #:funcall #:function #:intern #:setq
-           #:symbol-function #:symbol-name #:fboundp)
+           #:symbol-function #:symbol-name #:fboundp #:values #:symbol-value
+           #:set)
   (:export
    #:equal
    #:load-elisp-file

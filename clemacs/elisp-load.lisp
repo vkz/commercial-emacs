@@ -16,7 +16,8 @@
 
 (cl:defun load-bootstrap-set (&key (project-root (uiop:getcwd))
                                    (manifest #p"clemacs/contract/bootstrap.files")
-                                   (limit nil))
+                                   (limit nil)
+                                   (max-forms nil))
   (let* ((project-root (uiop:ensure-directory-pathname project-root))
          (manifest (merge-pathnames manifest project-root))
          (loaded 0))
@@ -28,6 +29,7 @@
                            (not (char= (char line 0) #\#)))
                   (when (and limit (>= loaded limit))
                     (return))
-                  (load-elisp-file (merge-pathnames line project-root))
+                  (load-elisp-file (merge-pathnames line project-root)
+                                   :max-forms max-forms)
                   (incf loaded)))))
     0))

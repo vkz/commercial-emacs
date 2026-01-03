@@ -50,7 +50,7 @@
          rt)
         (setf *elisp-readtable* rt))))
 
-(cl:defun load-elisp-file (path &key (package (find-package "ELISP")))
+(cl:defun load-elisp-file (path &key (package (find-package "ELISP")) (max-forms nil))
   (with-open-file (in path :external-format :utf-8)
     (let ((*package* package)
           (*readtable* (%ensure-elisp-readtable)))
@@ -70,4 +70,6 @@
                            :form-index form-index
                            :form form
                            :cause e
-                           :inventory-entry inv))))))))
+                           :inventory-entry inv))))
+              (when (and max-forms (>= form-index max-forms))
+                (return))))))
