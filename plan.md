@@ -628,7 +628,7 @@ Status (TODO, 2026-01-03)
   - Boundary: CL owns the value model + buffer representation; C provides only TTY + file + OS shims.
   - Deletion plan: timebox any compatibility shims and delete them once the CL implementation is feature-complete.
 - DONE (2026-01-03): Define a clemacs startup manifest + loader entrypoint:
-  - `clemacs/contract/startup.{smoke,check}.files` (monotonic list; currently 28 entries).
+  - `clemacs/contract/startup.{smoke,check}.files` (monotonic list; currently 35 entries).
   - `mise run clemacs:load:startup -- --level smoke|check`
 - DONE (2026-01-03): Add a startup delta report against the pdump load list:
   - `mise run clemacs:report:startup-delta` writes `build/clemacs/reports/startup-delta.md` (path configurable).
@@ -637,6 +637,14 @@ Status (TODO, 2026-01-03)
   - add `lisp/version.el` (first 2 forms only) to define `emacs-major-version` / `emacs-minor-version`.
 - DONE (2026-01-03): Continue growing the clemacs startup manifest toward pdump:
   - add `lisp/emacs-lisp/debug-early.el`.
+- DONE (2026-01-03): Make ELisp backquote/unquote readable and expandable under SBCL:
+  - ELisp reader now rewrites `` `x`` / `,x` / `,@x` into explicit list forms
+    using the symbols `\`` / `\,` / `\,@` (as documented in `lisp/emacs-lisp/backquote.el`),
+  - provide bootstrap runtime shims (`ELISP:APPEND` sequence semantics, `backquote-list*`)
+    so `backquote.el` expansions run under SBCL.
+- DONE (2026-01-03): Add a bootstrap pcase subset for early bring-up:
+  - add minimal `pcase-let*`, `pcase-let`, `pcase-dolist`,
+  - expand `pcase-exhaustive` to support constant/keyword/backquote patterns needed by upstream ERT.
 - DONE (2026-01-03): Add a 1-form startup checkpoint for `byte-run.el`:
   - add `lisp/emacs-lisp/byte-run.el 1` (defines `function-put` without running it yet).
 - DONE (2026-01-03): Add a 1-form startup checkpoint for `keymap.el`:
@@ -672,13 +680,22 @@ Status (TODO, 2026-01-03)
   - add `lisp/obarray.el 1`,
   - add `lisp/case-table.el 1`,
   - add `lisp/international/mule-util.el 1`.
-- TODO: Grow the startup manifest toward the pdump bootstrap load list (`admin/pdump-common.el`),
-  with explicit skip reasons (GUI/nativecomp/modules).
+- DONE (2026-01-03): Grow the startup manifest toward the pdump bootstrap load list (`admin/pdump-common.el`):
+  - reorder `clemacs/contract/startup.{smoke,check}.files` to follow the early pdump load order,
+    and ensure `backquote.el` is loaded before `subr.el` (macro safety),
+  - expand the startup manifest to 35 entries by adding 1-form checkpoints for
+    additional early pdump candidates (`button.el`, `abbrev.el`, `help.el`,
+    `cl-preloaded.el`, `oclosure.el`, `cl-seq.el`, `seq.el`).
 - DONE (2026-01-03): Add a clemacs ERT gate based on upstream tests:
   - `mise run clemacs:test:ert-upstream` loads upstream `ert.el` + `ert-tests.el` and runs a must-pass list from `clemacs/contract/ert-upstream.tests`.
-- DONE (2026-01-03): Expand the upstream ERT gate to a small, meaningful core set:
-  - `clemacs/contract/ert-upstream.tests` currently has 19 must-pass tests (0 XFAIL).
-- TODO: Continue expanding the upstream ERT gate:
-  - keep growing `clemacs/contract/ert-upstream.tests` (pure/core tests first),
-  - advance `clemacs/contract/ert-tests.maxforms` as those tests become runnable,
-  - keep temporary failures in `clemacs/contract/ert-upstream.known-fail.tests` until fixed (XPASS is a gate failure).
+- DONE (2026-01-03): Expand the upstream ERT gate (explicit list + checkpoints):
+  - advance `clemacs/contract/ert-tests.maxforms` to 120 (loads ~54 `ert-test-*` defs),
+  - expand `clemacs/contract/ert-upstream.tests` to 30 tests (22 pass + 8 XFAIL),
+  - track temporary failures in `clemacs/contract/ert-upstream.known-fail.tests`
+    (XPASS is a gate failure).
+- TODO: Reduce upstream ERT XFAILs by implementing missing core helpers / parity:
+  - fix `cl-defstruct` constructor parity where tests depend on it,
+  - implement enough of explainers (`ert--explain-equal*` path) to clear
+    `ert-test-get-explainer` and plist explanation tests,
+  - implement `with-demoted-errors` (or a faithful substitute) for `ert-test-with-demoted-errors`,
+  - re-run `mise run clemacs:test:ert-upstream` and shrink `ert-upstream.known-fail.tests` monotonically.

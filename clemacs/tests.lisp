@@ -41,6 +41,11 @@
         (*readtable* (elisp::%ensure-elisp-readtable)))
     (eval (read-from-string string))))
 
+(defun %elisp-read-1 (string)
+  (let ((*package* (find-package "ELISP"))
+        (*readtable* (elisp::%ensure-elisp-readtable)))
+    (read-from-string string)))
+
 (fiveam:test substrate-basics
   (let ((version (clemacs:substrate-version))
         (platform (clemacs:substrate-platform)))
@@ -104,6 +109,41 @@
             (if emacs-out
                 (fiveam:is (string= emacs-out expected))
                 (fiveam:skip "emacs not on PATH"))))))))
+
+(fiveam:test elisp-reader-backquote
+  (let* ((form (%elisp-read-1 "`(a ,b ,@c)")))
+    (fiveam:is (and (consp form) (string= (cl:symbol-name (car form)) "`")))
+    (let* ((elisp (find-package "ELISP"))
+           (comma (cl:intern "," elisp))
+           (comma-at (cl:intern ",@" elisp)))
+      (fiveam:is
+       (equal
+        (second form)
+        (list (cl:intern "A" elisp)
+              (list comma (cl:intern "B" elisp))
+              (list comma-at (cl:intern "C" elisp))))))))
+
+(fiveam:test elisp-backquote-vectors
+  (let* ((project-root
+           (uiop:ensure-directory-pathname
+            (or (uiop:getenv "MISE_PROJECT_ROOT")
+                (uiop:pathname-parent-directory-pathname
+                 (asdf:system-source-directory :clemacs)))))
+         (backquote-el (merge-pathnames #p"lisp/emacs-lisp/backquote.el" project-root)))
+    (unless (fboundp 'elisp::backquote)
+      (elisp::load-elisp-file backquote-el))
+    (let ((value (%elisp-eval-1 "`(x #(0 255))")))
+    (fiveam:is (and (consp value) (eql (car value) 'elisp::x)))
+    (fiveam:is (vectorp (cadr value)))
+    (fiveam:is (= (length (cadr value)) 2))
+    (fiveam:is (= (aref (cadr value) 0) 0))
+    (fiveam:is (= (aref (cadr value) 1) 255)))))
+
+(fiveam:test elisp-pcase-dolist-simple
+  (let ((value
+          (%elisp-eval-1
+           "(let ((states '((a t 1) (b nil 2))) (out nil)) (pcase-dolist (`(,v ,l ,val) states) (setq out (cons v out))) out)")))
+    (fiveam:is (string= (%clemacs-prin1 value) "(b a)"))))
 
 (defun run-smoke (&key (stream *standard-output*))
   (let ((fiveam:*test-dribble* stream))

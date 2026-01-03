@@ -42,6 +42,7 @@
   (:use #:cl)
   (:shadow #:defmacro #:defun #:equal #:funcall #:function #:intern #:make-hash-table #:provide #:require #:setq
            #:make-list #:format
+           #:append
            #:symbol-function #:symbol-name #:fboundp #:values #:symbol-value
            #:signal #:handler-bind #:error
            #:set)

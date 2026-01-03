@@ -4,54 +4,53 @@
 # equivalent of "what we load at editor startup" (eventually driven by the
 # pdump bootstrap load list in admin/pdump-common.el, or a close analogue).
 #
-# 2026-01-03: seed with the current subr.el bootstrap checkpoint.
+# 2026-01-03: seed with the early pdump load order (admin/pdump-common.el).
+#
+# NOTE: `backquote.el` must be loaded before any files that define macros using
+# backquote syntax, otherwise those macro definitions can get compiled against a
+# missing `backquote` macro and later misbehave at expansion time.
 
-lisp/subr.el 340
-lisp/emacs-lisp/backquote.el
-lisp/version.el 2
-# 2026-01-03: pdump candidate; should be dependency-free (errors only on use).
+# pdump: debug-early, byte-run, backquote, subr, keymap, version.
 lisp/emacs-lisp/debug-early.el
-
-# 2026-01-03: pdump candidate; start with a 1-form checkpoint (defines function-put).
 lisp/emacs-lisp/byte-run.el 1
-
-# 2026-01-03: pdump candidate; start with a 1-form checkpoint (defines keymap--check).
+lisp/emacs-lisp/backquote.el
+lisp/subr.el 340
 lisp/keymap.el 1
+lisp/version.el 2
 
-# 2026-01-03: pdump candidate; start with a 1-form checkpoint (defines define-widget-keywords).
+# pdump: widget, custom, map-ynp, mule, mule-conf, env, format, bindings, window, files.
 lisp/widget.el 1
-
-# 2026-01-03: pdump candidate; start with a 1-form checkpoint (defines read-envvar-name-history).
-lisp/env.el 1
-
-# 2026-01-03: pdump candidate; start with a 2-form checkpoint (buffer-file-format props only).
-lisp/format.el 2
-
-# 2026-01-03: pdump candidates; grow by safe early checkpoints.
 lisp/custom.el 1
 lisp/emacs-lisp/map-ynp.el 1
 lisp/international/mule.el 4
+lisp/international/mule-conf.el 200
+lisp/env.el 1
+lisp/format.el 2
 lisp/bindings.el 1
 lisp/window.el 1
 lisp/files.el 1
 
-# 2026-01-03: pdump candidates; start with 1-form checkpoints where safe.
+# pdump: macroexp, pcase, cus-face, faces, regexp-opt, rx.
 lisp/emacs-lisp/macroexp.el 1
 lisp/emacs-lisp/pcase.el 1
-lisp/emacs-lisp/gv.el 1
-lisp/emacs-lisp/cl-lib.el 1
-lisp/emacs-lisp/cl-macs.el 1
 lisp/cus-face.el 1
 lisp/faces.el 1
-
-# 2026-01-03: pdump entry; charset property plumbing bring-up.
-lisp/international/mule-conf.el 200
-
-# 2026-01-03: pdump candidates; small pure ELisp utilities.
 lisp/emacs-lisp/regexp-opt.el 1
 lisp/emacs-lisp/rx.el 1
 
-# 2026-01-03: pdump candidates; 1-form checkpoints (definitions only).
+# pdump: button, gv, cl-lib, cl-macs, cl-preloaded, oclosure, cl-seq, seq.
+lisp/button.el 1
+lisp/emacs-lisp/gv.el 1
+lisp/emacs-lisp/cl-lib.el 1
+lisp/emacs-lisp/cl-macs.el 1
+lisp/emacs-lisp/cl-preloaded.el 1
+lisp/emacs-lisp/oclosure.el 1
+lisp/emacs-lisp/cl-seq.el 1
+lisp/emacs-lisp/seq.el 1
+
+# pdump: obarray, abbrev, help, mule-util, case-table.
 lisp/obarray.el 1
-lisp/case-table.el 1
+lisp/abbrev.el 1
+lisp/help.el 1
 lisp/international/mule-util.el 1
+lisp/case-table.el 1

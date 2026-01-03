@@ -226,6 +226,40 @@ Currently does not load code; it only records FEATURE as provided."
     (provide feature))
   feature)
 
+(cl:defmacro |`| (structure)
+  "ELisp backquote reader form: (` STRUCTURE) -> (backquote STRUCTURE)."
+  `(backquote ,structure))
+
+(cl:defun backquote-list* (&rest args)
+  "Run-time helper used by `lisp/emacs-lisp/backquote.el' expansions."
+  (apply #'cl:list* args))
+
+(cl:defun append (&rest seqs)
+  "ELisp-ish APPEND.
+
+Supports lists and vectors (and strings as a sequence of characters).
+This is sufficient for `lisp/emacs-lisp/backquote.el', which uses
+`(append VEC ())' to turn a vector into a list of its elements."
+  (labels ((seq->list (x &key (copy t))
+             (cond
+              ((null x) nil)
+              ((consp x) (if copy (copy-list x) x))
+              ((vectorp x) (coerce x 'list))
+              ((stringp x) (coerce x 'list))
+              (t (error "ELISP:APPEND unsupported type: ~S" (type-of x))))))
+    (cond
+     ((null seqs) nil)
+     ((null (cdr seqs)) (seq->list (car seqs)))
+     (t
+      (let* ((last (car (last seqs)))
+             (prefix (butlast seqs))
+             (acc nil))
+        (dolist (s prefix)
+          (setf acc (nconc acc (seq->list s))))
+        (if (listp last)
+            (nconc acc last)
+            (nconc acc (seq->list last))))))))
+
 (cl:defmacro eval-when-compile (&rest body)
   "Bring-up stub for ELisp `eval-when-compile'.
 
@@ -239,6 +273,147 @@ matching the non-byte-compiler definition in `lisp/emacs-lisp/byte-run.el'."
 We evaluate BODY at macro-expansion time and return a quoted constant,
 matching the non-byte-compiler definition in `lisp/emacs-lisp/byte-run.el'."
   (list 'quote (eval (cons 'progn body))))
+
+;; ---------------------------------------------------------------------------
+;; Minimal pcase subset (bring-up)
+;;
+;; Goal: support the common `pcase-dolist' destructuring patterns used across
+;; the shipped ELisp tree, without pulling in the full upstream `pcase.el'
+;; machinery yet.
+;;
+;; This is intentionally a subset. The plan is to eventually load and run the
+;; upstream `lisp/emacs-lisp/pcase.el' implementation under clemacs, at which
+;; point these stubs should become unused/overridden.
+;; ---------------------------------------------------------------------------
+
+(cl:defun %pcase--dontcare-p (pat)
+  (and (symbolp pat) (or (eq pat '_) (eq pat t) (eq pat 'pcase--dontcare))))
+
+(cl:defun %pcase--comma-form-p (x)
+  (and (consp x) (symbolp (car x)) (string= (symbol-name (car x)) ",")))
+
+(cl:defun %pcase--comma-at-form-p (x)
+  (and (consp x) (symbolp (car x)) (string= (symbol-name (car x)) ",@")))
+
+(cl:defun %pcase--bq-form-p (x)
+  (and (consp x) (symbolp (car x)) (string= (symbol-name (car x)) "`")))
+
+(cl:defun %pcase--collect-vars (pat)
+  (let ((vars nil))
+    (labels ((walk (p)
+               (cond
+                ((%pcase--dontcare-p p) nil)
+                ((symbolp p) (pushnew p vars :test #'eq))
+                ((%pcase--comma-form-p p)
+                 (when (= (length p) 2) (walk (cadr p))))
+                ((%pcase--comma-at-form-p p)
+                 (when (= (length p) 2) (walk (cadr p))))
+                ((%pcase--bq-form-p p)
+                 (when (= (length p) 2) (walk (cadr p))))
+                ((consp p)
+                 (walk (car p))
+                 (walk (cdr p)))
+                (t nil))))
+      (walk pat))
+    (nreverse vars)))
+
+(cl:defun %pcase--template->lambda-list (tmpl)
+  "Translate a backquote template TMPL into a destructuring-bind lambda list.
+
+Returns (values LAMBDA-LIST CHECKS BINDINGS), where:
+- LAMBDA-LIST is suitable for CL:DESTRUCTURING-BIND.
+- CHECKS is a list of forms (in terms of the destructured vars) that must hold.
+- BINDINGS is the list of ELisp variables introduced."
+  (let ((checks nil)
+        (bindings nil))
+    (labels ((gen-elt (x)
+               (cond
+                ((%pcase--comma-form-p x)
+                 (let ((p (cadr x)))
+                   (cond
+                    ((%pcase--dontcare-p p) (gensym "_"))
+                    ((symbolp p) (pushnew p bindings :test #'eq) p)
+                    (t
+                     (let ((g (gensym "PCASE-")))
+                       (push `(elisp:equal ,g ',p) checks)
+                       g)))))
+                ((%pcase--comma-at-form-p x)
+                 (let ((p (cadr x)))
+                   (cond
+                    ((%pcase--dontcare-p p) '&rest)
+                    ((symbolp p) (pushnew p bindings :test #'eq) (list '&rest p))
+                    (t
+                     (let ((g (gensym "REST-")))
+                       (push `(elisp:equal ,g ',p) checks)
+                       (list '&rest g))))))
+                ((consp x)
+                 (let ((car (gen-elt (car x)))
+                       (cdr (gen-elt (cdr x))))
+                   (cond
+                    ((and (consp car) (eq (car car) '&rest))
+                     (cl:error "pcase: ,@ only supported in list tail position"))
+                    ((and (consp cdr) (eq (car cdr) '&rest))
+                     (cons car cdr))
+                    (t (cons car cdr)))))
+                ((null x) nil)
+                ((vectorp x)
+                 ;; Basic vector destructuring: translate to a list of elements.
+                 (let ((lst (map 'list #'identity x)))
+                   (coerce (mapcar #'gen-elt lst) 'vector)))
+                (t
+                 (let ((g (gensym "K-")))
+                   (push `(elisp:equal ,g ',x) checks)
+                   g)))))
+      (let ((ll (gen-elt tmpl)))
+        (cl:values ll (nreverse checks) (nreverse bindings))))))
+
+(cl:defmacro pcase-let* (bindings &rest body)
+  "Bring-up subset of ELisp `pcase-let*'.
+
+Supports destructuring patterns of the form:
+- SYMBOL (binds the whole value)
+- `_`/`t` (don't care)
+- backquote templates using `\, and `\,@ (from the ELisp reader)."
+  (let ((forms body))
+    (labels
+        ((expand (bs)
+           (if (null bs)
+               `(progn ,@forms)
+               (destructuring-bind (pat expr) (car bs)
+                 (cond
+                  ((%pcase--dontcare-p pat)
+                   `(let ((,(gensym "_") ,expr))
+                      ,(expand (cdr bs))))
+                  ((symbolp pat)
+                   `(let ((,pat ,expr))
+                      ,(expand (cdr bs))))
+                  ((%pcase--bq-form-p pat)
+                   (let ((tmp (gensym "PCASE-VALUE-")))
+                     (multiple-value-bind (ll checks _vars)
+                         (%pcase--template->lambda-list (cadr pat))
+                       (declare (ignore _vars))
+                       `(let ((,tmp ,expr))
+                          (destructuring-bind ,ll ,tmp
+                            (unless (and ,@checks)
+                              (error "pcase-let*: pattern mismatch: %S %S" ',pat ,tmp))
+                            ,(expand (cdr bs)))))))
+                  (t
+                   (cl:error "pcase-let*: unsupported pattern: ~S" pat)))))))
+      (expand bindings))))
+
+(cl:defmacro pcase-let (bindings &rest body)
+  "Bring-up subset of ELisp `pcase-let'."
+  `(pcase-let* ,bindings ,@body))
+
+(cl:defmacro pcase-dolist (spec &rest body)
+  "Bring-up subset of ELisp `pcase-dolist'."
+  (destructuring-bind (pat listform) spec
+    (if (%pcase--dontcare-p pat)
+        `(dolist (_ ,listform) ,@body)
+      (let ((tmp (gensym "PCASE-ELT-")))
+        `(dolist (,tmp ,listform)
+           (pcase-let* ((,pat ,tmp))
+             ,@body))))))
 
 (cl:defmacro defgroup (name _parents _docstring &rest _args)
   "Stub for ELisp `defgroup'."
@@ -388,6 +563,10 @@ an augmented SBCL lexical environment."
   "Minimal subset of cl-lib's `cl-loop'."
   `(cl:loop ,@clauses))
 
+(cl:defmacro cl-incf (place &optional (delta 1))
+  "Minimal subset of cl-lib's `cl-incf'."
+  `(cl:incf ,place ,delta))
+
 (cl:defmacro cl-return (&optional value)
   "Minimal subset of cl-lib's `cl-return'."
   `(cl:return ,value))
@@ -429,6 +608,16 @@ an augmented SBCL lexical environment."
             ((symbolp prefix) (symbol-name prefix))
             (t (cl:error "ELISP:CL-GENSYM unsupported prefix: ~S" prefix)))))
     (gensym (string-upcase p))))
+
+(cl:defun cl-coerce (object type)
+  "Bring-up subset of cl-lib's `cl-coerce'.
+
+ELisp tends to pass type names as ELISP package symbols (e.g. `list'),
+whereas CL:COERCE expects CL type names."
+  (let ((type (if (symbolp type)
+                  (intern (string-upcase (symbol-name type)) (find-package "CL"))
+                  type)))
+    (coerce object type)))
 
 (cl:defun cl-search (sequence1 sequence2 &rest args &key (test 'eql) &allow-other-keys)
   "Bring-up subset of cl-lib's `cl-search'."
@@ -493,8 +682,27 @@ Unsupported places error with a clear message."
     (expand bindings)))
 
 (cl:defmacro cl-defstruct (&rest args)
-  "Minimal subset of cl-lib's `cl-defstruct'."
-  `(cl:defstruct ,@args))
+  "Minimal subset of cl-lib's `cl-defstruct'.
+
+cl-lib's `cl-defstruct' provides a constructor function with the same name as
+the struct (e.g. `ert-test-passed'), whereas CL:DEFSTRUCT defaults to
+`make-<name>'.  Upstream ERT depends on the cl-lib behavior."
+  (let* ((spec (car args))
+         (name (if (consp spec) (car spec) spec)))
+    (if (and (symbolp name)
+             (not (eq (symbol-package name) (find-package "CL"))))
+        (let ((make-name
+                (intern (cl:format nil "MAKE-~A" (string-upcase (symbol-name name)))
+                        (symbol-package name))))
+          `(progn
+             (cl:defstruct ,@args)
+             (defun ,name (&rest initargs)
+               (if (and initargs
+                        (keywordp (car initargs))
+                        (cl:evenp (length initargs)))
+                   (apply #',make-name initargs)
+                   (funcall #',make-name)))))
+        `(cl:defstruct ,@args))))
 
 (cl:defun put (symbol prop value)
   "ELisp-ish PUT for symbol plists."
@@ -823,24 +1031,52 @@ Return (values EXPANDED EXPANDEDP)."
 (cl:defmacro pcase-exhaustive (expr &rest clauses)
   "Bring-up subset of ELisp `pcase-exhaustive'.
 
-Supports only `(pred <fn>)' patterns (sufficient for upstream ERT bring-up)."
-  (let ((v (gensym "PCASE-")))
+Supports a small set of patterns used by upstream ERT:
+- `_` (default)
+- (pred FN)
+- quoted constants (e.g. 'nil)
+- keyword constants (e.g. :failed)
+- backquote templates using `\, and `\,@."
+  (let ((v (gensym "PCASE-"))
+        (done (gensym "PCASE-DONE-")))
     `(let ((,v ,expr))
-       (cond
-        ,@(mapcar
-           (lambda (clause)
-             (destructuring-bind (pattern &rest body) clause
-               (cond
-                ((and (consp pattern) (eq (car pattern) 'pred) (= (length pattern) 2))
-                 (let ((pred (cadr pattern)))
-                   `((,pred ,v) (progn ,@body))))
-                ((eq pattern '_)
-                 `(t (progn ,@body)))
-                (t
-                 (cl:error "ELISP:PCASE-EXHAUSTIVE unsupported pattern: ~S" pattern)))))
-           clauses)
-        (t
-         (error "pcase-exhaustive: no match for %S" ,v))))))
+       (block ,done
+         ,@(mapcar
+            (lambda (clause)
+              (destructuring-bind (pattern &rest body) clause
+                (cond
+                 ((eq pattern '_)
+                  `(return-from ,done (progn ,@body)))
+                 ((and (consp pattern) (eq (car pattern) 'pred) (= (length pattern) 2))
+                  (let ((pred (cadr pattern)))
+                    `(when (,pred ,v)
+                       (return-from ,done (progn ,@body)))))
+                 ((and (consp pattern) (eq (car pattern) 'quote) (= (length pattern) 2))
+                  (let ((k (cadr pattern)))
+                    `(when (elisp:equal ,v ',k)
+                       (return-from ,done (progn ,@body)))))
+                 ((and (symbolp pattern)
+                       (eq (symbol-package pattern) (find-package "KEYWORD")))
+                  `(when (eql ,v ,pattern)
+                     (return-from ,done (progn ,@body))))
+                 ((%pcase--bq-form-p pattern)
+                  (let ((tmp (gensym "PCASE-TMP-")))
+                    (multiple-value-bind (ll checks _vars)
+                        (%pcase--template->lambda-list (cadr pattern))
+                      (declare (ignore _vars))
+                      `(let ((,tmp ,v))
+                         (handler-case
+                             (destructuring-bind ,ll ,tmp
+                               (when (and ,@checks)
+                                 (return-from ,done (progn ,@body))))
+                           (cl:error () nil))))))
+                 ((null pattern)
+                  `(when (null ,v)
+                     (return-from ,done (progn ,@body))))
+                 (t
+                  (cl:error "ELISP:PCASE-EXHAUSTIVE unsupported pattern: ~S" pattern)))))
+            clauses)
+         (error "pcase-exhaustive: no match for %S" ,v)))))
 
 (cl:defun macroexp--fgrep (bindings sexp)
   "Bring-up subset of `macroexp--fgrep'.

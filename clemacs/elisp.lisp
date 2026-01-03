@@ -39,6 +39,33 @@
 (cl:defun %ensure-elisp-readtable ()
   (or *elisp-readtable*
       (let ((rt (copy-readtable nil)))
+        ;; Emacs Lisp backquote/unquote are not reader macros in the CL sense:
+        ;; they read into explicit forms using the symbols `\, and \,@.
+        ;; This is important because ELisp code expects to see those symbols
+        ;; (e.g. backquote.el and pcase patterns).
+        (let ((bq (cl:intern "`" (find-package "ELISP")))
+              (uq (cl:intern "," (find-package "ELISP")))
+              (sp (cl:intern ",@" (find-package "ELISP"))))
+          (set-macro-character
+           #\`
+           (lambda (stream char)
+             (declare (ignore char))
+             (list bq (read stream t nil t)))
+           nil
+           rt)
+          (set-macro-character
+           #\,
+           (lambda (stream char)
+             (declare (ignore char))
+             (let ((next (peek-char nil stream nil nil t)))
+               (cond
+                ((and next (char= next #\@))
+                 (read-char stream nil nil t)
+                 (list sp (read stream t nil t)))
+                (t
+                 (list uq (read stream t nil t))))))
+           nil
+           rt))
         (set-macro-character
          #\"
          (lambda (stream char)

@@ -3,10 +3,15 @@
 # Keep this list monotonic during bring-up; move temporary failures to
 # `ert-upstream.known-fail.tests` with a short reason + date.
 ert-test-body-runs
+ert-test-abbreviate-string
+ert-test-deftest
 ert-test-nested-test-body-runs
 ert-test-pass
 ert-test-fail
 ert-test-error
+ert-test-get-explainer
+ert-test-parse-keys-and-body
+ert-test-plist-difference-explanation
 ert-test-should
 ert-test-should-not
 ert-test-should-value
@@ -21,3 +26,9 @@ ert-test-deftest-lexical-binding-t
 ert-test-special-operator-p
 ert-test-list-of-should-forms
 ert-test-list-of-should-forms-observers-should-not-stack
+ert-test-significant-plist-keys
+ert-test-stats-set-test-and-result
+ert-test-string-first-line
+ert-test-test-boundp
+ert-test-test-result-expected-p
+ert-test-with-demoted-errors
