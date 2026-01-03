@@ -383,6 +383,14 @@ Deliverables
 Gate
 - CL tests cover handle allocation/freeing and error propagation.
 
+Status (DONE, 2026-01-03)
+- DONE: Define substrate status/errno-ish contract (`emx_status` + small code set).
+- DONE: Add substrate function to exercise errors (`emx_substrate_parse_int`).
+- DONE: Implement CL-side handle table (`make-handle-table`, `handle-alloc/get/free`).
+- DONE: Implement CL-side error model (conditions + status->condition mapping).
+- DONE: Smoke test covers handle semantics + error propagation (`mise run clemacs:test:smoke`).
+- TODO: Replace ad-hoc smoke assertions with a real CL test framework once we add one (FiveAM/Parachute).
+
 ### Milestone B1-3: Elisp-as-CL dialect loader (source first)
 
 Deliverables

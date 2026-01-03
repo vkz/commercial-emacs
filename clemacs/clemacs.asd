@@ -5,6 +5,8 @@
   :serial t
   :components
   ((:file "package")
+   (:file "errors")
+   (:file "handles")
    (:file "main")
    (:file "substrate")
    (:file "tests")))

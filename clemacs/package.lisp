@@ -1,8 +1,20 @@
 (defpackage #:clemacs
   (:use #:cl)
   (:export
+   #:clemacs-error
+   #:clemacs-quit
+   #:clemacs-substrate-error
+   #:clemacs-substrate-error-message
+   #:clemacs-substrate-error-status
+   #:emx-value
+   #:handle-alloc
+   #:handle-free
+   #:handle-get
+   #:handle-table
+   #:make-handle-table
    #:main
    #:substrate-platform
+   #:substrate-parse-int
    #:substrate-version))
 
 (defpackage #:clemacs.test
