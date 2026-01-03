@@ -482,3 +482,106 @@ Status (DONE, 2026-01-03)
   - implement a tiny ERT-like harness in the `ELISP` package,
   - run a handful of ERT-style tests from `clemacs/contract/ert-smoke.el` via `mise run clemacs:test:ert`,
   - include it in the `check` contract level (`mise run clemacs:test:contract -- --level check`).
+
+## Next milestones (end goal: Emacs shipped ELisp runs under clemacs)
+
+Important: the current `inventory/` is a complete inventory of the C-defined
+ELisp surface area in the *C-hosted* Emacs build. We have not yet "replaced"
+those sites in C; that work is the remaining roadmap.
+
+We will drive the remaining work with three synced loops:
+
+1) Inventory: use `inventory/*` as the authoritative checklist of primitives
+2) Load: attempt to load more of `lisp/` under clemacs, recording missing pieces
+3) Tests: run increasingly large ERT suites under clemacs with explicit skip lists
+
+### Milestone B1-7: inventory-driven ELisp core (values + env + function cells)
+
+Deliverables
+- A CL value model sufficient to represent Emacs Lisp "user space":
+  symbols (value cell + function cell + plist), conses, strings, vectors, numbers.
+- A CL evaluator/expander path capable of handling core special forms, at least:
+  `quote`, `progn`, `if`, `cond`, `let`/`let*`, `setq`, `function`, `lambda`,
+  `and`/`or`, `catch`/`throw`, `condition-case` (or an explicit substitute).
+- A compatibility layer where unsupported forms fail loudly with actionable errors.
+
+Gate
+- A clemacs gate that loads and runs a small curated ELisp "bootstrap set"
+  without modifying `lisp/` (prefer adding shims first).
+
+Status (TODO, 2026-01-03)
+- TODO: Create a clemacs-side inventory view:
+  - extract "used primitives" by scanning/evaluating a bootstrap set of `lisp/*.el`,
+  - cross-check against `inventory/runtime-subrs.json` and record missing coverage.
+- TODO: Implement CL symbol cells (value cell + function cell) and a basic `defun`/`fset` story.
+- TODO: Implement dynamic binding semantics needed by core libs (or document an explicit alternative).
+- TODO: Add a "missing primitive" error format that includes the inventory entry (name + source file).
+- TODO: Add a new clemacs contract level `elisp-core` (fast) that runs constantly during this phase.
+
+Guardrails
+- Keep ELisp native compilation disabled.
+- Do not reintroduce GUI backends, dynamic modules, or X11/NS backends.
+- Any temporary B2-like bridge must be explicitly timeboxed in the plan and removed.
+
+### Milestone B1-8: load the shipped `lisp/` tree under clemacs
+
+Deliverables
+- A deterministic clemacs loader that can load (most of) `lisp/` from this repo.
+- A mechanical rewrite path for cases where we intentionally diverge from upstream ELisp.
+  (Prefer a translator that writes patches into a dedicated `clemacs/ported/` tree.)
+
+Gate
+- `mise run clemacs:load:lisp -- --level smoke` loads an explicit list of ELisp files and exits 0.
+- The list is data in-repo and grows monotonically (no deleting to get green).
+
+Status (TODO, 2026-01-03)
+- TODO: Define a source-of-truth manifest for the initial ELisp bootstrap set
+  (files + load order), committed under `clemacs/contract/`.
+- TODO: Add `mise` tasks:
+  - `clemacs:load:lisp -- --level smoke|check`
+  - `clemacs:port:regen` (optional, generates mechanical rewrites into `clemacs/ported/`)
+- TODO: Load the bootstrap set without modifying `lisp/` (first), then introduce a mechanical
+  rewrite step only when necessary.
+- TODO: Track allowed skips explicitly (GUI/nativecomp/modules) with reasons and dates.
+
+### Milestone B1-9: run upstream ERT suites under clemacs
+
+Deliverables
+- Ability to run a meaningful subset of upstream ERT tests shipped in this repo under clemacs.
+- Explicit contract data for:
+  - must-pass,
+  - allowed-skip (removed features),
+  - known-fail (temporary, tracked).
+
+Gate
+- `mise run clemacs:test:contract -- --level check` runs:
+  - clemacs smoke + tty + ERT subset,
+  and fails on regressions.
+
+Status (TODO, 2026-01-03)
+- TODO: Replace the ERT prototype with a compatibility layer that can load and run upstream `lisp/emacs-lisp/ert.el`.
+- TODO: Start with one upstream test file (e.g. `lisp/emacs-lisp/ert-tests.el`) and grow from there.
+- TODO: Add a delta report mode:
+  - compare clemacs results against `emacs -Q --batch` when available,
+  - record divergences in `plans/clemacs-compat.md`.
+
+### Milestone B1-10: swap the ELisp engine in a running Emacs
+
+This is the endgame milestone: a TTY Emacs that uses the CL-hosted ELisp engine.
+On this branch we keep pursuing Option B (SBCL-hosted) rather than Option A (C-hosted embed).
+
+Deliverables
+- A runnable editor process whose command loop uses the clemacs evaluator for ELisp.
+- A plan for how the remaining C editor subsystems migrate behind the substrate boundary.
+
+Acceptance criteria
+- `mise run run` starts the editor in a terminal using the clemacs engine.
+- A curated set of shipped ELisp loads at startup.
+- `mise run test:smoke` (or an agreed successor contract) passes with an explicit skip list.
+
+Status (TODO, 2026-01-03)
+- TODO: Decide the concrete integration shape for "running Emacs" on this branch:
+  - SBCL-hosted `emacs` binary (SBCL main + C substrate), or
+  - transitional C-hosted shim (explicitly timeboxed) to reach parity faster.
+- TODO: Write down the first C subsystem to migrate (buffers/windowing/keymaps/minibuffer),
+  with an explicit API boundary and deletion plan for shims.
