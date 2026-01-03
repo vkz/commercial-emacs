@@ -31,6 +31,7 @@ deps_dir="${project_root}/${build_dir}/deps"
 
 qlfile_src="${project_root}/clemacs/qlfile"
 qlfile_lock_src="${project_root}/clemacs/qlfile.lock"
+asd_src="${project_root}/clemacs/clemacs.asd"
 
 if [[ ! -f "${qlfile_src}" ]]; then
   echo "[clemacs:deps:install] missing ${qlfile_src}" >&2
@@ -57,6 +58,9 @@ ln -sf "${qlfile_src}" "${deps_dir}/qlfile"
 if [[ -f "${qlfile_lock_src}" ]]; then
   ln -sf "${qlfile_lock_src}" "${deps_dir}/qlfile.lock"
 fi
+if [[ -f "${asd_src}" ]]; then
+  ln -sf "${asd_src}" "${deps_dir}/clemacs.asd"
+fi
 
 mkdir -p "${cache_dir}"
 
@@ -74,6 +78,10 @@ if [[ -f "${deps_dir}/.qlot/setup.lisp" && -f "${stamp_file}" ]]; then
     echo "[clemacs:deps:install] deps up to date (stamp match)"
     exit 0
   fi
+fi
+
+if [[ -d "${deps_dir}/.qlot" ]]; then
+  rm -rf "${deps_dir}/.qlot"
 fi
 
 echo "[clemacs:deps:install] installing deps into ${deps_dir}/.qlot (cache: ${cache_dir})"

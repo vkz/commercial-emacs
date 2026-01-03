@@ -25,6 +25,9 @@
 (cffi:defcfun ("emx_tty_write" %emx-tty-write) :int32
   (buf :pointer)
   (len :int32))
+(cffi:defcfun ("emx_tty_get_winsize" %emx-tty-get-winsize) :int32
+  (out-rows :pointer)
+  (out-cols :pointer))
 
 (defun %check-substrate-status (status)
   (cond
@@ -67,3 +70,9 @@
   (let ((octets (babel:string-to-octets s :encoding :utf-8)))
     (cffi:with-pointer-to-vector-data (ptr octets)
       (%check-substrate-status (%emx-tty-write ptr (length octets))))))
+
+(defun tty-winsize ()
+  (ensure-substrate-loaded)
+  (cffi:with-foreign-objects ((rows :int32) (cols :int32))
+    (%check-substrate-status (%emx-tty-get-winsize rows cols))
+    (values (cffi:mem-ref rows :int32) (cffi:mem-ref cols :int32))))

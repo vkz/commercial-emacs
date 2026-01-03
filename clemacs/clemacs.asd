@@ -1,7 +1,7 @@
 (asdf:defsystem "clemacs"
   :description "SBCL-hosted clemacs bring-up scaffold"
   :version "0.0.1"
-  :depends-on ("cffi")
+  :depends-on ("babel" "cffi" "fiveam")
   :serial t
   :components
   ((:file "package")

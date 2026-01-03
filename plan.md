@@ -392,7 +392,7 @@ Status (DONE, 2026-01-03)
 - DONE: Implement CL-side handle table (`make-handle-table`, `handle-alloc/get/free`).
 - DONE: Implement CL-side error model (conditions + status->condition mapping).
 - DONE: Smoke test covers handle semantics + error propagation (`mise run clemacs:test:smoke`).
-- TODO: Replace ad-hoc smoke assertions with a real CL test framework once we add one (FiveAM/Parachute).
+- DONE (2026-01-03): Replace ad-hoc smoke assertions with FiveAM (still invoked via `mise run clemacs:test:smoke`).
 
 ### Milestone B1-3: Elisp-as-CL dialect loader (source first)
 
@@ -410,7 +410,9 @@ Status (DONE, 2026-01-03)
 - DONE: Add an `ELISP` package and a restricted reader (supports `[]` vectors and `?x` chars).
 - DONE: Add initial compat shims: `plist-get`, `plist-put`.
 - DONE: Extend `clemacs:test:smoke` to evaluate a handful of ELisp forms and cross-check against `emacs -Q --batch` when `emacs` is on PATH.
-- TODO: Decide how we want to handle CL compiler warnings for Elisp-style global `setq` (e.g. treat unknown globals as special).
+- DONE (2026-01-03): Implement `ELISP:SETQ` as a macro that:
+  - preserves lexical bindings when inside `let`,
+  - treats unknown/global variables as `symbol-value` assignments to avoid noisy CL undefined-variable warnings.
 
 ### Milestone B1-4: hello TTY command loop
 
@@ -431,8 +433,9 @@ Status (TODO, 2026-01-03)
 - DONE: Add substrate TTY API (raw mode + byte read/write).
 - DONE: Add CL TTY loop (`clemacs:tty-main`) with insert/backspace and basic cursor moves.
 - DONE: Add `mise` entrypoint for interactive bring-up: `mise run clemacs:tty:run` (restores `stty` on exit).
-- TODO: Manual gate: run `mise run clemacs:tty:run -- /tmp/clemacs-tty.txt`, type text, move point (C-b/C-f), save (C-s), quit (C-q), and confirm terminal state is restored.
-- TODO: Implement multi-line/viewport behavior and a real "save/quit" command chord (e.g. C-x C-s / C-x C-c) once we care about keymaps.
+- DONE (2026-01-03): Add multi-line display with a viewport (uses terminal size) and vertical motion (arrows/C-p/C-n).
+- DONE (2026-01-03): Add real save/quit chords: `C-x C-s` and `C-x C-c` (legacy `C-s` / `C-q` still work for now).
+- TODO: Manual gate: run `mise run clemacs:tty:run -- /tmp/clemacs-tty.txt`, type text, move point, save, quit, and confirm terminal state is restored.
 
 ### Milestone B1-5: expand editor substrate coverage
 

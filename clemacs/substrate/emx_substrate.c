@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -129,5 +130,25 @@ emx_status emx_tty_write(const uint8_t *buf, int32_t len)
       p += n;
       remain -= (int32_t)n;
     }
+  return EMX_STATUS_OK;
+}
+
+emx_status emx_tty_get_winsize(int32_t *out_rows, int32_t *out_cols)
+{
+  if (out_rows == NULL || out_cols == NULL)
+    return EMX_STATUS_EINVAL;
+
+  if (!isatty(STDOUT_FILENO))
+    return EMX_STATUS_EINVAL;
+
+  struct winsize ws;
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != 0)
+    return EMX_STATUS_EINVAL;
+
+  if (ws.ws_row == 0 || ws.ws_col == 0)
+    return EMX_STATUS_EINVAL;
+
+  *out_rows = (int32_t)ws.ws_row;
+  *out_cols = (int32_t)ws.ws_col;
   return EMX_STATUS_OK;
 }

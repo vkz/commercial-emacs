@@ -23,10 +23,24 @@ fi
 
 export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
 
+stale=false
+if find "${project_root}/clemacs" \
+    -type f \
+    \( -name '*.lisp' -o -name '*.asd' -o -name 'qlfile' -o -name 'qlfile.lock' \) \
+    -newer "${core_path}" \
+    -print -quit | rg -q .; then
+  stale=true
+fi
+
+if [[ "${stale}" == "true" ]]; then
+  mise run clemacs:core:build -- --build-dir "${build_dir}"
+fi
+
 mise x -- sbcl \
   --core "${core_path}" \
   --noinform \
   --no-sysinit \
   --no-userinit \
+  --non-interactive \
   --disable-debugger \
   --eval '(sb-ext:exit :code (clemacs:main))'

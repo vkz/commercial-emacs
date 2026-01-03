@@ -24,6 +24,7 @@
 
 (defpackage #:elisp
   (:use #:cl)
+  (:shadow #:setq)
   (:export
    #:load-elisp-file
    #:plist-get

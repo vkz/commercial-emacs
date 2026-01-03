@@ -1,8 +1,7 @@
 (in-package #:clemacs.test)
 
-(defun %assert (pred fmt &rest args)
-  (unless pred
-    (error "~?." fmt args)))
+(fiveam:def-suite clemacs-smoke)
+(fiveam:in-suite clemacs-smoke)
 
 (defun %maybe-emacs-prin1 (expr)
   (handler-case
@@ -42,63 +41,48 @@
         (*readtable* (elisp::%ensure-elisp-readtable)))
     (eval (read-from-string string))))
 
-(defun run-smoke (&key (stream *standard-output*))
+(fiveam:test substrate-basics
   (let ((version (clemacs:substrate-version))
         (platform (clemacs:substrate-platform)))
-    (%assert (and (stringp version) (> (length version) 0))
-             "substrate version is invalid: ~S" version)
-    (%assert (and (stringp platform) (> (length platform) 0))
-             "substrate platform is invalid: ~S" platform))
+    (fiveam:is (and (stringp version) (> (length version) 0)))
+    (fiveam:is (and (stringp platform) (> (length platform) 0))))
 
+  (fiveam:is (= (clemacs:substrate-parse-int "42") 42))
+  (fiveam:signals clemacs:clemacs-substrate-error
+    (clemacs:substrate-parse-int "nope")))
+
+(fiveam:test handle-table
   (let* ((table (clemacs:make-handle-table))
          (h1 (clemacs:handle-alloc table 'a))
          (h2 (clemacs:handle-alloc table 'b)))
-    (%assert (eql (clemacs:handle-get table h1) 'a)
-             "handle-get mismatch for h1")
-    (%assert (eql (clemacs:handle-get table h2) 'b)
-             "handle-get mismatch for h2")
-    (%assert (clemacs:handle-free table h1)
-             "handle-free returned nil for h1")
-    (handler-case
-        (progn
-          (clemacs:handle-get table h1)
-          (%assert nil "expected handle-get to fail for freed handle"))
-      (error () nil))
+    (fiveam:is (eql (clemacs:handle-get table h1) 'a))
+    (fiveam:is (eql (clemacs:handle-get table h2) 'b))
+    (fiveam:is (clemacs:handle-free table h1))
+    (fiveam:signals error
+      (clemacs:handle-get table h1))
     (let ((h3 (clemacs:handle-alloc table 'c)))
-      (%assert (eql h3 h1)
-               "expected handle reuse; got h3=~S h1=~S" h3 h1)
-      (%assert (eql (clemacs:handle-get table h3) 'c)
-               "handle-get mismatch for h3")))
+      (fiveam:is (eql h3 h1))
+      (fiveam:is (eql (clemacs:handle-get table h3) 'c)))))
 
-  (%assert (= (clemacs:substrate-parse-int "42") 42)
-           "substrate-parse-int failed for valid input")
-  (handler-case
-      (progn
-        (clemacs:substrate-parse-int "nope")
-        (%assert nil "expected substrate-parse-int to error"))
-    (clemacs:clemacs-substrate-error () nil))
-
-  ;; B1-3: restricted Elisp subset loader cross-check (if system emacs exists).
-  (let* ((exprs '(("(progn (setq x 1) x)" . "1")
-                  ("(let ((p nil)) (setq p (plist-put p 'a 1)) (plist-get p 'a))" . "1")
-                  ("[1 2 3]" . "[1 2 3]")
-                  ("?a" . "97")))
-         (emacs-present nil))
+(fiveam:test elisp-compat
+  (let ((exprs '(("(progn (setq x 1) x)" . "1")
+                 ("(let ((p nil)) (setq p (plist-put p 'a 1)) (plist-get p 'a))" . "1")
+                 ("[1 2 3]" . "[1 2 3]")
+                 ("?a" . "97"))))
     (dolist (item exprs)
       (destructuring-bind (expr . expected) item
         (let ((value (%elisp-eval-1 expr)))
-          (%assert (string= (%clemacs-prin1 value) expected)
-                   "clemacs elisp mismatch for ~A: got ~S expected ~S"
-                   expr (%clemacs-prin1 value) expected)
+          (fiveam:is (string= (%clemacs-prin1 value) expected))
           (let ((emacs-out (%maybe-emacs-prin1 expr)))
-            (when emacs-out
-              (setf emacs-present t)
-              (%assert (string= emacs-out expected)
-                       "emacs baseline mismatch for ~A: got ~S expected ~S"
-                       expr emacs-out expected))))))
-    (when (not emacs-present)
-      (format stream "clemacs smoke: WARNING: `emacs` not found; skipped baseline cross-check~%")))
+            (if emacs-out
+                (fiveam:is (string= emacs-out expected))
+                (fiveam:skip "emacs not on PATH"))))))))
 
-  (format stream "clemacs smoke: ok~%")
-  (finish-output stream)
-  0)
+(defun run-smoke (&key (stream *standard-output*))
+  (let ((fiveam:*test-dribble* stream))
+    (multiple-value-bind (ok failed skipped)
+        (fiveam:run! 'clemacs-smoke)
+      (declare (ignore failed skipped))
+      (format stream "clemacs smoke: ~:[FAIL~;ok~]~%" ok)
+      (finish-output stream)
+      (if ok 0 1))))

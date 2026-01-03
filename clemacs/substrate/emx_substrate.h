@@ -31,6 +31,7 @@ emx_status emx_tty_enter_raw(void);
 emx_status emx_tty_exit_raw(void);
 emx_status emx_tty_read_byte(uint8_t *out);
 emx_status emx_tty_write(const uint8_t *buf, int32_t len);
+emx_status emx_tty_get_winsize(int32_t *out_rows, int32_t *out_cols);
 
 #ifdef __cplusplus
 }

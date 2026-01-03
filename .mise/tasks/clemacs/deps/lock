@@ -26,6 +26,7 @@ export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
 
 qlfile_src="${project_root}/clemacs/qlfile"
 qlfile_lock_src="${project_root}/clemacs/qlfile.lock"
+asd_src="${project_root}/clemacs/clemacs.asd"
 
 if [[ ! -f "${qlfile_src}" ]]; then
   echo "[clemacs:deps:lock] missing ${qlfile_src}" >&2
@@ -59,6 +60,9 @@ fi
 
 ln -sf "${qlfile_src}" "${tmp_deps_dir}/qlfile"
 ln -sf "${qlfile_lock_src}" "${tmp_deps_dir}/qlfile.lock"
+if [[ -f "${asd_src}" ]]; then
+  ln -sf "${asd_src}" "${tmp_deps_dir}/clemacs.asd"
+fi
 
 echo "[clemacs:deps:lock] generating qlfile.lock via qlot (cache: ${cache_dir})"
 (cd "${tmp_deps_dir}" && "${qlot_dir}/bin/qlot" install --cache "${cache_dir}")

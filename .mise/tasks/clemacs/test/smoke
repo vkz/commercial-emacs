@@ -26,13 +26,25 @@ core_path="${project_root}/${build_dir}/clemacs.core"
 
 export CLEMACS_SUBSTRATE_DYLIB="${substrate_dylib}"
 
+core_fresh=false
 if [[ -f "${core_path}" ]]; then
+  if ! find "${project_root}/clemacs" \
+      -type f \
+      \( -name '*.lisp' -o -name '*.asd' -o -name 'qlfile' -o -name 'qlfile.lock' \) \
+      -newer "${core_path}" \
+      -print -quit | rg -q .; then
+    core_fresh=true
+  fi
+fi
+
+if [[ "${core_fresh}" == "true" ]]; then
   mise x -- sbcl \
     --core "${core_path}" \
     --noinform \
     --disable-debugger \
     --no-sysinit \
     --no-userinit \
+    --non-interactive \
     --eval '(sb-ext:exit :code (clemacs.test:run-smoke))'
 else
   deps_dir="${project_root}/${build_dir}/deps"

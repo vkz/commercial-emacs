@@ -34,6 +34,6 @@ cd "${deps_dir}"
   --eval '(require :asdf)' \
   --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
   --eval '(asdf:load-system :clemacs)' \
-  --eval "(sb-ext:save-lisp-and-die \"${core_path}\" :executable nil :compression t :toplevel (lambda () (sb-ext:exit :code 0)))"
+  --eval "(sb-ext:save-lisp-and-die \"${core_path}\" :executable nil :compression t)"
 
 echo "[clemacs:core:build] wrote ${core_path}"

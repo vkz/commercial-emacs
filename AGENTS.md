@@ -82,6 +82,14 @@ alongside the baseline C-hosted Emacs build.
   - Implementation detail: qlot is cloned into `build/clemacs/tools/qlot`, and
     deps are installed under `build/clemacs/deps/.qlot` with cache under
     `build/clemacs/qlot-cache` (avoid global `~/.cache/qlot`).
+  - Notes:
+    - `clemacs/qlfile` should list only our direct deps; pinning the Quicklisp
+      dist in `clemacs/qlfile.lock` pins the full dependency closure.
+    - `clemacs:deps:install` symlinks `clemacs/clemacs.asd` into the deps dir
+      so qlot can install transitive deps (otherwise it installs only dists).
+    - On macOS, qlot can fail uninstalling old deps because its local dist uses
+      cache symlinks; `clemacs:deps:install` wipes `build/clemacs/deps/.qlot`
+      when the stamp changes to keep this reproducible.
 - Substrate dylib:
   - `mise run clemacs:substrate:build`
 - Optional: faster startup via SBCL saved core:
