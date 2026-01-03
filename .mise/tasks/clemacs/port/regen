@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Regenerate clemacs/ported/ from a small allowlist (experimental)"
+#USAGE flag "-h --help" help="Print help"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+manifest="clemacs/contract/ported.files"
+dest_root="clemacs/ported"
+
+if [[ ! -f "${manifest}" ]]; then
+  echo "[clemacs:port:regen] missing manifest: ${manifest}" >&2
+  exit 2
+fi
+
+mkdir -p "${dest_root}"
+
+ported=0
+while IFS= read -r line; do
+  [[ -z "${line}" ]] && continue
+  [[ "${line}" =~ ^# ]] && continue
+
+  src="${project_root}/${line}"
+  dst="${project_root}/${dest_root}/${line}"
+
+  if [[ ! -f "${src}" ]]; then
+    echo "[clemacs:port:regen] missing source file: ${line}" >&2
+    exit 2
+  fi
+
+  mkdir -p "$(dirname "${dst}")"
+  cp -p "${src}" "${dst}"
+  ported=$((ported + 1))
+done < "${manifest}"
+
+echo "[clemacs:port:regen] ported files: ${ported}"

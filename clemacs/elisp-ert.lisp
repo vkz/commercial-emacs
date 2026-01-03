@@ -5,7 +5,7 @@
   (:report (lambda (c s)
              (format s "ERT failure: ~S" (ert-failure-form c)))))
 
-(defvar *ert-tests* (make-hash-table :test 'eq))
+(defvar *ert-tests* (cl:make-hash-table :test 'eq))
 
 (cl:defun ert-reset ()
   (clrhash *ert-tests*)

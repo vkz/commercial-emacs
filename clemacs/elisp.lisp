@@ -2,6 +2,31 @@
 
 (defvar *elisp-readtable* nil)
 
+(cl:defun %elisp-rewrite (form)
+  (labels ((rw (x)
+             (cond
+              ((atom x) x)
+              ;; Do not rewrite under QUOTE.
+              ((and (consp x) (eq (car x) 'quote) (= (length x) 2))
+               x)
+              ;; Rewrite FUNCTION only when it wraps a lambda form.
+              ((and (consp x) (eq (car x) 'function) (= (length x) 2))
+               (let ((arg (cadr x)))
+                 (if (and (consp arg) (eq (car arg) 'lambda))
+                     (list 'function (rw arg))
+                     x)))
+              ;; ELisp IF allows multiple else forms; CL:IF does not.
+              ((and (consp x) (eq (car x) 'cl:if))
+               (destructuring-bind (op test then &rest else) x
+                 (declare (ignore op))
+                 (cond
+                  ((null else) (list 'cl:if (rw test) (rw then) nil))
+                  ((null (cdr else)) (list 'cl:if (rw test) (rw then) (rw (car else))))
+                  (t (list 'cl:if (rw test) (rw then) (cons 'progn (mapcar #'rw else)))))))
+              ;; General cons rewrite: preserve dotted lists.
+              (t (cons (rw (car x)) (rw (cdr x)))))))
+    (rw form)))
+
 (cl:defun %ensure-elisp-readtable ()
   (or *elisp-readtable*
       (let ((rt (copy-readtable nil)))
@@ -60,7 +85,7 @@
             do
               (incf form-index)
               (handler-case
-                  (eval form)
+                  (eval (%elisp-rewrite form))
                 (error (e)
                   (let ((inv (inventory-entry-for-condition
                               e

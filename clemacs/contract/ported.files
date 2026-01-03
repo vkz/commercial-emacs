@@ -1,0 +1,7 @@
+# clemacs ported file list
+#
+# Files listed here are copied (or mechanically rewritten) from the source tree
+# into clemacs/ported/ via `mise run clemacs:port:regen`.
+#
+# Keep this list small; it should contain only files that need intentional
+# divergence or mechanical translation for clemacs.

@@ -1,7 +1,7 @@
 (in-package #:elisp)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (require "SB-CLTL2"))
+  (cl:require "SB-CLTL2"))
 
 (cl:defun symbol-name (sym)
   "ELisp-ish SYMBOL-NAME that returns lowercase names by default."
@@ -30,7 +30,7 @@ references less strict than CL."
    (t
    `(cl:function ,arg))))
 
-(defvar *elisp-function-cells* (make-hash-table :test 'eq))
+(defvar *elisp-function-cells* (cl:make-hash-table :test 'eq))
 
 (cl:defun symbol-function (symbol)
   "ELisp-ish SYMBOL-FUNCTION.
@@ -76,17 +76,151 @@ Returns NIL if SYMBOL has no function cell value."
   "Compatibility shim for the C primitive `sxhash-equal'."
   (cl:sxhash object))
 
+(cl:defun concat (&rest parts)
+  "Stub for ELisp `concat'."
+  (with-output-to-string (out)
+    (dolist (p parts)
+      (typecase p
+        (null nil)
+        (string (write-string p out))
+        (character (write-char p out))
+        (t (write-string (princ-to-string p) out))))))
+
+(cl:defun make-hash-table (&rest args &key (test 'eql) &allow-other-keys)
+  "ELisp-ish MAKE-HASH-TABLE.
+
+Emacs Lisp accepts `:test' values like 'eq/'eql/'equal/'equalp. We map
+`equal' to CL:EQUALP to get vector element semantics, which is a closer
+match to Elisp than CL:EQUAL."
+  (unless (symbolp test)
+    (error "ELISP:MAKE-HASH-TABLE only supports symbolic :test, got: ~S" test))
+  (let* ((mapped-test
+           (cond
+            ((or (eq test 'eq) (eq test 'cl:eq)) 'cl:eq)
+            ((or (eq test 'eql) (eq test 'cl:eql)) 'cl:eql)
+            ((or (eq test 'equal) (eq test 'cl:equal)) 'cl:equalp)
+            ((or (eq test 'equalp) (eq test 'cl:equalp)) 'cl:equalp)
+            (t (error "ELISP:MAKE-HASH-TABLE unsupported :test: ~S" test))))
+         (remapped-args
+           (loop for (k v) on args by #'cddr
+                 collect k
+                 collect (if (eq k :test) mapped-test v))))
+    (apply #'cl:make-hash-table remapped-args)))
+
+(defparameter features nil)
+
+(cl:defun featurep (feature)
+  "Stub for ELisp `featurep'."
+  (and (member feature features :test 'eq) t))
+
+(cl:defun provide (feature &optional _subfeatures)
+  "Stub for ELisp `provide'."
+  (declare (ignore _subfeatures))
+  (pushnew feature features :test 'eq)
+  feature)
+
+(cl:defun require (feature &optional _filename _noerror)
+  "Stub for ELisp `require'.
+
+Currently does not load code; it only records FEATURE as provided."
+  (declare (ignore _filename _noerror))
+  (unless (featurep feature)
+    (provide feature))
+  feature)
+
+(cl:defmacro defgroup (name _parents _docstring &rest _args)
+  "Stub for ELisp `defgroup'."
+  (declare (ignore _parents _docstring _args))
+  `(progn ',name))
+
+(cl:defmacro defcustom (symbol value _docstring &rest _args)
+  "Stub for ELisp `defcustom'."
+  (declare (ignore _docstring _args))
+  `(defparameter ,symbol ,value))
+
+(cl:defmacro defface (face _spec _docstring &rest _args)
+  "Stub for ELisp `defface'."
+  (declare (ignore _spec _docstring _args))
+  `(progn ',face))
+
+(cl:defun define-error (name _message &optional _parent)
+  "Stub for ELisp `define-error'."
+  (declare (ignore _message _parent))
+  name)
+
+(cl:defmacro cl-assert (&rest args)
+  "Minimal subset of cl-lib's `cl-assert'."
+  `(cl:assert ,@args))
+
+(cl:defmacro cl-defmacro (name lambda-list &body body)
+  "Minimal subset of cl-lib's `cl-defmacro'."
+  `(defmacro ,name ,lambda-list ,@body))
+
+(cl:defmacro cl-defun (name lambda-list &body body)
+  "Minimal subset of cl-lib's `cl-defun'."
+  `(defun ,name ,lambda-list ,@body))
+
+(cl:defmacro cl-destructuring-bind (lambda-list expr &body body)
+  "Minimal subset of cl-lib's `cl-destructuring-bind'."
+  `(cl:destructuring-bind ,lambda-list ,expr ,@body))
+
+(cl:defmacro cl-macrolet (bindings &body body)
+  "Minimal subset of cl-lib's `cl-macrolet'."
+  `(cl:macrolet ,bindings ,@body))
+
+(cl:defmacro cl-flet (bindings &body body)
+  "Minimal subset of cl-lib's `cl-flet'."
+  `(cl:flet ,bindings ,@body))
+
+(cl:defmacro cl-labels (bindings &body body)
+  "Minimal subset of cl-lib's `cl-labels'."
+  `(cl:labels ,bindings ,@body))
+
+(cl:defmacro cl-loop (&rest clauses)
+  "Minimal subset of cl-lib's `cl-loop'."
+  `(cl:loop ,@clauses))
+
+(cl:defmacro cl-return (&optional value)
+  "Minimal subset of cl-lib's `cl-return'."
+  `(cl:return ,value))
+
+(cl:defmacro cl-return-from (name &optional value)
+  "Minimal subset of cl-lib's `cl-return-from'."
+  `(cl:return-from ,name ,value))
+
+(cl:defmacro cl-block (name &body body)
+  "Minimal subset of cl-lib's `cl-block'."
+  `(cl:block ,name ,@body))
+
+(cl:defmacro cl-case (keyform &rest clauses)
+  "Minimal subset of cl-lib's `cl-case'."
+  `(cl:case ,keyform ,@clauses))
+
+(cl:defmacro cl-ecase (keyform &rest clauses)
+  "Minimal subset of cl-lib's `cl-ecase'."
+  `(cl:ecase ,keyform ,@clauses))
+
+(cl:defun cl-remprop (symbol indicator)
+  "Minimal subset of cl-lib's `cl-remprop'."
+  (and (remprop symbol indicator) t))
+
+(cl:defmacro cl-defstruct (&rest args)
+  "Minimal subset of cl-lib's `cl-defstruct'."
+  `(cl:defstruct ,@args))
+
 (cl:defun put (symbol prop value)
   "ELisp-ish PUT for symbol plists."
   (setf (get symbol prop) value)
   value)
 
 (defstruct elisp-keymap
-  (table (make-hash-table :test 'cl:equal))
+  (table (cl:make-hash-table :test 'cl:equal))
   (parent nil))
 
 (defparameter system-type 'darwin)
 (defvar *global-map* nil)
+(defparameter minibuffer-local-map (make-elisp-keymap))
+(defparameter find-function-space-re "")
 
 (cl:defun make-keymap ()
   "Extremely small stub for ELisp `make-keymap'."
@@ -114,6 +248,15 @@ Stores DEFINITION verbatim; KEY can be a string or vector (and is stored as-is).
     (error "ELISP:DEFINE-KEY expected a keymap, got: ~S" keymap))
   (setf (gethash key (elisp-keymap-table keymap)) definition)
   definition)
+
+(cl:defun set-keymap-parent (keymap parent)
+  "Extremely small stub for ELisp `set-keymap-parent'."
+  (unless (typep keymap 'elisp-keymap)
+    (error "ELISP:SET-KEYMAP-PARENT expected a keymap, got: ~S" keymap))
+  (when (and parent (not (typep parent 'elisp-keymap)))
+    (error "ELISP:SET-KEYMAP-PARENT expected a keymap parent, got: ~S" parent))
+  (setf (elisp-keymap-parent keymap) parent)
+  keymap)
 
 (cl:defun use-global-map (keymap)
   "Extremely small stub for ELisp `use-global-map'."
@@ -191,7 +334,7 @@ trying to redefine locked symbols while loading upstream ELisp)."
       (sb-cltl2:variable-information symbol env)
     (eq kind :lexical)))
 
-(defvar *elisp-variable-aliases* (make-hash-table :test 'eq))
+(defvar *elisp-variable-aliases* (cl:make-hash-table :test 'eq))
 
 (cl:defun %resolve-variable-alias (symbol &key (max-hops 16))
   (loop with cur = symbol
@@ -232,6 +375,41 @@ trying to redefine locked symbols while loading upstream ELisp)."
   (declare (ignore _since _docstring))
   (defalias obsolete-name current-definition)
   obsolete-name)
+
+(cl:defun autoload (function file &optional _docstring _interactive _type)
+  "Stub for ELisp `autoload'.
+
+Stores a non-callable marker in the function cell; calling it will
+fail until proper autoload support exists."
+  (declare (ignore _docstring _interactive _type))
+  (unless (symbolp function)
+    (error "ELISP:AUTOLOAD expects a function symbol, got: ~S" function))
+  (fset function (list 'autoload file))
+  function)
+
+(cl:defun make-variable-buffer-local (variable)
+  "Stub for ELisp `make-variable-buffer-local'."
+  variable)
+
+(cl:defun default-boundp (symbol)
+  "Stub for ELisp `default-boundp'.
+
+Currently treats \"default\" binding as CL's global binding model (no
+buffer-local values yet)."
+  (cl:boundp (%resolve-variable-alias symbol)))
+
+(cl:defun local-variable-if-set-p (_symbol &optional _buffer)
+  "Stub for ELisp `local-variable-if-set-p'."
+  (declare (ignore _symbol _buffer))
+  nil)
+
+(cl:defun default-value (symbol)
+  "Stub for ELisp `default-value'."
+  (symbol-value symbol))
+
+(cl:defun set-default (symbol value)
+  "Stub for ELisp `set-default'."
+  (set symbol value))
 
 (cl:defmacro setq (&environment env &rest pairs)
   (unless (evenp (length pairs))

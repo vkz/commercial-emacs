@@ -38,12 +38,13 @@
 
 (defpackage #:elisp
   (:use #:cl)
-  (:shadow #:defmacro #:defun #:equal #:funcall #:function #:intern #:setq
+  (:shadow #:defmacro #:defun #:equal #:funcall #:function #:intern #:make-hash-table #:provide #:require #:setq
            #:symbol-function #:symbol-name #:fboundp #:values #:symbol-value
            #:set)
   (:export
    #:equal
    #:load-elisp-file
+   #:load-elisp-manifest
    #:load-bootstrap-set
    #:ert-deftest
    #:ert-run-tests-batch

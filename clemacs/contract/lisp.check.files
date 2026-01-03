@@ -1,0 +1,14 @@
+# clemacs lisp load manifest (check)
+#
+# This list is data and should grow monotonically. Prefer adding shims and/or
+# generated ports under clemacs/ported/ over editing lisp/ directly.
+#
+# 2026-01-03: same as smoke; diverges once we can load more of lisp/.
+
+lisp/subr.el
+lisp/emacs-lisp/cl-lib.el
+lisp/emacs-lisp/cl-macs.el
+lisp/emacs-lisp/macroexp.el
+lisp/emacs-lisp/pcase.el
+lisp/emacs-lisp/ert.el
+lisp/simple.el

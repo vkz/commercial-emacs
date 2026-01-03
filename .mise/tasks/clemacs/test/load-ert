@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Load upstream lisp/emacs-lisp/ert.el to a fixed max-forms checkpoint"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--max-forms <n>" help="Stop after N forms (0 = use ert.maxforms, empty = no limit)" default="0"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}"
+
+export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+
+mise run clemacs:deps:install -- --build-dir "${build_dir}"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+max_forms="${usage_max_forms}"
+
+max_forms_eval="nil"
+if [[ "${max_forms}" == "0" ]]; then
+  max_forms_file="${project_root}/clemacs/contract/ert.maxforms"
+  if [[ -f "${max_forms_file}" ]]; then
+    max_forms_eval="$(tr -d ' \t\r\n' < "${max_forms_file}")"
+  fi
+elif [[ -n "${max_forms}" ]]; then
+  max_forms_eval="${max_forms}"
+fi
+
+cd "${deps_dir}"
+"${qlot_bin}" exec sbcl \
+  --noinform \
+  --no-sysinit \
+  --no-userinit \
+  --non-interactive \
+  --disable-debugger \
+  --eval '(require :asdf)' \
+  --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
+  --eval '(asdf:load-system :clemacs)' \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert.el\" :max-forms ${max_forms_eval})" \
+  --eval '(uiop:quit 0)'

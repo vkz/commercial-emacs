@@ -519,11 +519,15 @@ Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Implement a real ELisp function-cell store (separate from CL fdefinition):
   - `fset` can store non-functions (e.g. keymaps), and `symbol-function` returns arbitrary defs.
   - `function` / `#'` / `funcall` are loosened to support forward references during bootstrap.
-- TODO: Implement dynamic binding semantics needed by core libs (or document an explicit alternative).
+- DONE (2026-01-03): Document the dynamic-binding stance (pragmatic, for bootstrap):
+  - Treat `lexical-binding: t` as the default/assumed mode for now.
+  - Dynamic binding is supported for variables declared via `defvar`/`defcustom`
+    (CL specials). Files that assume `lexical-binding: nil` remain TODO/ported.
 - DONE (2026-01-03): Add a "missing primitive" load error that includes the inventory entry (name + source file).
 - DONE (2026-01-03): Add a new clemacs contract level `elisp-core` (fast-ish) that runs constantly during this phase.
 - DONE (2026-01-03): Add a monotonic loader checkpoint gate:
   - `mise run clemacs:test:load-bootstrap` loads `lisp/subr.el` up to `clemacs/contract/bootstrap.maxforms`.
+- DONE (2026-01-03): Advance `clemacs/contract/bootstrap.maxforms` to 300 (subr.el form checkpoint).
 
 Guardrails
 - Keep ELisp native compilation disabled.
@@ -544,14 +548,15 @@ Gate
 Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Define a source-of-truth manifest for the initial ELisp bootstrap set
   (files + load order), committed under `clemacs/contract/` (`clemacs/contract/bootstrap.files`).
-- TODO: Add `mise` tasks:
+- DONE (2026-01-03): Add `mise` tasks:
   - `clemacs:load:lisp -- --level smoke|check`
   - `clemacs:port:regen` (optional, generates mechanical rewrites into `clemacs/ported/`)
 - DONE (2026-01-03): Add a precursor loader task:
   - `mise run clemacs:load:bootstrap -- --limit 1` (used for bring-up; currently expected to fail on missing primitives)
-- TODO: Load the bootstrap set without modifying `lisp/` (first), then introduce a mechanical
-  rewrite step only when necessary.
-- TODO: Track allowed skips explicitly (GUI/nativecomp/modules) with reasons and dates.
+- DONE (2026-01-03): Load the bootstrap set without modifying `lisp/` (shims/rewrites happen inside clemacs).
+- DONE (2026-01-03): Track allowed skips explicitly (GUI/nativecomp/modules) with reasons and dates:
+  - `clemacs/contract/lisp.allowed-skip.files` (consumed by `clemacs:load:lisp`)
+  - `clemacs/contract/ported.files` + `clemacs/ported/` (preferred-by-loader port tree)
 
 ### Milestone B1-9: run upstream ERT suites under clemacs
 
@@ -569,6 +574,8 @@ Gate
 
 Status (TODO, 2026-01-03)
 - TODO: Replace the ERT prototype with a compatibility layer that can load and run upstream `lisp/emacs-lisp/ert.el`.
+- DONE (2026-01-03): Add an incremental upstream ERT load gate:
+  - `mise run clemacs:test:load-ert` loads `lisp/emacs-lisp/ert.el` up to `clemacs/contract/ert.maxforms` (currently 40).
 - TODO: Start with one upstream test file (e.g. `lisp/emacs-lisp/ert-tests.el`) and grow from there.
 - TODO: Add a delta report mode:
   - compare clemacs results against `emacs -Q --batch` when available,
@@ -594,3 +601,9 @@ Status (TODO, 2026-01-03)
   - transitional C-hosted shim (explicitly timeboxed) to reach parity faster.
 - TODO: Write down the first C subsystem to migrate (buffers/windowing/keymaps/minibuffer),
   with an explicit API boundary and deletion plan for shims.
+- TODO: Define an end-to-end clemacs startup manifest:
+  - start from `lisp/loadup.el` (preferred) or a smaller curated list that grows monotonically.
+  - define an explicit `allowed-skip` list with reasons/dates (GUI/nativecomp/modules).
+- TODO: Add a clemacs ERT gate based on upstream tests:
+  - first file target: `lisp/emacs-lisp/ert-tests.el` under `mise run clemacs:test:ert-upstream`.
+  - contract tracking: must-pass / allowed-skip / known-fail as data under `clemacs/contract/`.
