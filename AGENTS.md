@@ -84,6 +84,8 @@ alongside the baseline C-hosted Emacs build.
     `build/clemacs/qlot-cache` (avoid global `~/.cache/qlot`).
 - Substrate dylib:
   - `mise run clemacs:substrate:build`
+- Interactive TTY loop (manual testing; run inside tmux if possible):
+  - `mise run clemacs:tty:run -- <optional-file>`
 - One-command gate:
   - `mise run clemacs:verify`
 - Timing (iteration cost signal):

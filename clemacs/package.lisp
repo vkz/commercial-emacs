@@ -13,6 +13,7 @@
    #:handle-table
    #:make-handle-table
    #:main
+   #:tty-main
    #:substrate-platform
    #:substrate-parse-int
    #:substrate-version))

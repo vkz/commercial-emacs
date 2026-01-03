@@ -18,6 +18,13 @@
 (cffi:defcfun ("emx_substrate_parse_int" %emx-substrate-parse-int) :int32
   (s :string)
   (out :pointer))
+(cffi:defcfun ("emx_tty_enter_raw" %emx-tty-enter-raw) :int32)
+(cffi:defcfun ("emx_tty_exit_raw" %emx-tty-exit-raw) :int32)
+(cffi:defcfun ("emx_tty_read_byte" %emx-tty-read-byte) :int32
+  (out :pointer))
+(cffi:defcfun ("emx_tty_write" %emx-tty-write) :int32
+  (buf :pointer)
+  (len :int32))
 
 (defun %check-substrate-status (status)
   (cond
@@ -40,3 +47,23 @@
   (cffi:with-foreign-object (out :int32)
     (%check-substrate-status (%emx-substrate-parse-int s out))
     (cffi:mem-ref out :int32)))
+
+(defun tty-enter-raw ()
+  (ensure-substrate-loaded)
+  (%check-substrate-status (%emx-tty-enter-raw)))
+
+(defun tty-exit-raw ()
+  (ensure-substrate-loaded)
+  (%check-substrate-status (%emx-tty-exit-raw)))
+
+(defun tty-read-byte ()
+  (ensure-substrate-loaded)
+  (cffi:with-foreign-object (out :uint8)
+    (%check-substrate-status (%emx-tty-read-byte out))
+    (cffi:mem-ref out :uint8)))
+
+(defun tty-write-string (s)
+  (ensure-substrate-loaded)
+  (let ((octets (babel:string-to-octets s :encoding :utf-8)))
+    (cffi:with-pointer-to-vector-data (ptr octets)
+      (%check-substrate-status (%emx-tty-write ptr (length octets))))))

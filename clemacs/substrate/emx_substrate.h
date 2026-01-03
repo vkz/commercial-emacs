@@ -27,6 +27,11 @@ const char *emx_substrate_status_string(emx_status status);
 
 emx_status emx_substrate_parse_int(const char *s, int32_t *out);
 
+emx_status emx_tty_enter_raw(void);
+emx_status emx_tty_exit_raw(void);
+emx_status emx_tty_read_byte(uint8_t *out);
+emx_status emx_tty_write(const uint8_t *buf, int32_t len);
+
 #ifdef __cplusplus
 }
 #endif

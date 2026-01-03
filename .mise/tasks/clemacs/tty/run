@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Run clemacs interactive TTY loop (experimental)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE arg "[file]" help="Optional file to edit (default: in-memory buffer)"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}"
+
+export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+
+mise run clemacs:deps:install -- --build-dir "${build_dir}"
+mise run clemacs:substrate:build -- --build-dir "${build_dir}"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+substrate_dylib="${project_root}/${build_dir}/substrate/libemxsubstrate.dylib"
+
+export CLEMACS_SUBSTRATE_DYLIB="${substrate_dylib}"
+
+if [[ -n "${1:-}" ]]; then
+  export CLEMACS_TTY_PATH="${1}"
+else
+  unset CLEMACS_TTY_PATH || true
+fi
+
+stty_state="$(stty -g 2>/dev/null || true)"
+cleanup() {
+  if [[ -n "${stty_state}" ]]; then
+    stty "${stty_state}" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+cd "${deps_dir}"
+"${qlot_bin}" exec sbcl \
+  --noinform \
+  --no-sysinit \
+  --no-userinit \
+  --disable-debugger \
+  --eval '(require :asdf)' \
+  --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
+  --eval '(asdf:load-system :clemacs)' \
+  --eval '(uiop:quit (clemacs:tty-main :path (or (uiop:getenv "CLEMACS_TTY_PATH") "")))'

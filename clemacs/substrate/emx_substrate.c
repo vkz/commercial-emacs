@@ -1,7 +1,10 @@
 #include "emx_substrate.h"
 
 #include <errno.h>
+#include <stdbool.h>
 #include <stdlib.h>
+#include <termios.h>
+#include <unistd.h>
 
 #if defined(__APPLE__) && defined(__MACH__)
 #define EMX_PLATFORM "darwin"
@@ -50,5 +53,81 @@ emx_status emx_substrate_parse_int(const char *s, int32_t *out)
     return EMX_STATUS_EINVAL;
 
   *out = (int32_t)v;
+  return EMX_STATUS_OK;
+}
+
+static bool emx_tty_saved = false;
+static bool emx_tty_raw = false;
+static struct termios emx_tty_orig;
+
+emx_status emx_tty_enter_raw(void)
+{
+  if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
+    return EMX_STATUS_EINVAL;
+
+  if (emx_tty_raw)
+    return EMX_STATUS_OK;
+
+  if (!emx_tty_saved)
+    {
+      if (tcgetattr(STDIN_FILENO, &emx_tty_orig) != 0)
+        return EMX_STATUS_EINVAL;
+      emx_tty_saved = true;
+    }
+
+  struct termios raw = emx_tty_orig;
+  cfmakeraw(&raw);
+  raw.c_cc[VMIN] = 1;
+  raw.c_cc[VTIME] = 0;
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) != 0)
+    return EMX_STATUS_EINVAL;
+
+  emx_tty_raw = true;
+  return EMX_STATUS_OK;
+}
+
+emx_status emx_tty_exit_raw(void)
+{
+  if (!emx_tty_saved)
+    return EMX_STATUS_OK;
+
+  if (emx_tty_raw)
+    {
+      (void)tcsetattr(STDIN_FILENO, TCSAFLUSH, &emx_tty_orig);
+      emx_tty_raw = false;
+    }
+
+  return EMX_STATUS_OK;
+}
+
+emx_status emx_tty_read_byte(uint8_t *out)
+{
+  if (out == NULL)
+    return EMX_STATUS_EINVAL;
+
+  uint8_t b = 0;
+  ssize_t n = read(STDIN_FILENO, &b, 1);
+  if (n != 1)
+    return EMX_STATUS_EINVAL;
+
+  *out = b;
+  return EMX_STATUS_OK;
+}
+
+emx_status emx_tty_write(const uint8_t *buf, int32_t len)
+{
+  if (buf == NULL || len < 0)
+    return EMX_STATUS_EINVAL;
+
+  const uint8_t *p = buf;
+  int32_t remain = len;
+  while (remain > 0)
+    {
+      ssize_t n = write(STDOUT_FILENO, p, (size_t)remain);
+      if (n <= 0)
+        return EMX_STATUS_EINVAL;
+      p += n;
+      remain -= (int32_t)n;
+    }
   return EMX_STATUS_OK;
 }

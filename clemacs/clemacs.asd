@@ -11,4 +11,5 @@
    (:file "elisp-compat")
    (:file "main")
    (:file "substrate")
+   (:file "tty")
    (:file "tests")))
