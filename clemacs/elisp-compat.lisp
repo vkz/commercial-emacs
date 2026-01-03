@@ -111,6 +111,8 @@ Returns NIL if SYMBOL has no function cell value."
 
 (cl:defvar emacs-version "31.0.50")
 
+(cl:defvar lexical-binding t)
+
 (defvar *match-strings* nil)
 
 (cl:defun %match-leading-digits (s start)
@@ -223,6 +225,20 @@ Currently does not load code; it only records FEATURE as provided."
   (unless (featurep feature)
     (provide feature))
   feature)
+
+(cl:defmacro eval-when-compile (&rest body)
+  "Bring-up stub for ELisp `eval-when-compile'.
+
+We evaluate BODY at macro-expansion time and return a quoted constant,
+matching the non-byte-compiler definition in `lisp/emacs-lisp/byte-run.el'."
+  (list 'quote (eval (cons 'progn body))))
+
+(cl:defmacro eval-and-compile (&rest body)
+  "Bring-up stub for ELisp `eval-and-compile'.
+
+We evaluate BODY at macro-expansion time and return a quoted constant,
+matching the non-byte-compiler definition in `lisp/emacs-lisp/byte-run.el'."
+  (list 'quote (eval (cons 'progn body))))
 
 (cl:defmacro defgroup (name _parents _docstring &rest _args)
   "Stub for ELisp `defgroup'."
@@ -404,6 +420,28 @@ an augmented SBCL lexical environment."
            ((functionp test) test)
            (t (cl:error "ELISP:CL-INTERSECTION unsupported :test: ~S" test)))))
     (cl:intersection list1 list2 :test test-fn :key key)))
+
+(cl:defun cl-gensym (&optional prefix)
+  "Bring-up subset of cl-lib's `cl-gensym'."
+  (let ((p (cond
+            ((null prefix) "G")
+            ((stringp prefix) prefix)
+            ((symbolp prefix) (symbol-name prefix))
+            (t (cl:error "ELISP:CL-GENSYM unsupported prefix: ~S" prefix)))))
+    (gensym (string-upcase p))))
+
+(cl:defun cl-search (sequence1 sequence2 &rest args &key (test 'eql) &allow-other-keys)
+  "Bring-up subset of cl-lib's `cl-search'."
+  (declare (ignore args))
+  (let ((test-fn
+          (cond
+           ((or (eq test 'eq) (eq test 'cl:eq)) #'cl:eq)
+           ((or (eq test 'eql) (eq test 'cl:eql)) #'cl:eql)
+           ((or (eq test 'equal) (eq test 'cl:equal)) #'cl:equalp)
+           ((or (eq test 'equalp) (eq test 'cl:equalp)) #'cl:equalp)
+           ((functionp test) test)
+           (t (cl:error "ELISP:CL-SEARCH unsupported :test: ~S" test)))))
+    (cl:search sequence1 sequence2 :test test-fn)))
 
 (cl:defun cl-remprop (symbol indicator)
   "Minimal subset of cl-lib's `cl-remprop'."
@@ -989,8 +1027,23 @@ Supports the common pattern of a self-referential closure (used by ERT)."
   (handler-case
       (cond
        ((symbolp thing)
-        (or (gethash thing *special-operator-subrs*)
-            (symbol-function thing)))
+        (let ((seen nil)
+              (cur thing))
+          (loop
+            (when (member cur seen :test #'eq)
+              (error "ELISP:INDIRECT-FUNCTION circular definition: ~S" thing))
+            (push cur seen)
+            (let ((special (gethash cur *special-operator-subrs*)))
+              (when special
+                (return special)))
+            (let ((def (symbol-function cur)))
+              (cond
+               ((null def)
+                (return nil))
+               ((and (symbolp def) (not (eq def cur)))
+                (setf cur def))
+               (t
+                (return def)))))))
        ((functionp thing) thing)
        (t (error "ELISP:INDIRECT-FUNCTION bad value: ~S" thing)))
     (cl:error (e)

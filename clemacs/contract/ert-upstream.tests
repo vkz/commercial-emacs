@@ -17,3 +17,5 @@ ert-test-should-error-argument
 ert-test-should-error-macroexpansion
 ert-test-skip-when
 ert-test-skip-unless
+ert-test-deftest-lexical-binding-t
+ert-test-special-operator-p
