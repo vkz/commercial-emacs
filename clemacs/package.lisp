@@ -44,6 +44,7 @@
            #:make-list #:format
            #:append
            #:string= #:string-equal
+           #:characterp
            #:type-of
            #:symbol-function #:symbol-name #:fboundp #:values #:symbol-value
            #:signal #:handler-bind #:error

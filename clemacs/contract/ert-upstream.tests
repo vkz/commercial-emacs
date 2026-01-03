@@ -32,3 +32,6 @@ ert-test-string-first-line
 ert-test-test-boundp
 ert-test-test-result-expected-p
 ert-test-with-demoted-errors
+ert-test-explain-equal
+ert-test-explain-equal-improper-list
+ert-test-fail-inside-should

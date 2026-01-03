@@ -581,7 +581,7 @@ Gate
 
 Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Load upstream `lisp/emacs-lisp/ert.el` and run at least one upstream test:
-  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 19 tests) via upstream `ert-run-test`.
+  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 33 tests) via upstream `ert-run-test`.
 - DONE (2026-01-03): Add an incremental upstream ERT load gate:
   - `mise run clemacs:test:load-ert` loads `lisp/emacs-lisp/ert.el` up to `clemacs/contract/ert.maxforms` (currently 182).
 - DONE (2026-01-03): Start with one upstream test file and grow from there (load gate first):
@@ -690,7 +690,7 @@ Status (TODO, 2026-01-03)
   - `mise run clemacs:test:ert-upstream` loads upstream `ert.el` + `ert-tests.el` and runs a must-pass list from `clemacs/contract/ert-upstream.tests`.
 - DONE (2026-01-03): Expand the upstream ERT gate (explicit list + checkpoints):
   - advance `clemacs/contract/ert-tests.maxforms` to 120 (loads ~54 `ert-test-*` defs),
-  - expand `clemacs/contract/ert-upstream.tests` to 30 tests (22 pass + 8 XFAIL),
+  - expand `clemacs/contract/ert-upstream.tests` to 33 tests (33 pass + 0 XFAIL),
   - track temporary failures in `clemacs/contract/ert-upstream.known-fail.tests`
     (XPASS is a gate failure).
 - DONE (2026-01-03): Reduce upstream ERT XFAILs by implementing missing core helpers / parity:

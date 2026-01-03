@@ -1352,7 +1352,7 @@ the original (SYMBOL . DATA) pair."
 (cl:defun %format-message (fmt args)
   "Very small subset of ELisp `format' used for early error messages.
 
-Supports: %s, %S, %d, %c, and %%."
+Supports: %s, %S, %d, %x, %c, and %%."
   (unless (stringp fmt)
     (cl:error "ELISP:ERROR expects a string format, got: ~S" fmt))
   (let ((i 0)
@@ -1378,10 +1378,18 @@ Supports: %s, %S, %d, %c, and %%."
                            (write-string (cl:prin1-to-string arg) out)))
                     (#\d (when arg-present
                            (write-string (cl:princ-to-string arg) out)))
+                    (#\x (when arg-present
+                           (write-string
+                            (cl:format nil "~x"
+                                       (cond
+                                        ((integerp arg) arg)
+                                        ((cl:characterp arg) (char-code arg))
+                                        (t arg)))
+                            out)))
                     (#\c (when arg-present
                            (write-char (cond
-                                        ((characterp arg) arg)
-                                        ((integerp arg) (code-char arg))
+                                        ((cl:characterp arg) arg)
+                                        ((integerp arg) (or (code-char arg) #\?))
                                         (t (char (cl:princ-to-string arg) 0)))
                                       out)))
                     (otherwise
@@ -1397,6 +1405,13 @@ Supports: %s, %S, %d, %c, and %%."
 (cl:defun format (fmt &rest args)
   "Bring-up subset of ELisp `format'."
   (%format-message fmt args))
+
+(cl:defun characterp (x)
+  "ELisp-ish `characterp'.
+
+In Emacs, characters are represented as integers."
+  (or (cl:characterp x)
+      (and (integerp x) (<= 0 x #x3fffff) t)))
 
 (cl:defun error (fmt &rest args)
   "Signal an ELisp-style `error' with DATA = (MESSAGE).
