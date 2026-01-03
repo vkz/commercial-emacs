@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Build clemacs substrate dylib (C ABI for SBCL via CFFI)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+out_dir="${project_root}/${build_dir}/substrate"
+mkdir -p "${out_dir}"
+
+src_dir="${project_root}/clemacs/substrate"
+out_lib="${out_dir}/libemxsubstrate.dylib"
+
+cc="${CC:-cc}"
+"${cc}" \
+  -dynamiclib \
+  -fPIC \
+  -O2 \
+  -I"${src_dir}" \
+  "${src_dir}/emx_substrate.c" \
+  -o "${out_lib}"
+
+echo "[clemacs:substrate:build] built ${out_lib}"

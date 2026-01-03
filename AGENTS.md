@@ -68,6 +68,25 @@ iterations, implement it immediately (prefer a `mise` file task).
 
 All project tasks should be run via `mise` (prefer `mise run ...`).
 
+### clemacs bring-up (SBCL-hosted, experimental)
+
+clemacs is the experimental SBCL-hosted runtime (Option B) being brought up
+alongside the baseline C-hosted Emacs build.
+
+- Toolchain bootstrap (host CL + SBCL):
+  - `mise run clemacs:bootstrap`
+- Dependency management (project-local, pinned, reproducible):
+  - Source of truth: `clemacs/qlfile` + `clemacs/qlfile.lock` (commit both).
+  - Install deps out-of-tree: `mise run clemacs:deps:install`
+  - Refresh lockfile (writes to source tree): `mise run clemacs:deps:lock`
+  - Implementation detail: qlot is cloned into `build/clemacs/tools/qlot`, and
+    deps are installed under `build/clemacs/deps/.qlot` with cache under
+    `build/clemacs/qlot-cache` (avoid global `~/.cache/qlot`).
+- Substrate dylib:
+  - `mise run clemacs:substrate:build`
+- One-command gate:
+  - `mise run clemacs:verify`
+
 ### Canonical build flow (macOS TTY)
 
 - `mise run bootstrap`

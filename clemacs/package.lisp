@@ -1,6 +1,9 @@
 (defpackage #:clemacs
   (:use #:cl)
-  (:export #:main))
+  (:export
+   #:main
+   #:substrate-platform
+   #:substrate-version))
 
 (defpackage #:clemacs.test
   (:use #:cl)

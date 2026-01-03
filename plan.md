@@ -361,6 +361,18 @@ Deliverables
 Gate
 - A CL-level smoke test calls the substrate and validates results.
 
+Status (DONE, 2026-01-03)
+- DONE: Choose dependency workflow: qlot + `clemacs/qlfile.lock` (pinned; via mise).
+- DONE: Add `clemacs/qlfile` + `clemacs/qlfile.lock` (commit both).
+- DONE: Add mise tasks:
+  - `clemacs:deps:install` (out-of-tree deps under `build/clemacs/deps/.qlot`)
+  - `clemacs:deps:lock` (regenerates `clemacs/qlfile.lock`)
+  - `clemacs:substrate:build` (builds `build/clemacs/substrate/libemxsubstrate.dylib`)
+  - `clemacs:verify` (one-command gate for bring-up)
+- DONE: Implement substrate dylib API: `emx_substrate_version`, `emx_substrate_platform`.
+- DONE: Implement CL-side CFFI bindings + smoke test gate (`mise run clemacs:test:smoke`).
+- TODO: Make dependency install quieter/faster (e.g. skip `qlot install` if lock unchanged).
+
 ### Milestone B1-2: stable handle table + error model
 
 Deliverables

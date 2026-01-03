@@ -18,8 +18,20 @@ mkdir -p "${build_dir}"
 
 export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
 
-mise x -- sbcl \
+mise run clemacs:deps:install -- --build-dir "${build_dir}"
+mise run clemacs:substrate:build -- --build-dir "${build_dir}"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+substrate_dylib="${project_root}/${build_dir}/substrate/libemxsubstrate.dylib"
+
+export CLEMACS_SUBSTRATE_DYLIB="${substrate_dylib}"
+
+cd "${deps_dir}"
+"${qlot_bin}" exec sbcl \
   --noinform \
+  --no-sysinit \
+  --no-userinit \
   --non-interactive \
   --disable-debugger \
   --eval '(require :asdf)' \

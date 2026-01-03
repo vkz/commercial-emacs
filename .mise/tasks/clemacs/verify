@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Verify clemacs bring-up (deps + substrate + run + smoke)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+build_dir="${usage_build_dir}"
+
+mise run clemacs:build -- --build-dir "${build_dir}"
+mise run clemacs:run -- --build-dir "${build_dir}"
+mise run clemacs:test:smoke -- --build-dir "${build_dir}"
