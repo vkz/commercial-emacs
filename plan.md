@@ -619,7 +619,7 @@ Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Decide the concrete integration shape for "running Emacs" on this branch:
   - Choose: SBCL-hosted `emacs` binary (SBCL main + C substrate).
   - Not chosen: transitional C-hosted shim (even if timeboxed).
-  - Decision commit: `cd122ed451f` (this affects all B1-10 work from here on).
+  - Decision commit: `a7d327d308a` (this affects all B1-10 work from here on).
 - DONE (2026-01-03): Scaffold an SBCL-hosted `emacs` executable for clemacs:
   - Build: `mise run clemacs:emacs:build` (writes `build/clemacs/bin/emacs`).
   - Run: `mise run clemacs:emacs:run` (sets `CLEMACS_SUBSTRATE_DYLIB` automatically).
