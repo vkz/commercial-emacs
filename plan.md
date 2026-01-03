@@ -429,13 +429,13 @@ Gate
 - Prefer running this milestone inside `tmux` so a wedged TTY can be killed
   without losing the outer shell.
 
-Status (TODO, 2026-01-03)
+Status (DONE, 2026-01-03)
 - DONE: Add substrate TTY API (raw mode + byte read/write).
 - DONE: Add CL TTY loop (`clemacs:tty-main`) with insert/backspace and basic cursor moves.
 - DONE: Add `mise` entrypoint for interactive bring-up: `mise run clemacs:tty:run` (restores `stty` on exit).
 - DONE (2026-01-03): Add multi-line display with a viewport (uses terminal size) and vertical motion (arrows/C-p/C-n).
 - DONE (2026-01-03): Add real save/quit chords: `C-x C-s` and `C-x C-c` (legacy `C-s` / `C-q` still work for now).
-- TODO: Manual gate: run `mise run clemacs:tty:run -- /tmp/clemacs-tty.txt`, type text, move point, save, quit, and confirm terminal state is restored.
+- DONE (2026-01-03): Automated TTY gate: `mise run clemacs:test:tty` drives `clemacs:tty-main` under a PTY and verifies save/quit.
 
 ### Milestone B1-5: expand editor substrate coverage
 

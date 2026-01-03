@@ -97,6 +97,8 @@ alongside the baseline C-hosted Emacs build.
   - `mise run clemacs:run` / `mise run clemacs:test:smoke` uses it automatically when present
 - Interactive TTY loop (manual testing; run inside tmux if possible):
   - `mise run clemacs:tty:run -- <optional-file>`
+- Non-interactive TTY gate (PTY-driven):
+  - `mise run clemacs:test:tty`
 - One-command gate:
   - `mise run clemacs:verify`
 - Timing (iteration cost signal):

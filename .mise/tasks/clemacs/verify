@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-#MISE description="Verify clemacs bring-up (deps + substrate + run + smoke)"
+#MISE description="Verify clemacs bring-up (deps + substrate + run + smoke + tty)"
 #USAGE flag "-h --help" help="Print help"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
 
@@ -15,3 +15,4 @@ build_dir="${usage_build_dir}"
 mise run clemacs:build -- --build-dir "${build_dir}"
 mise run clemacs:run -- --build-dir "${build_dir}"
 mise run clemacs:test:smoke -- --build-dir "${build_dir}"
+mise run clemacs:test:tty -- --build-dir "${build_dir}"

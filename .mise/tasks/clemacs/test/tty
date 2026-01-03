@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Run clemacs TTY loop under a PTY (non-interactive gate)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}/tmp"
+
+export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+
+outfile="${project_root}/${build_dir}/tmp/tty-test.txt"
+rm -f "${outfile}"
+
+mise run clemacs:deps:install -- --build-dir "${build_dir}"
+mise run clemacs:substrate:build -- --build-dir "${build_dir}"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+substrate_dylib="${project_root}/${build_dir}/substrate/libemxsubstrate.dylib"
+
+export CLEMACS_SUBSTRATE_DYLIB="${substrate_dylib}"
+export CLEMACS_TTY_PATH="${outfile}"
+
+export CLEMACS_TTY_TEST_OUTFILE="${outfile}"
+export CLEMACS_TTY_TEST_QLOT_BIN="${qlot_bin}"
+export CLEMACS_TTY_TEST_PROJECT_ROOT="${project_root}"
+
+cd "${deps_dir}"
+
+python3 - <<'PY'
+import os
+import pty
+import select
+import sys
+import time
+
+project_root = os.environ.get("CLEMACS_TTY_TEST_PROJECT_ROOT") or os.getcwd()
+outfile = os.environ.get("CLEMACS_TTY_TEST_OUTFILE")
+qlot_bin = os.environ.get("CLEMACS_TTY_TEST_QLOT_BIN")
+if not outfile or not qlot_bin:
+    raise SystemExit("missing CLEMACS_TTY_TEST_OUTFILE/CLEMACS_TTY_TEST_QLOT_BIN")
+
+asd_path = os.path.join(project_root, "clemacs", "clemacs.asd")
+cmd = [
+    qlot_bin,
+    "exec",
+    "sbcl",
+    "--noinform",
+    "--no-sysinit",
+    "--no-userinit",
+    "--disable-debugger",
+    "--eval",
+    "(require :asdf)",
+    "--eval",
+    f'(asdf:load-asd #p"{asd_path}")',
+    "--eval",
+    "(asdf:load-system :clemacs)",
+    "--eval",
+    '(uiop:quit (clemacs:tty-main :path (or (uiop:getenv "CLEMACS_TTY_PATH") "")))',
+]
+
+data = bytearray()
+data += b"abc"
+data += bytes([27, 91, 68])  # left arrow
+data += b"X"
+data += b"\nline2"
+data += bytes([24, 19])  # C-x C-s (save)
+data += bytes([24, 3])  # C-x C-c (quit)
+
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp(cmd[0], cmd)
+
+os.set_blocking(fd, False)
+deadline = time.time() + 20.0
+buf = bytearray()
+exit_code = None
+
+banner_deadline = time.time() + 3.0
+banner = b"clemacs tty:"
+while time.time() < banner_deadline and banner not in buf:
+    r, _, _ = select.select([fd], [], [], 0.05)
+    if r:
+        try:
+            chunk = os.read(fd, 4096)
+            if chunk:
+                buf += chunk
+        except OSError:
+            pass
+
+try:
+    os.write(fd, data)
+except OSError:
+    pass
+
+while True:
+    now = time.time()
+    if now > deadline:
+        os.kill(pid, 9)
+        raise RuntimeError("timeout waiting for clemacs tty")
+
+    r, _, _ = select.select([fd], [], [], 0.05)
+    if r:
+        try:
+            chunk = os.read(fd, 4096)
+            if chunk:
+                buf += chunk
+        except OSError:
+            pass
+
+    wpid, status = os.waitpid(pid, os.WNOHANG)
+    if wpid == pid:
+        if os.WIFEXITED(status):
+            exit_code = os.WEXITSTATUS(status)
+        elif os.WIFSIGNALED(status):
+            exit_code = 128 + os.WTERMSIG(status)
+        break
+
+if exit_code != 0:
+    sys.stderr.write(buf.decode("utf-8", "replace"))
+    raise SystemExit(exit_code)
+
+if not os.path.exists(outfile):
+    raise SystemExit("tty test failed: output file not written")
+
+content = open(outfile, "rb").read()
+if content != b"abX\nline2c":
+    sys.stderr.write("tty test unexpected file contents: %r\n" % (content,))
+    raise SystemExit(1)
+
+print("clemacs tty: ok")
+PY
