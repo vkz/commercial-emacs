@@ -516,9 +516,11 @@ Status (TODO, 2026-01-03)
     `build/clemacs/tmp/inventory-used.{json,txt}`).
   - `mise run clemacs:test:contract -- --level elisp-core` runs smoke + tty + ERT
     plus the inventory usage report as the "keep it honest" gate for this phase.
-- TODO: Implement CL symbol cells (value cell + function cell) and a basic `defun`/`fset` story.
+- DONE (2026-01-03): Implement a real ELisp function-cell store (separate from CL fdefinition):
+  - `fset` can store non-functions (e.g. keymaps), and `symbol-function` returns arbitrary defs.
+  - `function` / `#'` / `funcall` are loosened to support forward references during bootstrap.
 - TODO: Implement dynamic binding semantics needed by core libs (or document an explicit alternative).
-- TODO: Add a "missing primitive" error format that includes the inventory entry (name + source file).
+- DONE (2026-01-03): Add a "missing primitive" load error that includes the inventory entry (name + source file).
 - DONE (2026-01-03): Add a new clemacs contract level `elisp-core` (fast-ish) that runs constantly during this phase.
 
 Guardrails
@@ -538,11 +540,13 @@ Gate
 - The list is data in-repo and grows monotonically (no deleting to get green).
 
 Status (TODO, 2026-01-03)
-- TODO: Define a source-of-truth manifest for the initial ELisp bootstrap set
-  (files + load order), committed under `clemacs/contract/`.
+- DONE (2026-01-03): Define a source-of-truth manifest for the initial ELisp bootstrap set
+  (files + load order), committed under `clemacs/contract/` (`clemacs/contract/bootstrap.files`).
 - TODO: Add `mise` tasks:
   - `clemacs:load:lisp -- --level smoke|check`
   - `clemacs:port:regen` (optional, generates mechanical rewrites into `clemacs/ported/`)
+- DONE (2026-01-03): Add a precursor loader task:
+  - `mise run clemacs:load:bootstrap -- --limit 1` (used for bring-up; currently expected to fail on missing primitives)
 - TODO: Load the bootstrap set without modifying `lisp/` (first), then introduce a mechanical
   rewrite step only when necessary.
 - TODO: Track allowed skips explicitly (GUI/nativecomp/modules) with reasons and dates.

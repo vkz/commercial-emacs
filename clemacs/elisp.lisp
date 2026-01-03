@@ -2,9 +2,17 @@
 
 (defvar *elisp-readtable* nil)
 
-(defun %ensure-elisp-readtable ()
+(cl:defun %ensure-elisp-readtable ()
   (or *elisp-readtable*
       (let ((rt (copy-readtable nil)))
+        (set-dispatch-macro-character
+         #\#
+         #\'
+         (lambda (stream sub-char arg)
+           (declare (ignore sub-char arg))
+           (list (cl:intern "FUNCTION" (find-package "ELISP"))
+                 (read stream t nil t)))
+         rt)
         (set-macro-character
          #\[
          (lambda (stream char)
@@ -42,10 +50,24 @@
          rt)
         (setf *elisp-readtable* rt))))
 
-(defun load-elisp-file (path &key (package (find-package "ELISP")))
+(cl:defun load-elisp-file (path &key (package (find-package "ELISP")))
   (with-open-file (in path :external-format :utf-8)
     (let ((*package* package)
           (*readtable* (%ensure-elisp-readtable)))
-      (loop for form = (read in nil :eof)
+      (loop with form-index = 0
+            for form = (read in nil :eof)
             until (eq form :eof)
-            do (eval form)))))
+            do
+              (incf form-index)
+              (handler-case
+                  (eval form)
+                (error (e)
+                  (let ((inv (inventory-entry-for-condition
+                              e
+                              :start-dir (uiop:pathname-directory-pathname path))))
+                    (error 'elisp-load-error
+                           :path path
+                           :form-index form-index
+                           :form form
+                           :cause e
+                           :inventory-entry inv))))))))

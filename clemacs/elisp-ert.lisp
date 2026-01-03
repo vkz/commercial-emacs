@@ -7,21 +7,21 @@
 
 (defvar *ert-tests* (make-hash-table :test 'eq))
 
-(defun ert-reset ()
+(cl:defun ert-reset ()
   (clrhash *ert-tests*)
   t)
 
-(defmacro ert-deftest (name args &body body)
+(cl:defmacro ert-deftest (name args &body body)
   `(progn
      (setf (gethash ',name *ert-tests*)
            (lambda ,args ,@body))
      ',name))
 
-(defmacro should (form)
+(cl:defmacro should (form)
   `(unless ,form
      (error 'ert-failure :form ',form)))
 
-(defun ert-run-tests-batch (&key (stream *standard-output*))
+(cl:defun ert-run-tests-batch (&key (stream *standard-output*))
   (let ((total 0)
         (failed 0))
     (maphash
@@ -29,7 +29,7 @@
        (incf total)
        (handler-case
            (progn
-             (funcall fn)
+             (cl:funcall fn)
              (format stream "ok  ~S~%" name))
          (error (e)
            (incf failed)

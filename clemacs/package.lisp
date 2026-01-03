@@ -38,10 +38,12 @@
 
 (defpackage #:elisp
   (:use #:cl)
-  (:shadow #:setq #:equal)
+  (:shadow #:defmacro #:defun #:equal #:funcall #:function #:intern #:setq
+           #:symbol-function #:symbol-name #:fboundp)
   (:export
    #:equal
    #:load-elisp-file
+   #:load-bootstrap-set
    #:ert-deftest
    #:ert-run-tests-batch
    #:ert-reset
