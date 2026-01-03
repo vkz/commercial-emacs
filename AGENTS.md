@@ -67,6 +67,7 @@ iterations, implement it immediately (prefer a `mise` file task).
 ## Workflows (use mise)
 
 All project tasks should be run via `mise` (prefer `mise run ...`).
+If you see `mise WARN ... not trusted`, run `mise trust` in the repo root once.
 
 ### clemacs bring-up (SBCL-hosted, experimental)
 
@@ -82,6 +83,8 @@ alongside the baseline C-hosted Emacs build.
   - Implementation detail: qlot is cloned into `build/clemacs/tools/qlot`, and
     deps are installed under `build/clemacs/deps/.qlot` with cache under
     `build/clemacs/qlot-cache` (avoid global `~/.cache/qlot`).
+    - clemacs tasks also set `HOME` + XDG dirs under `build/clemacs/` to avoid
+      accidentally writing global state (e.g. `~/.cache/common-lisp`).
   - Notes:
     - `clemacs/qlfile` should list only our direct deps; pinning the Quicklisp
       dist in `clemacs/qlfile.lock` pins the full dependency closure.
@@ -106,6 +109,9 @@ alongside the baseline C-hosted Emacs build.
   - `mise run clemacs:test:contract -- --level elisp-core` (smoke + inventory usage report)
   - `mise run clemacs:test:contract -- --level check` (includes `clemacs:test:ert`)
   - `mise run clemacs:test:ert` (ERT-style smoke, ELISP package)
+  - `mise run clemacs:test:ert-upstream` (upstream ERT bring-up gate; must-pass list in `clemacs/contract/ert-upstream.tests`)
+  - Report: `mise run clemacs:report:ert-delta` (writes `build/clemacs/reports/ert-delta.md`)
+  - Report: `mise run clemacs:report:startup-delta` (writes `build/clemacs/reports/startup-delta.md`)
   - Compatibility report: `plans/clemacs-compat.md`
 - Experimental ELisp loader bring-up:
   - `mise run clemacs:load:bootstrap -- --limit 1` (loads the first entry in `clemacs/contract/bootstrap.files` up to `clemacs/contract/bootstrap.maxforms`)
