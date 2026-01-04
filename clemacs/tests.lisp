@@ -39,7 +39,7 @@
 (defun %elisp-eval-1 (string)
   (let ((*package* (find-package "ELISP"))
         (*readtable* (elisp::%ensure-elisp-readtable)))
-    (eval (read-from-string string))))
+    (cl:eval (read-from-string string))))
 
 (defun %elisp-read-1 (string)
   (let ((*package* (find-package "ELISP"))

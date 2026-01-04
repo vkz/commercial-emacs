@@ -97,6 +97,14 @@ like: (defalias 'string= 'string-equal)."
   "ELisp-ish FUNCALL that accepts symbols and lambda forms."
   (cl:apply (%resolve-function fn) args))
 
+(cl:defun eval (form &optional lexical)
+  "ELisp-ish EVAL.
+
+ELisp `eval' accepts an optional LEXICAL argument; for bring-up we ignore it
+and evaluate the (already CL-shaped) FORM."
+  (declare (ignore lexical))
+  (cl:eval (%elisp-rewrite form)))
+
 (cl:defun sxhash-equal (object)
   "Compatibility shim for the C primitive `sxhash-equal'."
   (cl:sxhash object))
@@ -318,14 +326,14 @@ This is sufficient for `lisp/emacs-lisp/backquote.el', which uses
 
 We evaluate BODY at macro-expansion time and return a quoted constant,
 matching the non-byte-compiler definition in `lisp/emacs-lisp/byte-run.el'."
-  (list 'quote (eval (cons 'progn body))))
+  (list 'quote (cl:eval (cons 'progn body))))
 
 (cl:defmacro eval-and-compile (&rest body)
   "Bring-up stub for ELisp `eval-and-compile'.
 
 We evaluate BODY at macro-expansion time and return a quoted constant,
 matching the non-byte-compiler definition in `lisp/emacs-lisp/byte-run.el'."
-  (list 'quote (eval (cons 'progn body))))
+  (list 'quote (cl:eval (cons 'progn body))))
 
 ;; ---------------------------------------------------------------------------
 ;; Minimal pcase subset (bring-up)
@@ -588,12 +596,13 @@ an augmented SBCL lexical environment."
                                     `(let ((,env-var env)) (progn ,@mbody))
                                     `(progn ,@mbody))))
                  (list name
-                       (eval `(lambda (form env)
-                                (declare (ignorable form env))
-                                (let ((args (cdr form)))
-                                  (declare (ignorable args))
-                                  (destructuring-bind ,lambda-list args
-                                    ,body-form)))))))))))
+                       (cl:eval
+                        `(lambda (form env)
+                           (declare (ignorable form env))
+                           (let ((args (cdr form)))
+                             (declare (ignorable args))
+                             (destructuring-bind ,lambda-list args
+                               ,body-form)))))))))))
     (let* ((macro-defs (mapcar #'binding->macro bindings))
            (env1 (sb-cltl2:augment-environment env0 :macro macro-defs)))
       (let ((macroexpand-all-environment env1))
@@ -920,7 +929,13 @@ We currently represent charsets as symbols with properties."
   (buffer nil)
   (position nil))
 
-(defvar *messages-buffer* (make-elisp-buffer :name "*Messages*"))
+(defvar *buffer-table* (cl:make-hash-table :test 'cl:equal))
+
+(cl:defun %register-buffer (buf)
+  (setf (gethash (elisp-buffer-name buf) *buffer-table*) buf)
+  buf)
+
+(defvar *messages-buffer* (%register-buffer (make-elisp-buffer :name "*Messages*")))
 (defvar *current-buffer* *messages-buffer*)
 (defparameter message-log-max t)
 
@@ -930,16 +945,68 @@ We currently represent charsets as symbols with properties."
 (cl:defun messages-buffer ()
   *messages-buffer*)
 
+(cl:defun get-buffer (buffer-or-name)
+  "Bring-up subset of ELisp `get-buffer'."
+  (etypecase buffer-or-name
+    (elisp-buffer buffer-or-name)
+    (string (gethash buffer-or-name *buffer-table*))
+    (null nil)))
+
+(cl:defun get-buffer-create (name &optional _inhibit-buffer-hooks)
+  "Bring-up subset of ELisp `get-buffer-create'."
+  (declare (ignore _inhibit-buffer-hooks))
+  (unless (stringp name)
+    (error "ELISP:GET-BUFFER-CREATE expects a string name, got: ~S" name))
+  (or (gethash name *buffer-table*)
+      (%register-buffer (make-elisp-buffer :name name))))
+
+(cl:defun generate-new-buffer-name (name &optional _ignore)
+  "Bring-up subset of ELisp `generate-new-buffer-name'."
+  (declare (ignore _ignore))
+  (unless (stringp name)
+    (error "ELISP:GENERATE-NEW-BUFFER-NAME expects a string, got: ~S" name))
+  (if (null (gethash name *buffer-table*))
+      name
+      (loop for n from 2 do
+        (let ((cand (cl:format nil "~A<~D>" name n)))
+          (when (null (gethash cand *buffer-table*))
+            (return cand))))))
+
+(cl:defun kill-buffer (buffer-or-name)
+  "Bring-up subset of ELisp `kill-buffer'."
+  (let ((buf (get-buffer buffer-or-name)))
+    (unless buf
+      (return-from kill-buffer nil))
+    (remhash (elisp-buffer-name buf) *buffer-table*)
+    (when (eq buf *current-buffer*)
+      (setf *current-buffer* *messages-buffer*))
+    t))
+
+(cl:defun set-buffer (buffer-or-name)
+  "Bring-up subset of ELisp `set-buffer'."
+  (let ((buf (or (get-buffer buffer-or-name)
+                 (and (stringp buffer-or-name)
+                      (error "ELISP:SET-BUFFER no such buffer: ~S" buffer-or-name))
+                 (error "ELISP:SET-BUFFER invalid buffer: ~S" buffer-or-name))))
+    (setf *current-buffer* buf)
+    buf))
+
 (cl:defmacro with-current-buffer (buffer &body body)
-  `(let ((*current-buffer* ,buffer))
+  `(let ((*current-buffer* (or (get-buffer ,buffer) ,buffer)))
      ,@body))
 
 (cl:defmacro with-temp-buffer (&body body)
   `(with-current-buffer (make-elisp-buffer :name " *temp*")
      ,@body))
 
+(cl:defmacro save-current-buffer (&body body)
+  `(let ((buf (current-buffer)))
+     (unwind-protect
+         (progn ,@body)
+       (set-buffer buf))))
+
 (cl:defmacro save-window-excursion (&body body)
-  `(progn ,@body))
+  `(save-current-buffer ,@body))
 
 (cl:defmacro save-excursion (&body body)
   `(progn ,@body))
@@ -1015,6 +1082,35 @@ We currently represent charsets as symbols with properties."
           (concatenate 'string (subseq txt 0 idx) s (subseq txt idx)))
     (goto-char (+ (point) (length s)))
     nil))
+
+(cl:defun buffer-string ()
+  "Bring-up subset of ELisp `buffer-string'."
+  (elisp-buffer-text *current-buffer*))
+
+(cl:defun buffer-name (&optional buffer)
+  "Bring-up subset of ELisp `buffer-name'."
+  (let ((buf (or buffer *current-buffer*)))
+    (etypecase buf
+      (elisp-buffer (elisp-buffer-name buf))
+      (null nil))))
+
+(cl:defvar global-mark-ring nil)
+
+(defstruct elisp-window-configuration
+  (current-buffer nil))
+
+(cl:defun current-window-configuration ()
+  "Bring-up stub for ELisp `current-window-configuration'."
+  (make-elisp-window-configuration :current-buffer *current-buffer*))
+
+(cl:defun set-window-configuration (config)
+  "Bring-up stub for ELisp `set-window-configuration'."
+  (unless (elisp-window-configuration-p config)
+    (error "ELISP:SET-WINDOW-CONFIGURATION expected window configuration, got: ~S" config))
+  (let ((buf (elisp-window-configuration-current-buffer config)))
+    (when buf
+      (set-buffer buf)))
+  t)
 
 (cl:defun natnump (x)
   (and (integerp x) (not (minusp x)) t))
@@ -1119,8 +1215,9 @@ Return (values EXPANDED EXPANDEDP)."
                      (arg-bindings (%macroexpand-all--macro-arg-bindings lambda-list args))
                      (env-bindings (if env-var (list (list env-var env)) nil))
                      (expanded
-                       (eval `(let ,(append env-bindings arg-bindings)
-                                ,(macroexp-progn body)))))
+                       (cl:eval
+                        `(let ,(append env-bindings arg-bindings)
+                           ,(macroexp-progn body)))))
                 (cl:values expanded t))))))))
   (cl:values form nil))
 

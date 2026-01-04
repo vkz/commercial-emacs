@@ -153,7 +153,7 @@
             do
               (incf form-index)
               (handler-case
-                  (eval (%elisp-rewrite form))
+                  (cl:eval (%elisp-rewrite form))
                 (cl:error (e)
                   (let ((inv (inventory-entry-for-condition
                               e

@@ -40,7 +40,7 @@
 
 (defpackage #:elisp
   (:use #:cl)
-  (:shadow #:defmacro #:defun #:equal #:funcall #:function #:intern #:make-hash-table #:provide #:require #:setq
+  (:shadow #:defmacro #:defun #:equal #:eval #:funcall #:function #:intern #:make-hash-table #:provide #:require #:setq
            #:make-list #:format
            #:append
            #:string= #:string-equal

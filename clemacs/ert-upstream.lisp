@@ -44,28 +44,36 @@ This is an incremental bring-up gate: we run named tests via upstream
     (dolist (name names)
       (incf total)
       (handler-case
-          (let* ((test (%upstream-ert-test name))
-                 (result (funcall 'elisp::ert-run-test test))
-                 (ok (funcall 'elisp::ert-test-passed-p result))
-                 (expected-fail (member name known-fail :test #'string=)))
-            (cond
-             ((and expected-fail ok)
-              (incf xpass)
-              (format stream "XPASS ~A~%" name)
-              (when debugp
-                (format stream "      ~S~%" (%maybe-upstream-ert-condition result))))
-             ((and expected-fail (not ok))
-              (incf xfail)
-              (format stream "XFAIL ~A~%" name)
-              (when debugp
-                (format stream "      ~S~%" (%maybe-upstream-ert-condition result))))
-             (ok
-              (format stream "ok   ~A~%" name))
-             (t
-              (incf failed)
-              (format stream "FAIL ~A~%" name)
-              (when debugp
-                (format stream "      ~S~%" (%maybe-upstream-ert-condition result))))))
+          (handler-bind
+              ((error
+                 (lambda (e)
+                   (when debugp
+                     (format stream "      signalled: ~A~%" e)
+                     #+sbcl
+                     (sb-debug:print-backtrace :stream stream :count 50))
+                   nil)))
+            (let* ((test (%upstream-ert-test name))
+                   (result (funcall 'elisp::ert-run-test test))
+                   (ok (funcall 'elisp::ert-test-passed-p result))
+                   (expected-fail (member name known-fail :test #'string=)))
+              (cond
+               ((and expected-fail ok)
+                (incf xpass)
+                (format stream "XPASS ~A~%" name)
+                (when debugp
+                  (format stream "      ~S~%" (%maybe-upstream-ert-condition result))))
+               ((and expected-fail (not ok))
+                (incf xfail)
+                (format stream "XFAIL ~A~%" name)
+                (when debugp
+                  (format stream "      ~S~%" (%maybe-upstream-ert-condition result))))
+               (ok
+                (format stream "ok   ~A~%" name))
+               (t
+                (incf failed)
+                (format stream "FAIL ~A~%" name)
+                (when debugp
+                  (format stream "      ~S~%" (%maybe-upstream-ert-condition result)))))))
         (error (e)
           (if (member name known-fail :test #'string=)
               (progn
@@ -73,7 +81,11 @@ This is an incremental bring-up gate: we run named tests via upstream
                 (format stream "XFAIL ~A: ~A~%" name e))
               (progn
                 (incf failed)
-                (format stream "ERROR ~A: ~A~%" name e))))))
+                (format stream "ERROR ~A: ~A~%" name e)
+                (when debugp
+                  (format stream "      (~A)~%" (type-of e))
+                  #+sbcl
+                  (sb-debug:print-backtrace :stream stream :count 50)))))))
     (format stream "clemacs upstream ert: ~D total, ~D failed, ~D xfail, ~D xpass~%"
             total failed xfail xpass)
     (finish-output stream)
