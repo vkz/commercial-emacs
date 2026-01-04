@@ -40,7 +40,12 @@ tests_max_forms="${usage_tests_max_forms}"
 bootstrap_eval="nil"
 if [[ "${bootstrap_max_forms}" == "0" ]]; then
   f="${project_root}/clemacs/contract/bootstrap.maxforms"
-  [[ -f "${f}" ]] && bootstrap_eval="$(tr -d ' \t\r\n' < "${f}")"
+  if [[ -f "${f}" ]]; then
+    v="$(tr -d ' \t\r\n' < "${f}")"
+    if [[ "${v}" =~ ^[0-9]+$ ]]; then
+      bootstrap_eval="${v}"
+    fi
+  fi
 elif [[ -n "${bootstrap_max_forms}" ]]; then
   bootstrap_eval="${bootstrap_max_forms}"
 fi

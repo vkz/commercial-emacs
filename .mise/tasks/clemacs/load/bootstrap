@@ -38,7 +38,10 @@ max_forms_eval="nil"
 if [[ "${max_forms}" == "0" ]]; then
   max_forms_file="${project_root}/clemacs/contract/bootstrap.maxforms"
   if [[ -f "${max_forms_file}" ]]; then
-    max_forms_eval="$(tr -d ' \t\r\n' < "${max_forms_file}")"
+    v="$(tr -d ' \t\r\n' < "${max_forms_file}")"
+    if [[ "${v}" =~ ^[0-9]+$ ]]; then
+      max_forms_eval="${v}"
+    fi
   fi
 elif [[ -n "${max_forms}" ]]; then
   max_forms_eval="${max_forms}"

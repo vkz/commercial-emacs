@@ -530,17 +530,14 @@ Status (TODO, 2026-01-04)
 - DONE (2026-01-03): Add a new clemacs contract level `elisp-core` (fast-ish) that runs constantly during this phase.
 - DONE (2026-01-03): Add a monotonic loader checkpoint gate:
   - `mise run clemacs:test:load-bootstrap` loads `lisp/subr.el` up to `clemacs/contract/bootstrap.maxforms`.
-- DONE (2026-01-04): Advance `clemacs/contract/bootstrap.maxforms` to 3200 (subr.el form checkpoint).
+- DONE (2026-01-04): Advance `clemacs/contract/bootstrap.maxforms` to `-` (no max-forms limit; `lisp/subr.el` loads fully).
 - DONE (2026-01-04): Unblock `version-to-list` bring-up by implementing:
   - regexp + match-data primitives (`string-match`, `string-match-p`, `match-data`, `match-beginning`, `match-end`, `match-string`)
   - `read-from-string` + `prin1-to-string` (needed for readable hash-table feature probe)
   - `handler--bind` (needed once `subr.el` reaches its `handler-bind` macro)
-- TODO: Keep advancing `bootstrap.maxforms` in small steps (+25/+50), keeping:
-  - `mise run clemacs:test:load-bootstrap`
-  - `mise run clemacs:test:ert-upstream`
-  green at every checkpoint.
-- TODO: Treat each new failure as an inventory item: implement or stub the missing primitive
-  (prefer shims in `clemacs/elisp-compat.lisp`) and re-run the gate.
+- DONE (2026-01-04): Keep `clemacs:test:load-bootstrap` and `clemacs:test:ert-upstream` green while removing the bootstrap max-forms limit.
+- TODO: Treat each new failure (as we grow bootstrap/startup manifests) as an inventory item:
+  implement or stub the missing primitive (prefer shims in `clemacs/elisp-compat.lisp`) and re-run the gate.
 
 Guardrails
 - Keep ELisp native compilation disabled.
@@ -755,9 +752,9 @@ Gate
 - `mise run clemacs:test:load-bootstrap` succeeds with no form limit.
 - `mise run clemacs:test:ert-upstream` remains green.
 
-Status (TODO, 2026-01-04)
-- TODO: Keep advancing `clemacs/contract/bootstrap.maxforms` until it reaches the end of `lisp/subr.el`.
-- TODO: Once it reaches the end, replace `bootstrap.maxforms` with a sentinel (or remove the max-forms limit in the task) and keep the gate monotonic.
+Status (DONE, 2026-01-04)
+- DONE: `lisp/subr.el` loads fully under clemacs with no max-forms limit:
+  - `clemacs/contract/bootstrap.maxforms` is now `-` and clemacs tasks treat non-numeric values as `nil` (`:max-forms nil`).
 
 ### Milestone B1-12: inventory closure for "startup.check"
 

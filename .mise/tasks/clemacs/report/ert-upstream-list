@@ -39,7 +39,12 @@ sbcl_dynamic_space="${CLEMACS_SBCL_DYNAMIC_SPACE_SIZE:-4096}"
 
 bootstrap_eval="nil"
 f="${project_root}/clemacs/contract/bootstrap.maxforms"
-[[ -f "${f}" ]] && bootstrap_eval="$(tr -d ' \t\r\n' < "${f}")"
+if [[ -f "${f}" ]]; then
+  v="$(tr -d ' \t\r\n' < "${f}")"
+  if [[ "${v}" =~ ^[0-9]+$ ]]; then
+    bootstrap_eval="${v}"
+  fi
+fi
 
 ert_eval="nil"
 f="${project_root}/clemacs/contract/ert.maxforms"
