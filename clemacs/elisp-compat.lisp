@@ -206,6 +206,72 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
   "ELisp-ish STRING-EQUAL (case-sensitive; alias of `string=')."
   (string= a b))
 
+(cl:defun %plist-put-preserve (plist key value)
+  (loop for cell on plist by #'cddr do
+    (when (eq (car cell) key)
+      (setf (cadr cell) value)
+      (return plist)))
+  (append plist (list key value)))
+
+(cl:defun text-properties-at (pos string &optional _object)
+  "Bring-up subset of ELisp `text-properties-at' for strings."
+  (declare (ignore _object))
+  (unless (and (integerp pos) (not (minusp pos)))
+    (error "ELISP:TEXT-PROPERTIES-AT bad position: ~S" pos))
+  (unless (stringp string)
+    (error "ELISP:TEXT-PROPERTIES-AT expects a string, got: ~S" string))
+  (let ((len (length string)))
+    (when (> pos len)
+      (error "ELISP:TEXT-PROPERTIES-AT out of range: ~S (len ~S)" pos len))
+    (let ((intervals (elisp::%string-text-properties string))
+          (out nil))
+      (when (null intervals)
+        (return-from text-properties-at nil))
+      ;; Apply intervals in order, preserving key position on updates.
+      (dolist (iv intervals)
+        (when (and (<= (elisp::text-prop-interval-start iv) pos)
+                   (< pos (elisp::text-prop-interval-end iv)))
+          (loop for (k v) on (elisp::text-prop-interval-plist iv) by #'cddr do
+            (setf out (%plist-put-preserve out k v)))))
+      out)))
+
+(cl:defun substring-no-properties (string &optional (from 0) to)
+  "Bring-up subset of ELisp `substring-no-properties' (for strings)."
+  (let ((s (substring string from to)))
+    (elisp::%clear-string-text-properties s)
+    s))
+
+(cl:defun propertize (string &rest properties)
+  "Bring-up subset of ELisp `propertize' (for strings)."
+  (unless (stringp string)
+    (error "ELISP:PROPERTIZE expects a string, got: ~S" string))
+  (unless (evenp (length properties))
+    (error "ELISP:PROPERTIZE expects a property list, got: ~S" properties))
+  (let ((s (copy-seq string)))
+    (elisp::%clear-string-text-properties s)
+    (when properties
+      (elisp::%set-string-text-properties
+       s
+       (list (elisp::make-text-prop-interval
+              :start 0
+              :end (length s)
+              :plist properties))))
+    s))
+
+(cl:defun equal-including-properties (a b)
+  "Bring-up subset of ELisp `equal-including-properties'."
+  (cond
+   ((and (stringp a) (stringp b))
+    (when (not (cl:string= a b))
+      (return-from equal-including-properties nil))
+    (let ((len (length a)))
+      (loop for i from 0 to len do
+        (unless (equal (text-properties-at i a) (text-properties-at i b))
+          (return-from equal-including-properties nil)))
+      t))
+   (t
+    (equal a b))))
+
 (cl:defun capitalize (s)
   "Bring-up subset of ELisp `capitalize'."
   (unless (stringp s)
@@ -823,13 +889,56 @@ an augmented SBCL lexical environment."
                     ((and (consp arg) (eq (car arg) 'lambda)) `(cl:function ,arg))
                     (t x)))
                  x))
+           (rewrite-across (xs)
+             ;; cl-lib's `cl-loop' iterates strings by character codes
+             ;; (because `aref' returns integers).  CL:LOOP iterates strings
+             ;; by CL characters, which breaks a number of upstream helpers
+             ;; (notably ERT explainers).  Rewrite:
+             ;;   for VAR across SEQ
+             ;; into:
+             ;;   for SEQG = SEQ then SEQG
+             ;;   for IG from 0 below (length SEQG)
+             ;;   for VAR = (aref SEQG IG)
+             (let ((out nil)
+                   (bindings nil)
+                   (rest xs))
+               (loop while rest do
+                 (cond
+                  ((and (consp rest)
+                        (member (car rest) '(for as) :test #'eq)
+                        (consp (cdr rest))
+                        (symbolp (cadr rest))
+                        (consp (cddr rest))
+                        (eq (caddr rest) 'across)
+                        (consp (cdddr rest)))
+                   (let* ((kw (car rest))
+                          (var (cadr rest))
+                          (seq (cadddr rest))
+                          (seqg (gensym "SEQ"))
+                          (ig (gensym "I")))
+                     (declare (ignore kw))
+                     (push (list seqg seq) bindings)
+                     (setf rest (cddddr rest))
+                     ;; OUT is built in reverse order.
+                     (dolist (x (list 'for ig 'from 0 'below `(length ,seqg)
+                                      'for var '= `(aref ,seqg ,ig)))
+                       (push x out))))
+                  (t
+                   (push (car rest) out)
+                   (setf rest (cdr rest)))))
+               (cl:values (nreverse bindings) (nreverse out))))
            (walk (xs)
              (cond
               ((null xs) nil)
               ((eq (car xs) 'by)
                (cons 'by (cons (rewrite-by (cadr xs)) (walk (cddr xs)))))
               (t (cons (car xs) (walk (cdr xs)))))))
-    `(cl:loop ,@(walk clauses))))
+    (multiple-value-bind (bindings clauses*)
+        (rewrite-across clauses)
+      (if (null bindings)
+          `(cl:loop ,@(walk clauses*))
+          `(cl:let ,bindings
+             (cl:loop ,@(walk clauses*)))))))
 
 (cl:defmacro cl-etypecase (keyform &rest clauses)
   "Bring-up subset of cl-lib's `cl-etypecase'."
@@ -2217,13 +2326,6 @@ trying to redefine locked symbols while loading upstream ELisp)."
          (loop for i from 0 below (length a)
                always (equal (aref a i) (aref b i)))))
    (t (cl:equal a b))))
-
-(cl:defun equal-including-properties (a b)
-  "Bring-up stub for ELisp `equal-including-properties'.
-
-clemacs does not yet model text properties, so this currently behaves like
-`equal'."
-  (equal a b))
 
 (cl:defun type-of (object)
   "ELisp-ish `type-of'.

@@ -624,6 +624,11 @@ Status (TODO, 2026-01-04)
   - bump `clemacs/contract/ert-tests.maxforms` to 400 (no change in registered test count; still 55 at this checkpoint),
   - expand `clemacs/contract/ert-upstream.tests` to 47 tests by adding `ert-test-messages` and `ert-test-running-tests`,
   - keep `clemacs/contract/ert-upstream.known-fail.tests` explicit (still 6; XPASS is a gate failure).
+- DONE (2026-01-04): Start modeling string text properties well enough for ERT explainers:
+  - add ELisp reader support for `#("foo" 0 3 (a b))` (string literal with text properties),
+  - add minimal `propertize`, `text-properties-at`, `substring-no-properties`, `equal-including-properties`,
+  - fix `cl-loop` `across` handling so string iteration yields character codes (not CL chars),
+  - drop `ert-test-explain-equal-string-properties` from `ert-upstream.known-fail.tests` (now passes).
 - TODO: Continue expanding upstream ERT coverage (either more tests from `ert-tests.el` or additional upstream ERT test files),
   keeping the must-pass list monotonic and `known-fail` dated.
 
@@ -789,6 +794,7 @@ Status (TODO, 2026-01-04)
   - ELisp string AREF semantics (return integer char codes; allow setf via integer).
   - Reader support for quoted dot-only tokens like `'...` (pcase).
   - Minimal marker/Help bring-up primitives: `make-marker`, `marker-position`, `help-char`, `char-to-string`, `key-description`.
+  - Start string text property support (reader + core helpers) to unblock ERT string-property explainers.
 
 ### Milestone B1-13: (reserved)
 

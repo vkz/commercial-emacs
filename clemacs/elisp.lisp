@@ -2,6 +2,25 @@
 
 (defvar *elisp-readtable* nil)
 
+(defstruct text-prop-interval
+  (start 0 :type integer)
+  (end 0 :type integer)
+  (plist nil))
+
+(defvar *string-text-properties*
+  (cl:make-hash-table :test 'eq))
+
+(cl:defun %string-text-properties (string)
+  (gethash string *string-text-properties*))
+
+(cl:defun %set-string-text-properties (string intervals)
+  (setf (gethash string *string-text-properties*) intervals)
+  string)
+
+(cl:defun %clear-string-text-properties (string)
+  (remhash string *string-text-properties*)
+  string)
+
 (defconstant +char-alt+ #x0400000)
 (defconstant +char-super+ #x0800000)
 (defconstant +char-hyper+ #x1000000)
@@ -230,6 +249,33 @@
            (declare (ignore sub-char arg))
            (list (cl:intern "FUNCTION" (find-package "ELISP"))
                  (read stream t nil t)))
+         rt)
+        (set-dispatch-macro-character
+         #\#
+         #\(
+         (lambda (stream sub-char arg)
+           (declare (ignore sub-char arg))
+           ;; In Emacs Lisp, #("foo" 0 3 (a b)) is a string with text properties,
+           ;; not a vector. Vectors are read via [...].
+           (let* ((items (read-delimited-list #\) stream t))
+                  (base (first items))
+                  (rest (rest items)))
+             (unless (cl:stringp base)
+               (cl:error "#(...) expects a string first element, got: ~S" base))
+             (when (and rest (not (zerop (mod (length rest) 3))))
+               (cl:error "#(...) property syntax expects triples: START END PLIST; got: ~S" items))
+             (let ((s (copy-seq base))
+                   (intervals nil))
+               (loop for (start end plist) on rest by #'cdddr do
+                 (unless (and (integerp start) (integerp end) (<= 0 start) (<= start end))
+                   (cl:error "#(...) bad text property range: ~S ~S" start end))
+                 (unless (or (null plist) (listp plist))
+                   (cl:error "#(...) bad text property plist: ~S" plist))
+                 (push (make-text-prop-interval :start start :end end :plist plist) intervals))
+               (%clear-string-text-properties s)
+               (when intervals
+                 (%set-string-text-properties s (nreverse intervals)))
+               s)))
          rt)
         (set-macro-character
          #\[

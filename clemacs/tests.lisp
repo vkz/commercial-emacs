@@ -132,7 +132,7 @@
          (backquote-el (merge-pathnames #p"lisp/emacs-lisp/backquote.el" project-root)))
     (unless (fboundp 'elisp::backquote)
       (elisp::load-elisp-file backquote-el))
-    (let ((value (%elisp-eval-1 "`(x #(0 255))")))
+    (let ((value (%elisp-eval-1 "`(x [0 255])")))
     (fiveam:is (and (consp value) (eql (car value) 'elisp::x)))
     (fiveam:is (vectorp (cadr value)))
     (fiveam:is (= (length (cadr value)) 2))
