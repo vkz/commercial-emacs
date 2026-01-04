@@ -530,7 +530,7 @@ Status (TODO, 2026-01-04)
 - DONE (2026-01-03): Add a new clemacs contract level `elisp-core` (fast-ish) that runs constantly during this phase.
 - DONE (2026-01-03): Add a monotonic loader checkpoint gate:
   - `mise run clemacs:test:load-bootstrap` loads `lisp/subr.el` up to `clemacs/contract/bootstrap.maxforms`.
-- DONE (2026-01-04): Advance `clemacs/contract/bootstrap.maxforms` to 400 (subr.el form checkpoint).
+- DONE (2026-01-04): Advance `clemacs/contract/bootstrap.maxforms` to 450 (subr.el form checkpoint).
 - TODO: Keep advancing `bootstrap.maxforms` in small steps (+25/+50), keeping:
   - `mise run clemacs:test:load-bootstrap`
   - `mise run clemacs:test:ert-upstream`
