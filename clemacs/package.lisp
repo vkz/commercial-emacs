@@ -27,6 +27,7 @@
    #:buffer-move-vertical
    #:buffer-load-file
    #:buffer-save
+   #:list-upstream-ert-test-names
    #:run-upstream-ert-tests
    #:tty-main
    #:emacs-main

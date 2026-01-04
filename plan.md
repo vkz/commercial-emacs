@@ -610,6 +610,11 @@ Status (TODO, 2026-01-04)
 - DONE (2026-01-03): Expand the upstream ERT gate to an explicit, growing list:
   - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 34),
   - `clemacs/contract/ert-upstream.known-fail.tests` (temporary tolerations; XPASS is a gate failure).
+- DONE (2026-01-04): Add a helper to list which upstream tests are registered at the current checkpoint:
+  - `mise run clemacs:report:ert-upstream-list` writes `build/clemacs/reports/ert-upstream-tests.txt`.
+- DONE (2026-01-04): Grow the upstream ERT gate list monotonically:
+  - expand `clemacs/contract/ert-upstream.tests` to 45 tests,
+  - introduce `clemacs/contract/ert-upstream.known-fail.tests` entries for the 6 currently-failing tests (dated reasons).
 - DONE (2026-01-03): Make upstream ERT's `should-error` semantics runnable:
   - seed C-defined error hierarchy properties (at least `error`, `arith-error`, `domain-error`, `singularity-error`),
   - implement `cl-intersection` (used by `ert--should-error-handle-error`).

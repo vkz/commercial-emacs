@@ -24,6 +24,21 @@
         (try 'elisp::ert-test-failed-condition result)
         (try 'elisp::ert-test-skipped-condition result))))
 
+(defun list-upstream-ert-test-names (&key (stream *standard-output*))
+  "Return the list of upstream ERT tests currently registered under clemacs.
+
+This scans the ELISP package for symbols with an `ert--test` property."
+  (let* ((pkg (find-package "ELISP"))
+         (names nil))
+    (do-symbols (s pkg)
+      (when (get s 'elisp::ert--test)
+        (push (string-downcase (symbol-name s)) names)))
+    (setf names (sort names #'string<))
+    (dolist (n names)
+      (format stream "~A~%" n))
+    (finish-output stream)
+    names))
+
 (defun run-upstream-ert-tests (&key (names '("ert-test-body-runs"))
                                     (known-fail nil)
                                     (stream *standard-output*))

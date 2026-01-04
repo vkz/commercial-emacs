@@ -36,3 +36,14 @@ ert-test-explain-equal
 ert-test-explain-equal-improper-list
 ert-test-explain-equal-keymaps
 ert-test-fail-inside-should
+ert-test-explain-equal-string-properties
+ert-test-explain-equal-strings
+ert-test-list-of-should-forms-no-deep-copy
+ert-test-select-and
+ert-test-select-member
+ert-test-select-regexp
+ert-test-select-symbol
+ert-test-select-tag
+ert-test-select-test
+ert-test-select-undefined
+ert--pp-with-indentation-and-newline

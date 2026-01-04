@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="List upstream ERT tests currently registered under clemacs (experimental)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--out <path>" help="Write list to this path (defaults under build dir)" default=""
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}"
+
+out="${usage_out:-}"
+if [[ -z "${out}" ]]; then
+  out="${project_root}/${build_dir}/reports/ert-upstream-tests.txt"
+fi
+mkdir -p "$(dirname "${out}")"
+
+export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+export XDG_CONFIG_HOME="${project_root}/${build_dir}/xdg-config"
+export XDG_DATA_HOME="${project_root}/${build_dir}/xdg-data"
+
+home_dir="${project_root}/${build_dir}/home"
+mkdir -p "${home_dir}"
+export HOME="${home_dir}"
+
+usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+sbcl_dynamic_space="${CLEMACS_SBCL_DYNAMIC_SPACE_SIZE:-4096}"
+
+bootstrap_eval="nil"
+f="${project_root}/clemacs/contract/bootstrap.maxforms"
+[[ -f "${f}" ]] && bootstrap_eval="$(tr -d ' \t\r\n' < "${f}")"
+
+ert_eval="nil"
+f="${project_root}/clemacs/contract/ert.maxforms"
+[[ -f "${f}" ]] && ert_eval="$(tr -d ' \t\r\n' < "${f}")"
+
+tests_eval="nil"
+f="${project_root}/clemacs/contract/ert-tests.maxforms"
+[[ -f "${f}" ]] && tests_eval="$(tr -d ' \t\r\n' < "${f}")"
+
+cd "${deps_dir}"
+"${qlot_bin}" exec sbcl \
+  --dynamic-space-size "${sbcl_dynamic_space}" \
+  --noinform \
+  --no-sysinit \
+  --no-userinit \
+  --non-interactive \
+  --disable-debugger \
+  --eval '(require :asdf)' \
+  --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
+  --eval '(asdf:load-system :clemacs)' \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/backquote.el\")" \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/subr.el\" :max-forms ${bootstrap_eval})" \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert.el\" :max-forms ${ert_eval})" \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-tests.el\" :max-forms ${tests_eval})" \
+  --eval "(with-open-file (s #p\"${out}\" :direction :output :if-exists :supersede :if-does-not-exist :create) (clemacs:list-upstream-ert-test-names :stream s))" \
+  --eval '(uiop:quit 0)'
+
+echo "[clemacs:report:ert-upstream-list] wrote ${out}"
