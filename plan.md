@@ -770,8 +770,11 @@ Gate
 Status (TODO, 2026-01-04)
 - TODO: Use `mise run clemacs:inventory:used` on `startup.check.files` and implement the missing primitives first.
 - TODO: Grow `startup.check.files` checkpoints (monotonic), preferring the pdump load order as the guide.
- - DONE (2026-01-04): Make `startup.check.files` actually exercise full `subr.el`:
+- DONE (2026-01-04): Make `startup.check.files` actually exercise full `subr.el`:
   - set `lisp/subr.el -` in `clemacs/contract/startup.check.files` (smoke remains conservatively capped).
+- DONE (2026-01-04): Raise `startup.check.files` `lisp/keymap.el` checkpoint to 20 forms:
+  - Implement ELisp reader support for Emacs char modifier literals like `?\A-\0` / `?\C-\0` / `?\C-\M-a` (required by `lisp/keymap.el`).
+  - Catch reader errors in `elisp:load-elisp-file` so failures are wrapped as `elisp-load-error` and can be logged via `CLEMACS_LOAD_DEBUG_FILE`.
 
 ### Milestone B1-13: (reserved)
 

@@ -2,6 +2,113 @@
 
 (defvar *elisp-readtable* nil)
 
+(defconstant +char-alt+ #x0400000)
+(defconstant +char-super+ #x0800000)
+(defconstant +char-hyper+ #x1000000)
+(defconstant +char-shift+ #x2000000)
+(defconstant +char-ctl+ #x4000000)
+(defconstant +char-meta+ #x8000000)
+
+(cl:defun %controlify-ascii (code)
+  (cond
+   ((or (<= (char-code #\A) code (char-code #\Z))
+        (<= (char-code #\a) code (char-code #\z))
+        (<= (char-code #\@) code (char-code #\_)))
+    (logand code #x1f))
+   (t nil)))
+
+(cl:defun %read-elisp-escape-code (stream first)
+  (labels ((read-hex ()
+             (let ((digits nil))
+               (loop for ch = (peek-char nil stream nil nil t)
+                     while (and ch (digit-char-p ch 16)) do
+                       (push (read-char stream nil nil t) digits))
+               (unless digits
+                 (cl:error "Missing hex digits in ?\\x escape"))
+               (parse-integer (coerce (nreverse digits) 'string) :radix 16)))
+           (read-octal (first-digit)
+             (let ((digits (list first-digit)))
+               (loop repeat 2
+                     for ch = (peek-char nil stream nil nil t)
+                     while (and ch (digit-char-p ch 8)) do
+                       (push (read-char stream nil nil t) digits))
+               (parse-integer (coerce (nreverse digits) 'string) :radix 8))))
+    (case first
+      (#\n (char-code #\Newline))
+      (#\t (char-code #\Tab))
+      (#\r (char-code #\Return))
+      (#\s (char-code #\Space))
+      (#\b 8)
+      (#\f 12)
+      (#\a 7)
+      (#\e 27)
+      (#\\ (char-code #\\))
+      (#\" (char-code #\"))
+      (#\x (read-hex))
+      (otherwise
+       (cond
+        ((digit-char-p first 8)
+         (read-octal first))
+        (t
+         (char-code first)))))))
+
+(cl:defun %read-elisp-char-literal (stream)
+  (let ((c (read-char stream nil nil t)))
+    (when (null c)
+      (cl:error "EOF after ?"))
+    (if (not (char= c #\\))
+        (char-code c)
+        (let ((bits 0)
+              (ctlp nil))
+          (labels ((add-mod (m)
+                     (case m
+                       (#\A (incf bits +char-alt+))
+                       (#\H (incf bits +char-hyper+))
+                       (#\M (incf bits +char-meta+))
+                       (#\s (incf bits +char-super+))
+                       (#\S (incf bits +char-shift+))
+                       (#\C (setf ctlp t))
+                       (otherwise (cl:error "Unknown char modifier: ~S" m))))
+                   (finish (code)
+                     (let ((ctl-code (and ctlp (%controlify-ascii code))))
+                       (cond
+                        ((and ctlp (= code 0))
+                         (+ bits +char-ctl+))
+                        (ctl-code
+                         (+ bits ctl-code))
+                        (ctlp
+                         (+ bits +char-ctl+ code))
+                        (t
+                         (+ bits code)))))
+                   (read-base-code ()
+                     (let ((ch (read-char stream nil nil t)))
+                       (when (null ch)
+                         (cl:error "EOF in ?\\ escape"))
+                       (if (char= ch #\\)
+                           (let ((e (read-char stream nil nil t)))
+                             (when (null e)
+                               (cl:error "EOF in ?\\ escape"))
+                             (%read-elisp-escape-code stream e))
+                           (char-code ch)))))
+            ;; Parse a possibly-modified char like: ?\C-\M-a or ?\A-\0.
+            (loop
+              for ch = (read-char stream nil nil t) do
+                (when (null ch)
+                  (cl:error "EOF in ?\\ escape"))
+                (let ((dash (peek-char nil stream nil nil t)))
+                  (cond
+                   ((and dash (char= dash #\-) (find ch "ACHMsSC" :test #'char=))
+                    (read-char stream nil nil t) ; consume '-'
+                    (add-mod ch)
+                    (let ((next (peek-char nil stream nil nil t)))
+                      (when (null next)
+                        (cl:error "EOF in ?\\ escape"))
+                      (if (char= next #\\)
+                          (read-char stream nil nil t) ; consume '\' and loop
+                          (return (finish (read-base-code))))))
+                   (t
+                    (return (finish (%read-elisp-escape-code stream ch))))))))))))
+
 (cl:defun %elisp-rewrite (form)
   (labels ((rw (x)
              (cond
@@ -124,21 +231,7 @@
          #\?
          (lambda (stream char)
            (declare (ignore char))
-           (let ((c (read-char stream nil nil t)))
-             (when (null c)
-               (cl:error "EOF after ?"))
-             (if (char= c #\\)
-                 (let ((e (read-char stream nil nil t)))
-                   (when (null e)
-                     (cl:error "EOF in ?\\ escape"))
-                   (case e
-                     (#\n (char-code #\Newline))
-                     (#\t (char-code #\Tab))
-                     (#\r (char-code #\Return))
-                     (#\s (char-code #\Space))
-                     (#\\ (char-code #\\))
-                     (otherwise (char-code e))))
-                 (char-code c))))
+           (%read-elisp-char-literal stream))
          nil
          rt)
         (setf *elisp-readtable* rt))))
@@ -166,27 +259,41 @@
                          (finish-output out))
                      (when debug-file
                        (ignore-errors (close out))))))))
-        (loop with form-index = 0
-              for form = (read in nil :eof)
-              until (eq form :eof)
-              do
-                (incf form-index)
-                (handler-case
-                    (cl:handler-bind
-                        ((cl:error
-                           (lambda (e)
-                             (%maybe-log-load-error e form-index)
-                             nil)))
-                      (cl:eval (%elisp-rewrite form)))
-                  (cl:error (e)
-                    (let ((inv (inventory-entry-for-condition
-                                e
-                                :start-dir (uiop:pathname-directory-pathname path))))
-                      (cl:error 'elisp-load-error
-                                :path path
-                                :form-index form-index
-                                :form form
-                                :cause e
-                                :inventory-entry inv))))
-                (when (and max-forms (>= form-index max-forms))
-                  (return)))))))
+        (loop with form-index = 0 do
+          (let ((form
+                  (handler-case
+                      (read in nil :eof)
+                    (cl:error (e)
+                      (let ((next-index (1+ form-index)))
+                        (%maybe-log-load-error e next-index)
+                        (let ((inv (inventory-entry-for-condition
+                                    e
+                                    :start-dir (uiop:pathname-directory-pathname path))))
+                          (cl:error 'elisp-load-error
+                                    :path path
+                                    :form-index next-index
+                                    :form :read-error
+                                    :cause e
+                                    :inventory-entry inv)))))))
+            (when (eq form :eof)
+              (return))
+            (incf form-index)
+            (handler-case
+                (cl:handler-bind
+                    ((cl:error
+                       (lambda (e)
+                         (%maybe-log-load-error e form-index)
+                         nil)))
+                  (cl:eval (%elisp-rewrite form)))
+              (cl:error (e)
+                (let ((inv (inventory-entry-for-condition
+                            e
+                            :start-dir (uiop:pathname-directory-pathname path))))
+                  (cl:error 'elisp-load-error
+                            :path path
+                            :form-index form-index
+                            :form form
+                            :cause e
+                            :inventory-entry inv))))
+            (when (and max-forms (>= form-index max-forms))
+              (return))))))))

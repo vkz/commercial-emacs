@@ -13,7 +13,7 @@ lisp/emacs-lisp/debug-early.el
 lisp/emacs-lisp/byte-run.el 1
 lisp/emacs-lisp/backquote.el
 lisp/subr.el -
-lisp/keymap.el 1
+lisp/keymap.el 20
 lisp/version.el 2
 
 # pdump: widget, custom, map-ynp, mule, mule-conf, env, format, bindings, window, files.
