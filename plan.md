@@ -597,7 +597,7 @@ Gate
 
 Status (TODO, 2026-01-04)
 - DONE (2026-01-03): Load upstream `lisp/emacs-lisp/ert.el` and run at least one upstream test:
-  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 33 tests) via upstream `ert-run-test`.
+  - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 45 tests) via upstream `ert-run-test`.
 - DONE (2026-01-03): Add an incremental upstream ERT load gate:
   - `mise run clemacs:test:load-ert` loads `lisp/emacs-lisp/ert.el` up to `clemacs/contract/ert.maxforms` (currently 182).
 - DONE (2026-01-03): Start with one upstream test file and grow from there (load gate first):
@@ -608,7 +608,7 @@ Status (TODO, 2026-01-04)
   - `mise run clemacs:report:ert-delta` compares the baseline `ert-tests.log` summary against the clemacs bring-up gate,
     and writes `build/clemacs/reports/ert-delta.md` (path configurable).
 - DONE (2026-01-03): Expand the upstream ERT gate to an explicit, growing list:
-  - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 34),
+  - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 45),
   - `clemacs/contract/ert-upstream.known-fail.tests` (temporary tolerations; XPASS is a gate failure).
 - DONE (2026-01-04): Add a helper to list which upstream tests are registered at the current checkpoint:
   - `mise run clemacs:report:ert-upstream-list` writes `build/clemacs/reports/ert-upstream-tests.txt`.
