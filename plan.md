@@ -770,6 +770,8 @@ Gate
 Status (TODO, 2026-01-04)
 - TODO: Use `mise run clemacs:inventory:used` on `startup.check.files` and implement the missing primitives first.
 - TODO: Grow `startup.check.files` checkpoints (monotonic), preferring the pdump load order as the guide.
+ - DONE (2026-01-04): Make `startup.check.files` actually exercise full `subr.el`:
+  - set `lisp/subr.el -` in `clemacs/contract/startup.check.files` (smoke remains conservatively capped).
 
 ### Milestone B1-13: (reserved)
 
