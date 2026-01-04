@@ -1004,6 +1004,23 @@ an augmented SBCL lexical environment."
   "Bring-up subset of cl-lib's `cl-etypecase'."
   `(cl:etypecase ,keyform ,@clauses))
 
+(cl:defun cl-typep (object type)
+  "Bring-up subset of cl-lib's `cl-typep'."
+  (cond
+   ((and (consp type) (eq (car type) 'satisfies) (= (length type) 2))
+    (funcall (cadr type) object))
+   (t
+    (typep object type))))
+
+(cl:defmacro cl-check-type (form type &optional _string)
+  "Bring-up subset of cl-lib's `cl-check-type'."
+  (declare (ignore _string))
+  (let ((tmp (gensym "VAL")))
+    `(let ((,tmp ,form))
+       (unless (cl-typep ,tmp ',type)
+         (error "Wrong type: expected %S, got %S" ',type ,tmp))
+       nil)))
+
 (cl:defmacro cl-incf (place &optional (delta 1))
   "Minimal subset of cl-lib's `cl-incf'."
   `(cl:incf ,place ,delta))
@@ -1305,6 +1322,19 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
     (error "ELISP:MAKE-LIST expects nonnegative integer length, got: ~S" length))
   (cl:make-list length :initial-element init))
 
+(cl:defun make-string (length init)
+  "ELisp-ish `make-string'.
+
+LENGTH is the string length. INIT is an ELisp character code or a CL character."
+  (unless (and (integerp length) (>= length 0))
+    (error "ELISP:MAKE-STRING expects nonnegative integer length, got: ~S" length))
+  (let ((ch (typecase init
+              (integer (or (code-char init)
+                           (error "ELISP:MAKE-STRING invalid char code: ~S" init)))
+              (character init)
+              (t (error "ELISP:MAKE-STRING expects char code or character, got: ~S" init)))))
+    (cl:make-string length :initial-element ch)))
+
 (defvar *charset-aliases* (cl:make-hash-table :test 'eq))
 
 (cl:defun define-charset-alias (alias charset)
@@ -1416,6 +1446,7 @@ as HI*65536 + LO."
 (cl:defvar describe-symbol-backends nil)
 (cl:defvar minor-mode-alist nil)
 (cl:defvar help-char 8)
+(cl:defvar font-lock-mode nil)
 
 ;; ---------------------------------------------------------------------------
 ;; Minimal buffer/marker surface (enough for upstream ERT bring-up)
@@ -1640,6 +1671,190 @@ Returns a marker with no buffer/position."
       (set-buffer buf)))
   t)
 
+(cl:defun pop-to-buffer (buffer-or-name &optional _action _norecord)
+  "Bring-up stub for ELisp `pop-to-buffer'."
+  (declare (ignore _action _norecord))
+  (let ((buf (or (get-buffer buffer-or-name)
+                 (and (stringp buffer-or-name) (get-buffer-create buffer-or-name))
+                 (error "ELISP:POP-TO-BUFFER invalid buffer: ~S" buffer-or-name))))
+    (set-buffer buf)
+    buf))
+
+(cl:defun force-mode-line-update (&optional _all)
+  "Bring-up stub for ELisp `force-mode-line-update'."
+  (declare (ignore _all))
+  nil)
+
+(cl:defun redisplay (&optional _force)
+  "Bring-up stub for ELisp `redisplay'."
+  (declare (ignore _force))
+  nil)
+
+(cl:defun float-time (&optional time)
+  "Bring-up subset of ELisp `float-time'."
+  (cond
+   ((null time) (cl:coerce (get-universal-time) 'double-float))
+   ((numberp time) (cl:coerce time 'double-float))
+   ((and (consp time) (integerp (car time)) (consp (cdr time)) (integerp (cadr time)))
+    ;; Emacs time values are typically (HI LO USEC PSEC) where seconds are
+    ;; HI*2^16 + LO and the tail are fractional seconds.
+    (let* ((hi (cl:coerce (car time) 'double-float))
+           (lo (cl:coerce (cadr time) 'double-float))
+           (usec (cl:coerce (or (caddr time) 0) 'double-float))
+           (psec (cl:coerce (or (cadddr time) 0) 'double-float)))
+      (+ (* hi 65536.0d0) lo (/ usec 1000000.0d0) (/ psec 1000000000000.0d0))))
+   (t (error "ELISP:FLOAT-TIME unsupported time: ~S" time))))
+
+(cl:defun time-add (time-a time-b)
+  "Bring-up subset of ELisp `time-add'."
+  (+ (float-time time-a) (float-time time-b)))
+
+(cl:defun time-subtract (time-a time-b)
+  "Bring-up subset of ELisp `time-subtract'."
+  (- (float-time time-a) (float-time time-b)))
+
+(cl:defun time-less-p (time-a time-b)
+  "Bring-up subset of ELisp `time-less-p'."
+  (< (float-time time-a) (float-time time-b)))
+
+;; ---------------------------------------------------------------------------
+;; Minimal ewoc surface (enough for upstream ERT results printing bring-up)
+;; ---------------------------------------------------------------------------
+
+(defstruct elisp-ewoc-node
+  (data nil)
+  (location 1 :type integer))
+
+(defstruct elisp-ewoc
+  (buffer nil)
+  (pretty-printer nil)
+  (header "" :type string)
+  (footer "" :type string)
+  (nosep nil)
+  (nodes nil))
+
+(cl:defun ewoc-create (pretty-printer &optional header footer nosep)
+  "Bring-up subset of ELisp `ewoc-create'.
+
+This is a minimal stub used to get upstream ERT's results buffer printing
+working. It stores nodes out-of-band and (re)renders on `ewoc-refresh' and
+`ewoc-set-hf'."
+  (make-elisp-ewoc :buffer (current-buffer)
+                   :pretty-printer pretty-printer
+                   :header (or header "")
+                   :footer (or footer "")
+                   :nosep (and nosep t)
+                   :nodes nil))
+
+(cl:defun ewoc-set-hf (ewoc header footer)
+  "Bring-up subset of ELisp `ewoc-set-hf'."
+  (unless (elisp-ewoc-p ewoc)
+    (error "ELISP:EWOC-SET-HF expected ewoc, got: ~S" ewoc))
+  (setf (elisp-ewoc-header ewoc) (or header "")
+        (elisp-ewoc-footer ewoc) (or footer ""))
+  (ewoc-refresh ewoc)
+  nil)
+
+(cl:defun ewoc-enter-last (ewoc data)
+  "Bring-up subset of ELisp `ewoc-enter-last'."
+  (unless (elisp-ewoc-p ewoc)
+    (error "ELISP:EWOC-ENTER-LAST expected ewoc, got: ~S" ewoc))
+  (let ((node (make-elisp-ewoc-node :data data)))
+    (setf (elisp-ewoc-nodes ewoc)
+          (nconc (elisp-ewoc-nodes ewoc) (list node)))
+    node))
+
+(cl:defun ewoc-data (node)
+  "Bring-up subset of ELisp `ewoc-data'."
+  (unless (elisp-ewoc-node-p node)
+    (error "ELISP:EWOC-DATA expected ewoc node, got: ~S" node))
+  (elisp-ewoc-node-data node))
+
+(cl:defun ewoc-nth (ewoc n)
+  "Bring-up subset of ELisp `ewoc-nth'."
+  (unless (elisp-ewoc-p ewoc)
+    (error "ELISP:EWOC-NTH expected ewoc, got: ~S" ewoc))
+  (let* ((nodes (elisp-ewoc-nodes ewoc))
+         (len (length nodes)))
+    (cond
+     ((null nodes) nil)
+     ((minusp n) (nth (+ len n) nodes))
+     (t (nth n nodes)))))
+
+(cl:defun ewoc-next (ewoc node)
+  "Bring-up subset of ELisp `ewoc-next'."
+  (unless (and (elisp-ewoc-p ewoc) (elisp-ewoc-node-p node))
+    (error "ELISP:EWOC-NEXT bad args: ~S ~S" ewoc node))
+  (loop with seen = nil
+        for n in (elisp-ewoc-nodes ewoc) do
+          (cond
+           (seen (return n))
+           ((eq n node) (setf seen t)))
+        finally
+          (return nil)))
+
+(cl:defun ewoc-prev (ewoc node)
+  "Bring-up subset of ELisp `ewoc-prev'."
+  (unless (and (elisp-ewoc-p ewoc) (elisp-ewoc-node-p node))
+    (error "ELISP:EWOC-PREV bad args: ~S ~S" ewoc node))
+  (loop with prev = nil
+        for n in (elisp-ewoc-nodes ewoc) do
+          (when (eq n node)
+            (return prev))
+          (setf prev n)
+        finally
+          (return nil)))
+
+(cl:defun ewoc-location (node)
+  "Bring-up subset of ELisp `ewoc-location'."
+  (unless (elisp-ewoc-node-p node)
+    (error "ELISP:EWOC-LOCATION expected ewoc node, got: ~S" node))
+  (elisp-ewoc-node-location node))
+
+(cl:defun ewoc-goto-node (ewoc node)
+  "Bring-up subset of ELisp `ewoc-goto-node'."
+  (unless (and (elisp-ewoc-p ewoc) (elisp-ewoc-node-p node))
+    (error "ELISP:EWOC-GOTO-NODE bad args: ~S ~S" ewoc node))
+  (with-current-buffer (elisp-ewoc-buffer ewoc)
+    (goto-char (ewoc-location node)))
+  nil)
+
+(cl:defun ewoc-locate (ewoc &optional pos _guess)
+  "Bring-up subset of ELisp `ewoc-locate'."
+  (declare (ignore _guess))
+  (unless (elisp-ewoc-p ewoc)
+    (error "ELISP:EWOC-LOCATE expected ewoc, got: ~S" ewoc))
+  (with-current-buffer (elisp-ewoc-buffer ewoc)
+    (let ((p (or pos (point)))
+          (best nil))
+      (dolist (node (elisp-ewoc-nodes ewoc))
+        (when (<= (ewoc-location node) p)
+          (setf best node)))
+      (or best (car (elisp-ewoc-nodes ewoc))))))
+
+(cl:defun ewoc-invalidate (ewoc _node &rest _ignore)
+  "Bring-up subset of ELisp `ewoc-invalidate'."
+  (declare (ignore _node _ignore))
+  (ewoc-refresh ewoc)
+  nil)
+
+(cl:defun ewoc-refresh (ewoc)
+  "Bring-up subset of ELisp `ewoc-refresh'."
+  (unless (elisp-ewoc-p ewoc)
+    (error "ELISP:EWOC-REFRESH expected ewoc, got: ~S" ewoc))
+  (with-current-buffer (elisp-ewoc-buffer ewoc)
+    (erase-buffer)
+    (goto-char (point-min))
+    (let ((pp (elisp-ewoc-pretty-printer ewoc)))
+      (insert (elisp-ewoc-header ewoc))
+      (dolist (node (elisp-ewoc-nodes ewoc))
+        (setf (elisp-ewoc-node-location node) (point))
+        (funcall pp (ewoc-data node))
+        (unless (elisp-ewoc-nosep ewoc)
+          (insert #\Newline)))
+      (insert (elisp-ewoc-footer ewoc))))
+  nil)
+
 (cl:defun natnump (x)
   (and (integerp x) (not (minusp x)) t))
 
@@ -1811,62 +2026,80 @@ Supports a small set of patterns used by upstream ERT:
 - backquote templates using `\, and `\,@."
   (let ((v (gensym "PCASE-"))
         (done (gensym "PCASE-DONE-")))
-    `(let ((,v ,expr))
-       (block ,done
-         ,@(mapcar
-            (lambda (clause)
-              (destructuring-bind (pattern &rest body) clause
-                (cond
-                 ((eq pattern '_)
-                  `(return-from ,done (progn ,@body)))
-                 ((and (consp pattern) (eq (car pattern) 'pred) (= (length pattern) 2))
-                  (let ((pred (cadr pattern)))
-                    `(when (,pred ,v)
-                       (return-from ,done (progn ,@body)))))
-                 ((and (consp pattern) (eq (car pattern) 'quote) (= (length pattern) 2))
-                  (let ((k (cadr pattern)))
-                    `(when (elisp:equal ,v ',k)
-                       (return-from ,done (progn ,@body)))))
-                 ((and (symbolp pattern)
-                       (eq (symbol-package pattern) (find-package "KEYWORD")))
-                  `(when (eql ,v ,pattern)
-                     (return-from ,done (progn ,@body))))
-                 ((%pcase--bq-form-p pattern)
-                  (let ((tmp (gensym "PCASE-TMP-"))
-                        (thunk (gensym "PCASE-THUNK-")))
-                    (multiple-value-bind (ll checks _vars)
-                        (%pcase--template->lambda-list (cadr pattern))
-                      (declare (ignore _vars))
-                      `(let ((,tmp ,v)
-                             (,thunk nil))
-                         (handler-case
-                             ,(cond
-                                ;; CL:DESTRUCTURING-BIND requires a list lambda
-                                ;; list; for atomic templates like `t` our
-                                ;; template->lambda-list returns a single
-                                ;; binding symbol.
-                                ((symbolp ll)
-                                 `(let ((,ll ,tmp))
-                                    (when (and ,@checks)
-                                      (setf ,thunk (lambda () (progn ,@body))))))
-                                ;; Future-proofing: treat vector templates as a
-                                ;; mismatch for now.
-                                ((vectorp ll)
-                                 nil)
-                                (t
-                                 `(destructuring-bind ,ll ,tmp
-                                    (when (and ,@checks)
-                                      (setf ,thunk (lambda () (progn ,@body)))))))
-                           (cl:error () (setf ,thunk nil)))
-                         (when ,thunk
-                           (return-from ,done (cl:funcall ,thunk)))))))
-                 ((null pattern)
-                  `(when (null ,v)
-                     (return-from ,done (progn ,@body))))
-                 (t
-                  (cl:error "ELISP:PCASE-EXHAUSTIVE unsupported pattern: ~S" pattern)))))
-            clauses)
-         (error "pcase-exhaustive: no match for %S" ,v)))))
+    (labels ((test-form (pattern value-sym)
+               (cond
+                ((and (consp pattern) (eq (car pattern) 'pred) (= (length pattern) 2))
+                 (let ((pred (cadr pattern)))
+                   `(,pred ,value-sym)))
+                ((and (consp pattern) (eq (car pattern) 'quote) (= (length pattern) 2))
+                 (let ((k (cadr pattern)))
+                   `(elisp:equal ,value-sym ',k)))
+                ((and (symbolp pattern)
+                      (eq (symbol-package pattern) (find-package "KEYWORD")))
+                 `(eql ,value-sym ,pattern))
+                ((null pattern)
+                 `(null ,value-sym))
+                (t
+                 (cl:error "ELISP:PCASE-EXHAUSTIVE unsupported OR subpattern: ~S" pattern)))))
+      `(let ((,v ,expr))
+         (block ,done
+           ,@(mapcar
+              (lambda (clause)
+                (destructuring-bind (pattern &rest body) clause
+                  (cond
+                   ((eq pattern '_)
+                    `(return-from ,done (progn ,@body)))
+                   ((and (consp pattern) (eq (car pattern) 'or))
+                    `(when (or ,@(mapcar (lambda (p) (test-form p v)) (cdr pattern)))
+                       (return-from ,done (progn ,@body))))
+                   ((and (consp pattern) (eq (car pattern) 'pred) (= (length pattern) 2))
+                    (let ((pred (cadr pattern)))
+                      `(when (,pred ,v)
+                         (return-from ,done (progn ,@body)))))
+                   ((and (consp pattern) (eq (car pattern) 'quote) (= (length pattern) 2))
+                    (let ((k (cadr pattern)))
+                      `(when (elisp:equal ,v ',k)
+                         (return-from ,done (progn ,@body)))))
+                   ((and (symbolp pattern)
+                         (eq (symbol-package pattern) (find-package "KEYWORD")))
+                    `(when (eql ,v ,pattern)
+                       (return-from ,done (progn ,@body))))
+                   ((%pcase--bq-form-p pattern)
+                    (let ((tmp (gensym "PCASE-TMP-"))
+                          (thunk (gensym "PCASE-THUNK-")))
+                      (multiple-value-bind (ll checks _vars)
+                          (%pcase--template->lambda-list (cadr pattern))
+                        (declare (ignore _vars))
+                        `(let ((,tmp ,v)
+                               (,thunk nil))
+                           (handler-case
+                               ,(cond
+                                  ;; CL:DESTRUCTURING-BIND requires a list lambda
+                                  ;; list; for atomic templates like `t` our
+                                  ;; template->lambda-list returns a single
+                                  ;; binding symbol.
+                                  ((symbolp ll)
+                                   `(let ((,ll ,tmp))
+                                      (when (and ,@checks)
+                                        (setf ,thunk (lambda () (progn ,@body))))))
+                                  ;; Future-proofing: treat vector templates as a
+                                  ;; mismatch for now.
+                                  ((vectorp ll)
+                                   nil)
+                                  (t
+                                   `(destructuring-bind ,ll ,tmp
+                                      (when (and ,@checks)
+                                        (setf ,thunk (lambda () (progn ,@body)))))))
+                             (cl:error () (setf ,thunk nil)))
+                           (when ,thunk
+                             (return-from ,done (cl:funcall ,thunk)))))))
+                   ((null pattern)
+                    `(when (null ,v)
+                       (return-from ,done (progn ,@body))))
+                   (t
+                    (cl:error "ELISP:PCASE-EXHAUSTIVE unsupported pattern: ~S" pattern)))))
+              clauses)
+           (error "pcase-exhaustive: no match for %S" ,v))))))
 
 (cl:defun macroexp--fgrep (bindings sexp)
   "Bring-up subset of `macroexp--fgrep'.
@@ -2274,6 +2507,16 @@ major-mode implementation."
   (declare (ignore _args))
   nil)
 
+(cl:defun insert-text-button (label &rest _properties)
+  "Bring-up stub for ELisp `insert-text-button'.
+
+We currently ignore PROPERTIES and just insert LABEL, returning the start
+position."
+  (declare (ignore _properties))
+  (let ((begin (point)))
+    (insert label)
+    begin))
+
 (cl:defun add-hook (hook function &optional append _local)
   "Bring-up subset of ELisp `add-hook'.
 
@@ -2470,28 +2713,12 @@ implementation-specific ones."
 
 (cl:defun symbol-value (symbol)
   "ELisp-ish SYMBOL-VALUE (respects `defvaralias')."
-  (let* ((sym (%resolve-variable-alias symbol))
-         (locals (and (cl:boundp '*current-buffer*)
-                      (elisp-buffer-p *current-buffer*)
-                      (elisp-buffer-locals *current-buffer*))))
-    (if locals
-        (multiple-value-bind (val presentp) (gethash sym locals)
-          (if presentp val (cl:symbol-value sym)))
-        (cl:symbol-value sym))))
+  (cl:symbol-value (%resolve-variable-alias symbol)))
 
 (cl:defun set (symbol value)
   "ELisp-ish SET (respects `defvaralias')."
-  (let* ((sym (%resolve-variable-alias symbol))
-         (locals (and (cl:boundp '*current-buffer*)
-                      (elisp-buffer-p *current-buffer*)
-                      (elisp-buffer-locals *current-buffer*))))
-    (if locals
-        (multiple-value-bind (_ presentp) (gethash sym locals)
-          (declare (ignore _))
-          (if presentp
-              (setf (gethash sym locals) value)
-              (setf (cl:symbol-value sym) value)))
-        (setf (cl:symbol-value sym) value))
+  (let ((sym (%resolve-variable-alias symbol)))
+    (setf (cl:symbol-value sym) value)
     value))
 
 (cl:defun defvaralias (new-alias base-variable &optional _docstring)
@@ -2543,20 +2770,13 @@ Evaluate BODY, but if an error is signaled, demote it and return nil."
   variable)
 
 (cl:defun make-local-variable (variable)
-  "Bring-up subset of ELisp `make-local-variable'.
+  "Bring-up stub for ELisp `make-local-variable'.
 
-Marks VARIABLE as having a buffer-local value in the current buffer, seeding it
-from the current default value (or nil if unbound). Returns VARIABLE."
+We do not model true buffer-local variables yet; this is just enough for
+`setq-local' to run without error."
   (unless (symbolp variable)
     (error "ELISP:MAKE-LOCAL-VARIABLE expects a symbol, got: ~S" variable))
-  (let* ((sym (%resolve-variable-alias variable))
-         (locals (elisp-buffer-locals *current-buffer*)))
-    (multiple-value-bind (_ presentp) (gethash sym locals)
-      (declare (ignore _))
-      (unless presentp
-        (setf (gethash sym locals)
-              (if (cl:boundp sym) (cl:symbol-value sym) nil))))
-    variable))
+  variable)
 
 (cl:defun default-boundp (symbol)
   "Stub for ELisp `default-boundp'.
@@ -2566,13 +2786,8 @@ The \"default\" value is CL's global binding model."
 
 (cl:defun local-variable-if-set-p (_symbol &optional _buffer)
   "Bring-up subset of ELisp `local-variable-if-set-p'."
-  (let* ((sym (%resolve-variable-alias _symbol))
-         (buf (or (and _buffer (get-buffer _buffer)) *current-buffer*)))
-    (unless (elisp-buffer-p buf)
-      (error "ELISP:LOCAL-VARIABLE-IF-SET-P invalid buffer: ~S" _buffer))
-    (multiple-value-bind (_ presentp) (gethash sym (elisp-buffer-locals buf))
-      (declare (ignore _))
-      presentp)))
+  (declare (ignore _symbol _buffer))
+  nil)
 
 (cl:defun default-value (symbol)
   "Stub for ELisp `default-value'."

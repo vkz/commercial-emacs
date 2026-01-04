@@ -632,8 +632,12 @@ Status (TODO, 2026-01-04)
   - drop `ert-test-explain-equal-string-properties` from `ert-upstream.known-fail.tests` (now passes).
 - DONE (2026-01-04): Unblock upstream ERT selector tests and buffer-local paths:
   - fix `pcase-exhaustive` backquote/template matching so clause bodies aren't masked by template failures,
-  - add minimal buffer-local variable support (`make-local-variable`, local-aware `symbol-value`/`set`) and `erase-buffer`,
+  - add minimal buffer-local stubs (`make-local-variable`) and `erase-buffer`,
   - drop selector tests from `clemacs/contract/ert-upstream.known-fail.tests` (they now pass; XPASS is a gate failure).
+- DONE (2026-01-04): Advance interactive ERT results printing bring-up:
+  - implement minimal `ewoc-*` and `insert-text-button` shims plus time helpers (`time-add`, `time-subtract`, `time-less-p`),
+  - add `make-string` ELisp wrapper and `cl-check-type`/`cl-typep` shims,
+  - `ert--pp-with-indentation-and-newline` now fails only on missing `pp`.
 - TODO: Continue expanding upstream ERT coverage (either more tests from `ert-tests.el` or additional upstream ERT test files),
   keeping the must-pass list monotonic and `known-fail` dated.
 
