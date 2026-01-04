@@ -592,7 +592,7 @@ Status (TODO, 2026-01-03)
   - `mise run clemacs:report:ert-delta` compares the baseline `ert-tests.log` summary against the clemacs bring-up gate,
     and writes `build/clemacs/reports/ert-delta.md` (path configurable).
 - DONE (2026-01-03): Expand the upstream ERT gate to an explicit, growing list:
-  - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 19),
+  - `clemacs/contract/ert-upstream.tests` (must-pass test names; currently 34),
   - `clemacs/contract/ert-upstream.known-fail.tests` (temporary tolerations; XPASS is a gate failure).
 - DONE (2026-01-03): Make upstream ERT's `should-error` semantics runnable:
   - seed C-defined error hierarchy properties (at least `error`, `arith-error`, `domain-error`, `singularity-error`),
@@ -690,7 +690,7 @@ Status (TODO, 2026-01-03)
   - `mise run clemacs:test:ert-upstream` loads upstream `ert.el` + `ert-tests.el` and runs a must-pass list from `clemacs/contract/ert-upstream.tests`.
 - DONE (2026-01-03): Expand the upstream ERT gate (explicit list + checkpoints):
   - advance `clemacs/contract/ert-tests.maxforms` to 120 (loads ~54 `ert-test-*` defs),
-  - expand `clemacs/contract/ert-upstream.tests` to 33 tests (33 pass + 0 XFAIL),
+  - expand `clemacs/contract/ert-upstream.tests` to 34 tests (34 pass + 0 XFAIL),
   - track temporary failures in `clemacs/contract/ert-upstream.known-fail.tests`
     (XPASS is a gate failure).
 - DONE (2026-01-03): Reduce upstream ERT XFAILs by implementing missing core helpers / parity:

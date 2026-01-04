@@ -1718,6 +1718,19 @@ trying to redefine locked symbols while loading upstream ELisp)."
 
 (cl:defun equal (a b)
   (cond
+   ((and (typep a 'elisp-keymap) (typep b 'elisp-keymap))
+    (labels ((ht-equal (ha hb)
+               (and (= (hash-table-count ha) (hash-table-count hb))
+                    (block ok
+                      (maphash
+                       (lambda (k va)
+                         (multiple-value-bind (vb presentp) (gethash k hb)
+                           (unless (and presentp (equal va vb))
+                             (return-from ok nil))))
+                       ha)
+                      t))))
+      (and (ht-equal (elisp-keymap-table a) (elisp-keymap-table b))
+           (equal (elisp-keymap-parent a) (elisp-keymap-parent b)))))
    ((and (vectorp a) (vectorp b))
     (and (= (length a) (length b))
          (loop for i from 0 below (length a)

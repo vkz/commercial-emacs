@@ -34,4 +34,5 @@ ert-test-test-result-expected-p
 ert-test-with-demoted-errors
 ert-test-explain-equal
 ert-test-explain-equal-improper-list
+ert-test-explain-equal-keymaps
 ert-test-fail-inside-should
