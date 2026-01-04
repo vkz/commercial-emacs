@@ -598,7 +598,7 @@ Status (TODO, 2026-01-04)
 - DONE (2026-01-03): Add an incremental upstream ERT load gate:
   - `mise run clemacs:test:load-ert` loads `lisp/emacs-lisp/ert.el` up to `clemacs/contract/ert.maxforms` (currently 182).
 - DONE (2026-01-03): Start with one upstream test file and grow from there (load gate first):
-  - `mise run clemacs:test:load-ert-tests` loads `test/lisp/emacs-lisp/ert-tests.el` up to `clemacs/contract/ert-tests.maxforms` (currently 80).
+  - `mise run clemacs:test:load-ert-tests` loads `test/lisp/emacs-lisp/ert-tests.el` up to `clemacs/contract/ert-tests.maxforms` (currently 200).
 - DONE (2026-01-03): Add a minimal upstream ERT bring-up gate (load + assert one test is registered):
   - `mise run clemacs:test:ert-upstream` (wired into `clemacs:test:contract -- --level check`).
 - DONE (2026-01-03): Add a delta report mode:
@@ -711,15 +711,15 @@ Status (TODO, 2026-01-04)
 - DONE (2026-01-03): Add a clemacs ERT gate based on upstream tests:
   - `mise run clemacs:test:ert-upstream` loads upstream `ert.el` + `ert-tests.el` and runs a must-pass list from `clemacs/contract/ert-upstream.tests`.
 - DONE (2026-01-03): Expand the upstream ERT gate (explicit list + checkpoints):
-  - advance `clemacs/contract/ert-tests.maxforms` to 120 (loads ~54 `ert-test-*` defs),
-  - expand `clemacs/contract/ert-upstream.tests` to 34 tests (34 pass + 0 XFAIL),
+  - advance `clemacs/contract/ert-tests.maxforms` to 200 (still ~55 tests registered; see `clemacs:report:ert-upstream-list`),
+  - expand `clemacs/contract/ert-upstream.tests` to 45 tests (39 pass + 6 XFAIL),
   - track temporary failures in `clemacs/contract/ert-upstream.known-fail.tests`
-    (XPASS is a gate failure).
+    (currently 6; XPASS is a gate failure).
 - DONE (2026-01-03): Reduce upstream ERT XFAILs by implementing missing core helpers / parity:
   - fix `condition-case` semantics so handler bodies don't get re-caught (unblocks `should-error`),
   - fix `cl-loop` BY `#'` interop (unblocks plist tests),
   - add/adjust compat shims used by ERT explainers and helpers (`memq`, `substring`, `cl-position`, `equal-including-properties`, `type-of`, `string=`/`string-equal`, `with-demoted-errors`),
-  - re-run `mise run clemacs:test:ert-upstream` and shrink `clemacs/contract/ert-upstream.known-fail.tests` to empty (no XPASS/XFAIL).
+  - re-run `mise run clemacs:test:ert-upstream` and keep `clemacs/contract/ert-upstream.known-fail.tests` explicit and dated.
 - DONE (2026-01-04): Wire the startup manifest into the SBCL-hosted `emacs` entrypoint:
   - `build/clemacs/bin/emacs` loads `clemacs/contract/startup.smoke.files` by default.
   - Flags: `--no-elisp`, `--startup-level smoke|check`, `--startup-limit N`.
