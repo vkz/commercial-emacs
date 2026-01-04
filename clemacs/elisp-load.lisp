@@ -43,7 +43,12 @@
     (nreverse tokens)))
 
 (cl:defun %parse-manifest-entry (line)
-  "Parse LINE as: <path> [<max-forms>]."
+  "Parse LINE as: <path> [<max-forms>].
+
+Return (values PATH MAX-FORMS), where MAX-FORMS is one of:
+- integer: explicit per-file max-forms
+- :inherit: no per-file max-forms; inherit the caller's :max-forms (if any)
+- :no-limit: explicit '-' in the manifest; do not apply any max-forms limit"
   (let* ((parts (%split-whitespace line))
          (path (first parts))
          (max-forms (second parts)))
@@ -53,8 +58,8 @@
       (cl:error "Manifest entry has too many fields: ~S" line))
     (cl:values path
                (cond
-                ((null max-forms) nil)
-                ((string= max-forms "-") nil)
+                ((null max-forms) :inherit)
+                ((string= max-forms "-") :no-limit)
                 (t
                  (let ((n (parse-integer max-forms :junk-allowed nil)))
                    (and (plusp n) n)))))))
@@ -100,7 +105,11 @@ ported copy instead of the original source tree path."
           (let* ((src-path (merge-pathnames rel-path project-root))
                  (ported-path (merge-pathnames rel-path ported-root))
                  (path (if (probe-file ported-path) ported-path src-path))
-                 (eff-max-forms (or entry-max-forms max-forms)))
+                 (eff-max-forms
+                   (cond
+                    ((eq entry-max-forms :no-limit) nil)
+                    ((eq entry-max-forms :inherit) max-forms)
+                    (t (or entry-max-forms max-forms)))))
             (load-elisp-file path :max-forms eff-max-forms)
             (incf loaded))))))
     0))

@@ -24,6 +24,25 @@ home_dir="${project_root}/${build_dir}/home"
 mkdir -p "${home_dir}"
 export HOME="${home_dir}"
 
-mise run clemacs:load:bootstrap -- --build-dir "${build_dir}" --limit 1
+mise run clemacs:deps:install -- --build-dir "${build_dir}"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+
+bootstrap_eval="nil"
+f="${project_root}/clemacs/contract/bootstrap.maxforms"
+[[ -f "${f}" ]] && bootstrap_eval="$(tr -d ' \t\r\n' < "${f}")"
+
+cd "${deps_dir}"
+"${qlot_bin}" exec sbcl \
+  --noinform \
+  --no-sysinit \
+  --no-userinit \
+  --non-interactive \
+  --disable-debugger \
+  --eval '(require :asdf)' \
+  --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
+  --eval '(asdf:load-system :clemacs)' \
+  --eval "(uiop:quit (elisp:load-bootstrap-set :project-root #p\"${project_root}/\" :limit 2 :max-forms ${bootstrap_eval}))"
 
 echo "clemacs bootstrap load: ok"

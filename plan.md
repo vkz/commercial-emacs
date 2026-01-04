@@ -512,7 +512,7 @@ Gate
 - A clemacs gate that loads and runs a small curated ELisp "bootstrap set"
   without modifying `lisp/` (prefer adding shims first).
 
-Status (TODO, 2026-01-03)
+Status (TODO, 2026-01-04)
 - DONE (2026-01-03): Create a clemacs-side inventory view:
   - `mise run clemacs:inventory:used` scans `clemacs/contract/bootstrap.files`
     and reports which C-defined runtime subrs are referenced (writes
@@ -530,7 +530,13 @@ Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Add a new clemacs contract level `elisp-core` (fast-ish) that runs constantly during this phase.
 - DONE (2026-01-03): Add a monotonic loader checkpoint gate:
   - `mise run clemacs:test:load-bootstrap` loads `lisp/subr.el` up to `clemacs/contract/bootstrap.maxforms`.
-- DONE (2026-01-03): Advance `clemacs/contract/bootstrap.maxforms` to 340 (subr.el form checkpoint).
+- DONE (2026-01-04): Advance `clemacs/contract/bootstrap.maxforms` to 400 (subr.el form checkpoint).
+- TODO: Keep advancing `bootstrap.maxforms` in small steps (+25/+50), keeping:
+  - `mise run clemacs:test:load-bootstrap`
+  - `mise run clemacs:test:ert-upstream`
+  green at every checkpoint.
+- TODO: Treat each new failure as an inventory item: implement or stub the missing primitive
+  (prefer shims in `clemacs/elisp-compat.lisp`) and re-run the gate.
 
 Guardrails
 - Keep ELisp native compilation disabled.
@@ -552,9 +558,11 @@ Gate
 - `mise run clemacs:load:lisp -- --level smoke` loads an explicit list of ELisp files and exits 0.
 - The list is data in-repo and grows monotonically (no deleting to get green).
 
-Status (TODO, 2026-01-03)
+Status (TODO, 2026-01-04)
 - DONE (2026-01-03): Define a source-of-truth manifest for the initial ELisp bootstrap set
   (files + load order), committed under `clemacs/contract/` (`clemacs/contract/bootstrap.files`).
+- DONE (2026-01-04): Ensure the bootstrap manifest loads `backquote.el` fully before `subr.el`
+  (macro safety; matches the startup manifest ordering rule).
 - DONE (2026-01-03): Add `mise` tasks:
   - `clemacs:load:lisp -- --level smoke|check`
   - `clemacs:port:regen` (optional, generates mechanical rewrites into `clemacs/ported/`)
@@ -564,6 +572,10 @@ Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Track allowed skips explicitly (GUI/nativecomp/modules) with reasons and dates:
   - `clemacs/contract/lisp.allowed-skip.files` (consumed by `clemacs:load:lisp`)
   - `clemacs/contract/ported.files` + `clemacs/ported/` (preferred-by-loader port tree)
+- TODO: Grow `clemacs/contract/bootstrap.files` monotonically (no deletions); prefer adding files
+  in early pdump order and start with conservative per-file form limits.
+- TODO: When the first real semantic divergence from upstream is required, stop and ask for a user
+  decision with concrete examples (keep the port path mechanical by default).
 
 ### Milestone B1-9: run upstream ERT suites under clemacs
 
@@ -579,7 +591,7 @@ Gate
   - clemacs smoke + tty + ERT subset,
   and fails on regressions.
 
-Status (TODO, 2026-01-03)
+Status (TODO, 2026-01-04)
 - DONE (2026-01-03): Load upstream `lisp/emacs-lisp/ert.el` and run at least one upstream test:
   - `mise run clemacs:test:ert-upstream` now runs a must-pass list (currently 33 tests) via upstream `ert-run-test`.
 - DONE (2026-01-03): Add an incremental upstream ERT load gate:
@@ -600,6 +612,10 @@ Status (TODO, 2026-01-03)
 - DONE (2026-01-03): Unblock additional upstream ERT tests:
   - set `lexical-binding` (file default) and add `ert-test-deftest-lexical-binding-t`,
   - implement `cl-gensym` + improve `indirect-function` indirection so `ert-test-special-operator-p` passes.
+- DONE (2026-01-04): Keep the upstream ERT gate green while advancing the `subr.el` checkpoint:
+  - add minimal buffer/window shims required by early `subr.el` macros and ERT internals.
+- TODO: Increase `clemacs/contract/ert-tests.maxforms` and grow `clemacs/contract/ert-upstream.tests`
+  (keep the list monotonic; use `ert-upstream.known-fail.tests` with dated reasons).
 
 ### Milestone B1-10: swap the ELisp engine in a running Emacs
 
@@ -615,7 +631,7 @@ Acceptance criteria
 - A curated set of shipped ELisp loads at startup.
 - `mise run test:smoke` (or an agreed successor contract) passes with an explicit skip list.
 
-Status (TODO, 2026-01-03)
+Status (TODO, 2026-01-04)
 - DONE (2026-01-03): Decide the concrete integration shape for "running Emacs" on this branch:
   - Choose: SBCL-hosted `emacs` binary (SBCL main + C substrate).
   - Not chosen: transitional C-hosted shim (even if timeboxed).
@@ -698,3 +714,8 @@ Status (TODO, 2026-01-03)
   - fix `cl-loop` BY `#'` interop (unblocks plist tests),
   - add/adjust compat shims used by ERT explainers and helpers (`memq`, `substring`, `cl-position`, `equal-including-properties`, `type-of`, `string=`/`string-equal`, `with-demoted-errors`),
   - re-run `mise run clemacs:test:ert-upstream` and shrink `clemacs/contract/ert-upstream.known-fail.tests` to empty (no XPASS/XFAIL).
+- TODO: Decide the first "real editor core" ELisp subset to target for clemacs startup
+  (a curated, monotonic list of files) and wire it into `clemacs:emacs:run`.
+- TODO: Define how `mise run run` transitions from the C-hosted baseline to clemacs:
+  - keep the current baseline as `mise run run:c` (or similar),
+  - promote clemacs to `mise run run` only once it can start as a usable editor and exit cleanly.
