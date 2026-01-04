@@ -27,8 +27,8 @@ export HOME="${home_dir}"
 outfile="${project_root}/${build_dir}/tmp/tty-test.txt"
 rm -f "${outfile}"
 
-mise run clemacs:deps:install -- --build-dir "${build_dir}"
-mise run clemacs:substrate:build -- --build-dir "${build_dir}"
+usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
+usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/substrate/build"
 
 deps_dir="${project_root}/${build_dir}/deps"
 qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"

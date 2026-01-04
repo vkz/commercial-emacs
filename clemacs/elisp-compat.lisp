@@ -174,59 +174,169 @@ Supports negative indices and TO = nil (meaning end of string)."
 
 (cl:defvar lexical-binding t)
 
-(defvar *match-strings* nil)
+(cl:defvar case-fold-search nil)
 
-(cl:defun %match-leading-digits (s start)
-  (let ((i start))
-    (loop while (and (< i (length s))
-                     (digit-char-p (char s i)))
-          do (incf i))
-    (if (> i start) i nil)))
+(defvar *match-data* nil)
+(defvar *match-source-string* nil)
+(defvar *string-match-scanner-cache* (cl:make-hash-table :test #'cl:equal))
 
-(cl:defun string-match (regexp string &optional (start 0))
-  "Bring-up subset of ELisp `string-match'.
+(cl:defun match-data ()
+  "Bring-up subset of ELisp `match-data'."
+  (and *match-data* (copy-list *match-data*)))
 
-This currently supports the patterns used early in `lisp/version.el`:
-- \"^[0-9]+\"\n- \"^[0-9]+\\\\.\\\\([0-9]+\\\\)\""
-  (unless (and (stringp regexp) (stringp string))
-    (error "ELISP:STRING-MATCH expects strings, got: ~S ~S" regexp string))
-  (let ((re regexp))
-    (cond
-     ((string= re "^[0-9]+")
-      (when (/= start 0) (return-from string-match nil))
-      (let ((end (%match-leading-digits string 0)))
-        (if end
-            (progn
-              (setf *match-strings* (list (subseq string 0 end)))
-              0)
-            (progn
-              (setf *match-strings* nil)
-              nil))))
-     ((string= re "^[0-9]+\\.\\([0-9]+\\)")
-      (when (/= start 0) (return-from string-match nil))
-      (let ((end1 (%match-leading-digits string 0)))
-        (if (and end1
-                 (< end1 (length string))
-                 (char= (char string end1) #\.))
-            (let* ((start2 (1+ end1))
-                   (end2 (%match-leading-digits string start2)))
-              (if end2
-                  (progn
-                    (setf *match-strings*
-                          (list (subseq string 0 end2)
-                                (subseq string start2 end2)))
-                    0)
-                  (progn (setf *match-strings* nil) nil)))
-            (progn (setf *match-strings* nil) nil))))
-     (t
-      (error "ELISP:STRING-MATCH unsupported regexp (bring-up): ~S" regexp)))))
+(cl:defun set-match-data (data &optional _reseat _inhibit-read-only)
+  "Bring-up subset of ELisp `set-match-data'."
+  (declare (ignore _reseat _inhibit-read-only))
+  (setf *match-data* (and data (copy-list data)))
+  nil)
 
-(cl:defun match-string (n &optional _string)
-  "Bring-up subset of ELisp `match-string'."
-  (declare (ignore _string))
+(cl:defun match-beginning (n)
+  "Bring-up subset of ELisp `match-beginning'."
   (unless (and (integerp n) (<= 0 n))
-    (error "ELISP:MATCH-STRING expects non-negative integer, got: ~S" n))
-  (and *match-strings* (nth n *match-strings*)))
+    (error "ELISP:MATCH-BEGINNING expects non-negative integer, got: %S" n))
+  (let ((i (* 2 n)))
+    (and *match-data* (< i (length *match-data*)) (nth i *match-data*))))
+
+(cl:defun match-end (n)
+  "Bring-up subset of ELisp `match-end'."
+  (unless (and (integerp n) (<= 0 n))
+    (error "ELISP:MATCH-END expects non-negative integer, got: %S" n))
+  (let ((i (1+ (* 2 n))))
+    (and *match-data* (< i (length *match-data*)) (nth i *match-data*))))
+
+(cl:defun match-string (n &optional string)
+  "Bring-up subset of ELisp `match-string'."
+  (unless (and (integerp n) (<= 0 n))
+    (error "ELISP:MATCH-STRING expects non-negative integer, got: %S" n))
+  (let* ((s (or string *match-source-string*))
+         (start (match-beginning n))
+         (end (match-end n)))
+    (and s start end (subseq s start end))))
+
+(cl:defun %elisp-regexp->pcre (regexp)
+  "Translate a (very) small subset of Emacs regexps to PCRE.
+
+Key rule: Emacs uses backslash escapes for grouping/alternation
+(`\\(...\\)' and `\\|'), while unescaped parens and | are literals.
+PCRE uses unescaped parens/| as metacharacters.
+
+So we:
+- convert escaped Emacs grouping/alternation to PCRE metacharacters,
+- escape otherwise-unescaped PCRE metacharacters to preserve literal meaning,
+- translate `\\` and `\\'' anchors to ^/$."
+  (with-output-to-string (out)
+    (loop with i = 0
+          with n = (length regexp)
+          while (< i n) do
+            (let ((ch (char regexp i)))
+              (cond
+               ((char= ch #\\)
+                (incf i)
+                (when (>= i n)
+                  (write-char #\\ out)
+                  (return))
+                (let ((next (char regexp i)))
+                  (case next
+                    (#\( (write-char #\( out))
+                    (#\) (write-char #\) out))
+                    (#\| (write-char #\| out))
+                    (#\{ (write-char #\{ out))
+                    (#\} (write-char #\} out))
+                    (#\` (write-char #\^ out))
+                    (#\' (write-char #\$ out))
+                    (otherwise
+                     (write-char #\\ out)
+                     (write-char next out)))))
+               ((find ch "()|{}" :test #'char=)
+                (write-char #\\ out)
+                (write-char ch out))
+               (t
+                (write-char ch out))))
+            (incf i))))
+
+(cl:defun %string-match-scanner (regexp case-fold-search)
+  (let* ((key (list regexp (and case-fold-search t)))
+         (cached (gethash key *string-match-scanner-cache*)))
+    (or cached
+        (setf (gethash key *string-match-scanner-cache*)
+              (cl-ppcre:create-scanner (%elisp-regexp->pcre regexp)
+                                       :case-insensitive-mode
+                                       (and case-fold-search t))))))
+
+(cl:defun string-match (regexp string &optional start _inhibit-modify)
+  "Bring-up `string-match' using cl-ppcre as a temporary regexp engine."
+  (declare (ignore _inhibit-modify))
+  (unless (and (stringp regexp) (stringp string))
+    (error "ELISP:STRING-MATCH expects strings, got: %S %S" regexp string))
+  (let ((start (or start 0)))
+    (unless (and (integerp start) (<= 0 start))
+      (error "ELISP:STRING-MATCH bad start: %S" start))
+    (multiple-value-bind (mstart mend reg-starts reg-ends)
+        (cl-ppcre:scan (%string-match-scanner regexp case-fold-search)
+                       string
+                       :start start)
+      (if (null mstart)
+          (progn
+            (setf *match-data* nil
+                  *match-source-string* string)
+            nil)
+          (let ((md nil))
+            ;; Build match data in reverse, then NREVERSE to produce:
+            ;; (mstart mend g1start g1end g2start g2end ...).
+            (push mstart md)
+            (push mend md)
+            (when reg-starts
+              (loop for rs across reg-starts
+                    for re across reg-ends
+                    do
+                      (push (and (integerp rs) (<= 0 rs) rs) md)
+                      (push (and (integerp re) (<= 0 re) re) md)))
+            (setf *match-data* (nreverse md)
+                  *match-source-string* string)
+            mstart)))))
+
+(cl:defun string-match-p (regexp string &optional start)
+  "Bring-up `string-match-p' (like `string-match' but does not modify match data)."
+  (let ((saved-md *match-data*)
+        (saved-s *match-source-string*))
+    (unwind-protect
+        (string-match regexp string start)
+      (setf *match-data* saved-md
+            *match-source-string* saved-s))))
+
+(cl:defun prin1-to-string (object &optional _noescape)
+  "Bring-up subset of ELisp `prin1-to-string'.
+
+This is only intended to be readable by our ELisp `read-from-string'."
+  (declare (ignore _noescape))
+  (cond
+   ;; Emacs expects hash-tables to be printable/readable when the feature is
+   ;; available. For bring-up, keep it simple: print an empty hash-table in a
+   ;; read-time-eval form so `read-from-string' can reconstruct one.
+   ((cl:hash-table-p object) "#.(make-hash-table)")
+   (t (cl:prin1-to-string object))))
+
+(cl:defun read-from-string (string &optional start end)
+  "Bring-up subset of ELisp `read-from-string'.
+
+Return (OBJECT . POSITION) where POSITION is the index of the first unread
+character in STRING."
+  (unless (stringp string)
+    (error "ELISP:READ-FROM-STRING expects a string, got: %S" string))
+  (let* ((start (or start 0))
+         (end (or end (length string))))
+    (unless (and (integerp start) (<= 0 start))
+      (error "ELISP:READ-FROM-STRING bad start: %S" start))
+    (unless (and (integerp end) (<= start end) (<= end (length string)))
+      (error "ELISP:READ-FROM-STRING bad end: %S" end))
+    (let ((*package* (find-package "ELISP"))
+          (*readtable* (elisp::%ensure-elisp-readtable))
+          (*read-eval* t))
+      (multiple-value-bind (obj pos)
+          (cl:read-from-string string nil :eof :start start :end end)
+        (when (eq obj :eof)
+          (error "ELISP:READ-FROM-STRING EOF"))
+        (cons obj pos)))))
 
 (cl:defun string-to-number (string)
   "Bring-up subset of ELisp `string-to-number'."
@@ -1551,6 +1661,27 @@ Unlike CL:HANDLER-BIND, handlers receive an ELisp-style error datum:
     `(cl:handler-bind
          ,handlers
        ,@body)))
+
+(cl:defun handler--bind (thunk &rest args)
+  "Implementation helper for `lisp/subr.el' `handler-bind'.
+
+SUBR's macro expands to:
+  (handler--bind (lambda () ...) CONDS1 HANDLER1 CONDS2 HANDLER2 ...)
+
+Where each HANDLER is a function that takes one argument: the error object.
+In clemacs, the error object is represented as (ERROR-SYMBOL . DATA)."
+  (unless (functionp thunk)
+    (error "ELISP:HANDLER--BIND expects a function thunk, got: %S" thunk))
+  (unless (evenp (length args))
+    (error "ELISP:HANDLER--BIND expects an even number of args, got: %S" args))
+  (cl:handler-bind
+      ((elisp-signal
+         (lambda (c)
+           (let ((err (cons (elisp-signal-symbol c) (elisp-signal-data c))))
+             (loop for (types handler) on args by #'cddr do
+               (when (%handler-bind-match-p types err)
+                 (funcall handler err)))))))
+    (funcall thunk)))
 
 (define-condition quit (cl:error) ())
 

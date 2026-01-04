@@ -43,6 +43,7 @@
   (:shadow #:defmacro #:defun #:equal #:eval #:funcall #:function #:intern #:make-hash-table #:provide #:require #:setq
            #:make-list #:format
            #:append
+           #:prin1-to-string #:read-from-string
            #:string= #:string-equal
            #:characterp
            #:type-of

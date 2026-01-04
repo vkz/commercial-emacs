@@ -145,24 +145,48 @@
 
 (cl:defun load-elisp-file (path &key (package (find-package "ELISP")) (max-forms nil))
   (with-open-file (in path :external-format :utf-8)
-    (let ((*package* package)
-          (*readtable* (%ensure-elisp-readtable)))
-      (loop with form-index = 0
-            for form = (read in nil :eof)
-            until (eq form :eof)
-            do
-              (incf form-index)
-              (handler-case
-                  (cl:eval (%elisp-rewrite form))
-                (cl:error (e)
-                  (let ((inv (inventory-entry-for-condition
-                              e
-                              :start-dir (uiop:pathname-directory-pathname path))))
-                    (cl:error 'elisp-load-error
-                           :path path
-                           :form-index form-index
-                           :form form
-                           :cause e
-                           :inventory-entry inv))))
-              (when (and max-forms (>= form-index max-forms))
-                (return))))))
+    (let* ((*package* package)
+           (*readtable* (%ensure-elisp-readtable))
+           (debug-file (uiop:getenv "CLEMACS_LOAD_DEBUG_FILE"))
+           (debugp (or debug-file (and (uiop:getenv "CLEMACS_LOAD_DEBUG") t))))
+      (flet ((%maybe-log-load-error (e form-index)
+               (when debugp
+                 (let ((out (if debug-file
+                                (open debug-file
+                                      :direction :output
+                                      :if-exists :append
+                                      :if-does-not-exist :create)
+                                *standard-output*)))
+                   (unwind-protect
+                       (progn
+                         (cl:format out "[clemacs:load] error in ~A form ~D: ~A~%"
+                                    path form-index e)
+                         #+sbcl
+                         (sb-debug:print-backtrace :stream out :count 80)
+                         (finish-output out))
+                     (when debug-file
+                       (ignore-errors (close out))))))))
+        (loop with form-index = 0
+              for form = (read in nil :eof)
+              until (eq form :eof)
+              do
+                (incf form-index)
+                (handler-case
+                    (cl:handler-bind
+                        ((cl:error
+                           (lambda (e)
+                             (%maybe-log-load-error e form-index)
+                             nil)))
+                      (cl:eval (%elisp-rewrite form)))
+                  (cl:error (e)
+                    (let ((inv (inventory-entry-for-condition
+                                e
+                                :start-dir (uiop:pathname-directory-pathname path))))
+                      (cl:error 'elisp-load-error
+                                :path path
+                                :form-index form-index
+                                :form form
+                                :cause e
+                                :inventory-entry inv))))
+                (when (and max-forms (>= form-index max-forms))
+                  (return)))))))

@@ -1,3 +1,4 @@
 ql babel
 ql cffi
+ql cl-ppcre
 ql fiveam

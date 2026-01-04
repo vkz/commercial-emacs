@@ -24,13 +24,15 @@ home_dir="${project_root}/${build_dir}/home"
 mkdir -p "${home_dir}"
 export HOME="${home_dir}"
 
-mise run clemacs:deps:install -- --build-dir "${build_dir}"
+usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
 
 deps_dir="${project_root}/${build_dir}/deps"
 qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+sbcl_dynamic_space="${CLEMACS_SBCL_DYNAMIC_SPACE_SIZE:-4096}"
 
 cd "${deps_dir}"
 "${qlot_bin}" exec sbcl \
+  --dynamic-space-size "${sbcl_dynamic_space}" \
   --noinform \
   --no-sysinit \
   --no-userinit \

@@ -15,8 +15,8 @@ fi
 project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
 cd "${project_root}"
 
-build_dir="${usage_build_dir}"
-qlot_version="${usage_qlot_version}"
+build_dir="${usage_build_dir:-build/clemacs}"
+qlot_version="${usage_qlot_version:-1.8.2}"
 
 home_dir="${project_root}/${build_dir}/home"
 mkdir -p "${home_dir}"
