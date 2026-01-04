@@ -154,6 +154,24 @@
               (uq (cl:intern "," (find-package "ELISP")))
               (sp (cl:intern ",@" (find-package "ELISP"))))
           (set-macro-character
+           #\'
+           (lambda (stream char)
+             (declare (ignore char))
+             (let ((next (peek-char t stream nil nil t)))
+                (cond
+                 ((and next (char= next #\.))
+                 (let* ((dots
+                          (with-output-to-string (out)
+                            (loop for ch = (peek-char nil stream nil nil t)
+                                  while (and ch (char= ch #\.))
+                                  do (write-char (read-char stream nil nil t) out))))
+                        (sym (cl:intern dots (find-package "ELISP"))))
+                   (list 'quote sym)))
+                 (t
+                  (list 'quote (read stream t nil t))))))
+           nil
+           rt)
+          (set-macro-character
            #\`
            (lambda (stream char)
              (declare (ignore char))

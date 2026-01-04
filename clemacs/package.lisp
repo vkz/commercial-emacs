@@ -46,6 +46,7 @@
            #:append
            #:prin1-to-string #:read-from-string
            #:string= #:string-equal
+           #:aref
            #:characterp
            #:type-of
            #:symbol-function #:symbol-name #:fboundp #:values #:symbol-value

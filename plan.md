@@ -768,8 +768,10 @@ Gate
   `startup.check.files` checkpoints beyond the current 1-form/2-form stubs.
 
 Status (TODO, 2026-01-04)
-- TODO: Use `mise run clemacs:inventory:used` on `startup.check.files` and implement the missing primitives first.
-- TODO: Grow `startup.check.files` checkpoints (monotonic), preferring the pdump load order as the guide.
+- DONE (2026-01-04): Run `mise run clemacs:inventory:used -- --manifest clemacs/contract/startup.check.files`
+  as the checklist driver (currently 797 referenced runtime subrs).
+- DONE (2026-01-04): Grow `startup.check.files` checkpoints (monotonic), following the pdump load order,
+  and keep the clemacs contract green (`mise run clemacs:test:contract -- --level check`).
 - DONE (2026-01-04): Make `startup.check.files` actually exercise full `subr.el`:
   - set `lisp/subr.el -` in `clemacs/contract/startup.check.files` (smoke remains conservatively capped).
 - DONE (2026-01-04): Raise `startup.check.files` `lisp/keymap.el` checkpoint to 50 forms:
@@ -779,6 +781,10 @@ Status (TODO, 2026-01-04)
   - Make `defalias`/`fset` install CL-visible definitions for new function cells (without clobbering existing implementations).
   - Represent macros from `symbol-function` as `(macro . FN)` so ELisp patterns like `(defalias 'x (symbol-function 'some-macro))` work.
   - Make ELisp `function` keep lambdas as data to avoid premature macroexpansion/compilation during early bootstrap loads.
+- DONE (2026-01-04): Unblock additional `startup.check` checkpoints with targeted compat fixes:
+  - ELisp string AREF semantics (return integer char codes; allow setf via integer).
+  - Reader support for quoted dot-only tokens like `'...` (pcase).
+  - Minimal marker/Help bring-up primitives: `make-marker`, `marker-position`, `help-char`, `char-to-string`, `key-description`.
 
 ### Milestone B1-13: (reserved)
 
@@ -798,5 +804,8 @@ Acceptance criteria (promotion gate)
   and exits cleanly (both interactive and `--batch`).
 
 Status (TODO, 2026-01-04)
-- TODO: Define the first "editor-core" startup manifest (monotonic) as a sibling of `startup.{smoke,check}.files`.
+- DONE (2026-01-04): Define the first "editor-core" startup manifest (monotonic):
+  - `clemacs/contract/startup.editor-core.files` (seeded from `startup.check.files`).
+  - Teach `clemacs:load:startup -- --level editor-core` about the new manifest level.
+  - Default `mise run run:clemacs` to `--startup-level editor-core` (override by passing explicit args).
 - DONE (2026-01-04): Add a minimal `--eval` path in `build/clemacs/bin/emacs --batch` (non-interactive) for scripting/tests.

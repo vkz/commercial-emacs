@@ -116,6 +116,38 @@ and evaluate the (already CL-shaped) FORM."
   "Compatibility shim for the C primitive `sxhash-equal'."
   (cl:sxhash object))
 
+(cl:defun % (x y)
+  "Bring-up subset of ELisp `%'."
+  (unless (and (integerp x) (integerp y))
+    (error "ELISP:% expects integers, got: ~S ~S" x y))
+  (cl:rem x y))
+
+(cl:defun aref (array idx)
+  "ELisp-ish AREF.
+
+For strings, return a character code integer (Emacs Lisp semantics)."
+  (let ((v (cl:aref array idx)))
+    (if (stringp array) (char-code v) v)))
+
+(cl:defsetf aref (array idx) (value)
+  (let ((a (gensym "ARRAY"))
+        (i (gensym "IDX"))
+        (v (gensym "VALUE")))
+    `(let ((,a ,array)
+           (,i ,idx)
+           (,v ,value))
+       (setf (cl:aref ,a ,i)
+             (if (stringp ,a)
+                 (if (integerp ,v) (code-char ,v) ,v)
+                 ,v)))))
+
+(cl:defun char-to-string (ch)
+  "Bring-up subset of ELisp `char-to-string'."
+  (cond
+   ((integerp ch) (string (code-char ch)))
+   ((characterp ch) (string ch))
+   (t (error "ELISP:CHAR-TO-STRING expects character code, got: ~S" ch))))
+
 (cl:defun concat (&rest parts)
   "Stub for ELisp `concat'."
   (with-output-to-string (out)
@@ -126,11 +158,32 @@ and evaluate the (already CL-shaped) FORM."
         (character (write-char p out))
         (t (write-string (princ-to-string p) out))))))
 
+(cl:defun vconcat (&rest seqs)
+  "Bring-up subset of ELisp `vconcat'."
+  (let ((out nil))
+    (dolist (s seqs)
+      (cond
+       ((null s) nil)
+       ((vectorp s)
+        (dotimes (i (length s))
+          (push (aref s i) out)))
+       ((stringp s)
+        (loop for ch across s do (push ch out)))
+       ((consp s)
+        (dolist (x s) (push x out)))
+       (t
+        (error "ELISP:VCONCAT unsupported sequence: ~S" (type-of s)))))
+    (coerce (nreverse out) 'vector)))
+
 (cl:defun downcase (s)
   "Bring-up subset of ELisp `downcase'."
   (unless (stringp s)
     (error "ELISP:DOWNCASE expects a string, got: ~S" s))
   (string-downcase s))
+
+(cl:defun multibyte-string-p (s)
+  "Bring-up subset of the C primitive `multibyte-string-p'."
+  (and (stringp s) t))
 
 (cl:defun upcase (s)
   "Bring-up subset of ELisp `upcase'."
@@ -367,7 +420,9 @@ character in STRING."
 
 Emacs Lisp accepts `:test' values like 'eq/'eql/'equal/'equalp. We map
 `equal' to CL:EQUALP to get vector element semantics, which is a closer
-match to Elisp than CL:EQUAL."
+match to Elisp than CL:EQUAL.
+
+Also supports SBCL weak hash tables via Emacs's `:weakness' values (e.g. 'key)."
   (unless (symbolp test)
     (error "ELISP:MAKE-HASH-TABLE only supports symbolic :test, got: ~S" test))
   (let* ((mapped-test
@@ -377,11 +432,31 @@ match to Elisp than CL:EQUAL."
             ((or (eq test 'equal) (eq test 'cl:equal)) 'cl:equalp)
             ((or (eq test 'equalp) (eq test 'cl:equalp)) 'cl:equalp)
             (t (error "ELISP:MAKE-HASH-TABLE unsupported :test: ~S" test))))
-         (remapped-args
-           (loop for (k v) on args by (cl:function cl:cddr)
-                 collect k
-                 collect (if (eq k :test) mapped-test v))))
-    (apply #'cl:make-hash-table remapped-args)))
+         (out nil))
+    (loop for (k v) on args by (cl:function cl:cddr) do
+      (cond
+       ((eq k :test)
+        (setf out (list* mapped-test :test out)))
+       ((eq k :weakness)
+        (let ((wk
+                (cond
+                 ((null v) nil)
+                 ((eq v :key) :key)
+                 ((eq v :value) :value)
+                 ((eq v :key-or-value) :key-or-value)
+                 ((eq v :key-and-value) :key-and-value)
+                 ((eq v 'key) :key)
+                 ((eq v 'value) :value)
+                 ((eq v 'key-or-value) :key-or-value)
+                 ((eq v 'key-and-value) :key-and-value)
+                 (t (error "ELISP:MAKE-HASH-TABLE unsupported :weakness: ~S" v)))))
+          (when wk
+            (setf out (list* wk :weakness out)))))
+       ((or (eq k :size) (eq k :rehash-size) (eq k :rehash-threshold))
+        (setf out (list* v k out)))
+       (t
+        nil)))
+    (apply #'cl:make-hash-table (nreverse out))))
 
 (defparameter features nil)
 
@@ -929,6 +1004,15 @@ Unsupported places error with a clear message."
                  (cl:error "ELISP:CL-LETF* unsupported place: ~S" place)))))))
     (expand bindings)))
 
+(cl:defun cl--find-class (name)
+  "Bring-up stub for cl-lib's internal `cl--find-class'."
+  (and (symbolp name) (get name 'cl--class)))
+
+(cl:defsetf cl--find-class (name) (value)
+  `(progn
+     (put ,name 'cl--class ,value)
+     ,value))
+
 (cl:defmacro cl-defstruct (&rest args)
   "Minimal subset of cl-lib's `cl-defstruct'.
 
@@ -936,21 +1020,76 @@ cl-lib's `cl-defstruct' provides a constructor function with the same name as
 the struct (e.g. `ert-test-passed'), whereas CL:DEFSTRUCT defaults to
 `make-<name>'.  Upstream ERT depends on the cl-lib behavior."
   (let* ((spec (car args))
-         (name (if (consp spec) (car spec) spec)))
-    (if (and (symbolp name)
-             (not (eq (symbol-package name) (find-package "CL"))))
-        (let ((make-name
-                (intern (cl:format nil "MAKE-~A" (string-upcase (symbol-name name)))
-                        (symbol-package name))))
-          `(progn
-             (cl:defstruct ,@args)
-             (defun ,name (&rest initargs)
-               (if (and initargs
-                        (keywordp (car initargs))
-                        (cl:evenp (length initargs)))
-                   (apply #',make-name initargs)
-                   (funcall #',make-name)))))
-        `(cl:defstruct ,@args))))
+         (name (if (consp spec) (car spec) spec))
+         (opts (and (consp spec) (cdr spec)))
+         (ctor-opts (remove-if-not (lambda (x) (and (consp x) (eq (car x) :constructor))) opts))
+         (ctor-nil-p (and ctor-opts
+                          (some (lambda (x) (null (cadr x))) ctor-opts)))
+         (ctors (remove nil (mapcar #'cadr ctor-opts)))
+         (opts* (if (and ctor-nil-p ctors)
+                    ;; SBCL rejects (:constructor nil) combined with other
+                    ;; constructors; cl-lib uses this to disable the default
+                    ;; constructor while still defining named constructors.
+                    (remove-if (lambda (x)
+                                 (and (consp x) (eq (car x) :constructor) (null (cadr x))))
+                               opts)
+                    opts))
+         (spec* (if (consp spec) (cons name opts*) spec))
+         (args* (cons spec* (cdr args))))
+    (cond
+     ((or (not (symbolp name))
+          (eq (symbol-package name) (find-package "CL"))
+          ctor-nil-p)
+      `(cl:defstruct ,@args*))
+     (t
+      (let* ((make-name
+               (intern (cl:format nil "MAKE-~A" (string-upcase (symbol-name name)))
+                       (symbol-package name)))
+             (ctor (or (car ctors) make-name)))
+        `(progn
+           (cl:defstruct ,@args*)
+           (defun ,name (&rest initargs)
+             (if (and initargs
+                      (keywordp (car initargs))
+                      (cl:evenp (length initargs)))
+                 (apply #',ctor initargs)
+                 (funcall #',ctor)))))))))
+
+(cl:defmacro cl-defgeneric (name args &rest rest)
+  "Bring-up subset of cl-generic's `cl-defgeneric'.
+
+Defines a CLOS generic function, and (when BODY is provided) a default method."
+  (unless (and (symbolp name) (listp args))
+    (cl:error "ELISP:CL-DEFGENERIC expects (NAME ARGS ...), got: ~S ~S" name args))
+  (let* ((doc (and rest (stringp (car rest)) (pop rest)))
+         (body rest)
+         (method-args
+           (loop for a in args
+                 while (and (symbolp a) (not (keywordp a)) (not (char= (char (symbol-name a) 0) #\&)))
+                 collect `(,a t))))
+    `(progn
+       (cl:defgeneric ,name ,args
+         ,@(when doc `((:documentation ,doc))))
+       ,@(when body
+           `((cl:defmethod ,name ,method-args
+               ,@body)))
+       ',name)))
+
+(cl:defmacro cl-defmethod (name args &rest body)
+  "Bring-up subset of cl-generic's `cl-defmethod'."
+  (unless (and (listp args) (not (null args)))
+    (cl:error "ELISP:CL-DEFMETHOD expects (NAME ARGS ...), got: ~S ~S" name args))
+  (let ((method-args
+          (mapcar
+           (lambda (a)
+             (cond
+              ((symbolp a) a)
+              ((and (consp a) (= (length a) 2) (symbolp (car a)))
+               a)
+              (t (cl:error "ELISP:CL-DEFMETHOD unsupported arg spec: ~S" a))))
+           args)))
+    `(cl:defmethod ,name ,method-args
+       ,@body)))
 
 (cl:defun put (symbol prop value)
   "ELisp-ish PUT for symbol plists."
@@ -963,6 +1102,16 @@ the struct (e.g. `ert-test-passed'), whereas CL:DEFSTRUCT defaults to
     (error "ELISP:GETENV expects a string, got: ~S" var))
   (let ((v (uiop:getenv var)))
     (and v (stringp v) v)))
+
+(cl:defvar user-emacs-directory
+  (namestring (merge-pathnames ".emacs.d/" (user-homedir-pathname))))
+
+(cl:defun locate-user-emacs-file (new-name &optional _old-name)
+  "Bring-up subset of ELisp `locate-user-emacs-file'."
+  (declare (ignore _old-name))
+  (unless (stringp new-name)
+    (error "ELISP:LOCATE-USER-EMACS-FILE expects string, got: ~S" new-name))
+  (namestring (merge-pathnames new-name user-emacs-directory)))
 
 (cl:defun make-list (length init)
   "ELisp-ish MAKE-LIST."
@@ -990,6 +1139,29 @@ the struct (e.g. `ert-test-passed'), whereas CL:DEFSTRUCT defaults to
              (t (setf cur next))))
         finally
           (return sym)))
+
+(cl:defun charset-plist (charset)
+  "Bring-up subset of the C primitive `charset-plist'."
+  (unless (symbolp charset)
+    (error "ELISP:CHARSET-PLIST expects a symbol, got: ~S" charset))
+  (symbol-plist (%resolve-charset charset)))
+
+(cl:defun set-charset-plist (charset plist)
+  "Bring-up subset of the internal helper `set-charset-plist'."
+  (unless (symbolp charset)
+    (error "ELISP:SET-CHARSET-PLIST expects a symbol, got: ~S" charset))
+  (setf (symbol-plist (%resolve-charset charset)) plist)
+  plist)
+
+(cl:defun define-charset-internal (name &rest attrs)
+  "Bring-up stub for the C primitive `define-charset-internal'."
+  (unless (symbolp name)
+    (error "ELISP:DEFINE-CHARSET-INTERNAL expects symbol, got: ~S" name))
+  (let ((plist (car (last attrs))))
+    (when (listp plist)
+      (set-charset-plist name plist))
+    (put name 'charsetp t)
+    name))
 
 (cl:defun put-charset-property (charset prop value)
   "Bring-up stub for ELisp `put-charset-property'."
@@ -1022,6 +1194,30 @@ We currently represent charsets as symbols with properties."
   (parent nil))
 
 (defparameter system-type 'darwin)
+(cl:defun system-name ()
+  "Bring-up subset of ELisp `system-name'."
+  (or (ignore-errors (uiop:hostname))
+      (ignore-errors (machine-instance))
+      "unknown"))
+
+(cl:defun current-time ()
+  "Bring-up subset of ELisp `current-time'.
+
+Returns an Emacs-style time value: (HI LO USEC PSEC), where seconds are encoded
+as HI*65536 + LO."
+  (multiple-value-bind (sec usec) (sb-ext:get-time-of-day)
+    (let ((hi (floor sec 65536))
+          (lo (mod sec 65536)))
+      (list hi lo usec 0))))
+
+(cl:defun program-version ()
+  "Bring-up subset of ELisp `program-version'."
+  emacs-version)
+
+(defparameter system-configuration
+  (cl:format nil "~A-apple-darwin"
+             (string-downcase (machine-type))))
+
 (defvar *global-map* nil)
 (defparameter minibuffer-local-map (make-elisp-keymap))
 (defparameter find-function-space-re "")
@@ -1030,8 +1226,10 @@ We currently represent charsets as symbols with properties."
 (defparameter noninteractive t)
 (defparameter current-load-list nil)
 (cl:defvar load-history nil)
+(cl:defvar after-load-alist nil)
 (cl:defvar describe-symbol-backends nil)
 (cl:defvar minor-mode-alist nil)
+(cl:defvar help-char 8)
 
 ;; ---------------------------------------------------------------------------
 ;; Minimal buffer/marker surface (enough for upstream ERT bring-up)
@@ -1045,6 +1243,21 @@ We currently represent charsets as symbols with properties."
 (defstruct elisp-marker
   (buffer nil)
   (position nil))
+
+(cl:defun make-marker ()
+  "Bring-up subset of ELisp `make-marker'.
+
+Returns a marker with no buffer/position."
+  (make-elisp-marker))
+
+(cl:defun markerp (x)
+  (elisp-marker-p x))
+
+(cl:defun marker-position (marker)
+  "Bring-up subset of ELisp `marker-position'."
+  (unless (elisp-marker-p marker)
+    (error "ELISP:MARKER-POSITION expected marker, got: ~S" marker))
+  (elisp-marker-position marker))
 
 (defvar *buffer-table* (cl:make-hash-table :test 'cl:equal))
 
@@ -1771,6 +1984,39 @@ Supports the common pattern of a self-referential closure (used by ERT)."
     (integer (cl:format nil "#<keycode ~D>" key))
     (t (write-to-string key :escape t))))
 
+(cl:defun %key-event-description (event)
+  (cond
+   ((integerp event)
+    (cond
+     ((= event 127) "DEL")
+     ((= event 27) "ESC")
+     ((= event 13) "RET")
+     ((= event 9) "TAB")
+     ((= event 32) "SPC")
+     ((and (<= 0 event) (< event 32))
+      (cl:format nil "C-~A" (string (code-char (+ event 64)))))
+     (t
+      (string (code-char event)))))
+   ((characterp event) (string event))
+   ((symbolp event) (symbol-name event))
+   (t (princ-to-string event))))
+
+(cl:defun key-description (keys &optional _noangles)
+  "Bring-up subset of ELisp `key-description'."
+  (declare (ignore _noangles))
+  (labels ((emit (seq)
+             (with-output-to-string (out)
+               (loop for i from 0 for ev in seq do
+                 (when (> i 0) (write-char #\Space out))
+                 (write-string (%key-event-description ev) out)))))
+    (cond
+     ((stringp keys)
+      (emit (loop for ch across keys collect (char-code ch))))
+     ((vectorp keys)
+      (emit (loop for i from 0 below (length keys) collect (aref keys i))))
+     ((consp keys) (emit keys))
+     (t (%key-event-description keys)))))
+
 (cl:defun define-key (keymap key definition)
   "Minimal stub for ELisp `define-key' on `elisp-keymap' objects."
   (let ((km (if (symbolp keymap) (symbol-value keymap) keymap)))
@@ -2104,6 +2350,23 @@ buffer-local values yet)."
                 `(set ',var ,val))
             forms))
     `(progn ,@(nreverse forms))))
+
+(cl:defmacro define-minor-mode (name &rest args)
+  "Bring-up stub for ELisp `define-minor-mode'.
+
+This only defines the mode variable and a basic toggling function."
+  (unless (symbolp name)
+    (error "ELISP:DEFINE-MINOR-MODE expects a symbol name, got: ~S" name))
+  (let ((doc (and args (stringp (car args)) (pop args))))
+    `(progn
+       (defvar ,name nil ,doc)
+       (defun ,name (&optional arg)
+         ,@(when doc (list doc))
+         (setq ,name (cond
+                      ((null arg) (not ,name))
+                      ((integerp arg) (> arg 0))
+                      (t arg)))
+         ,name))))
 
 (cl:defun fset (symbol definition)
   "Set SYMBOL's function cell to DEFINITION.

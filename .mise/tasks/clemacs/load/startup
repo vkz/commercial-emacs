@@ -3,7 +3,7 @@ set -euo pipefail
 
 #MISE description="Load the clemacs startup manifest under SBCL (experimental)"
 #USAGE flag "-h --help" help="Print help"
-#USAGE flag "--level <level>" help="Manifest level: smoke|check" default="smoke"
+#USAGE flag "--level <level>" help="Manifest level: smoke|check|editor-core" default="smoke"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
 #USAGE flag "--limit <n>" help="Load only the first N manifest entries" default="0"
 
@@ -36,7 +36,7 @@ limit="${usage_limit}"
 
 manifest_rel="clemacs/contract/startup.${level}.files"
 case "${level}" in
-  smoke|check) ;;
+  smoke|check|editor-core) ;;
   *)
     echo "[clemacs:load:startup] unknown level: ${level}" >&2
     exit 2

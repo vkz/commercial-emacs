@@ -1,12 +1,13 @@
-# clemacs startup manifest (check)
+# clemacs startup manifest (editor-core)
 #
-# 2026-01-03: same as smoke; diverges once startup grows.
-
-# 2026-01-03: same list as smoke; diverges once startup grows.
+# This list is data and should grow monotonically.
 #
-# NOTE: `backquote.el` must be loaded before any files that define macros using
-# backquote syntax, otherwise those macro definitions can get compiled against a
-# missing `backquote` macro and later misbehave at expansion time.
+# Purpose: a curated startup set intended for interactive clemacs bring-up
+# (`mise run run:clemacs`), as we converge from "minimal TTY loop" toward a
+# real Emacs session driven by shipped ELisp.
+#
+# 2026-01-04: seed from `startup.check.files`. As clemacs becomes a usable
+# editor, this manifest should grow toward a "real session" load order.
 
 # pdump: debug-early, byte-run, backquote, subr, keymap, version.
 lisp/emacs-lisp/debug-early.el

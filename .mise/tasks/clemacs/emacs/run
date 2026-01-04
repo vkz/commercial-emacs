@@ -56,7 +56,8 @@ fi
 
 export CLEMACS_SUBSTRATE_DYLIB="${bin_dir}/libemxsubstrate.dylib"
 
-if [[ "${#emacs_args[@]}" -gt 0 ]]; then
-  exec "${emacs_bin}" "${emacs_args[@]}"
+if [[ "${#emacs_args[@]}" -eq 0 ]]; then
+  emacs_args=(--startup-level editor-core)
 fi
-exec "${emacs_bin}"
+
+exec "${emacs_bin}" "${emacs_args[@]}"
