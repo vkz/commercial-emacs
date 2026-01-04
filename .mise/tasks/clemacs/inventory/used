@@ -104,7 +104,10 @@ for line in open(manifest_path, "r", encoding="utf-8"):
     line = line.strip()
     if not line or line.startswith("#"):
         continue
-    files.append(line)
+    # Manifest entries are: <path> [<max-forms>]. We only care about paths here.
+    parts = line.split()
+    if parts:
+        files.append(parts[0])
 
 missing_files = [f for f in files if not os.path.exists(os.path.join(project_root, f))]
 if missing_files:
