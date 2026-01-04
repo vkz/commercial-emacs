@@ -1449,7 +1449,7 @@ Returns a marker with no buffer/position."
   (let ((s (apply #'format format-string args)))
     (with-current-buffer (messages-buffer)
       (goto-char (point-max))
-      (insert s "\n"))
+      (insert s #\Newline))
     s))
 
 (cl:defun error-message-string (condition)

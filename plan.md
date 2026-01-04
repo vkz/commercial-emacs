@@ -620,8 +620,12 @@ Status (TODO, 2026-01-04)
   - implement `cl-gensym` + improve `indirect-function` indirection so `ert-test-special-operator-p` passes.
 - DONE (2026-01-04): Keep the upstream ERT gate green while advancing the `subr.el` checkpoint:
   - add minimal buffer/window shims required by early `subr.el` macros and ERT internals.
-- TODO: Increase `clemacs/contract/ert-tests.maxforms` and grow `clemacs/contract/ert-upstream.tests`
-  (keep the list monotonic; use `ert-upstream.known-fail.tests` with dated reasons).
+- DONE (2026-01-04): Grow upstream ERT coverage:
+  - bump `clemacs/contract/ert-tests.maxforms` to 400 (no change in registered test count; still 55 at this checkpoint),
+  - expand `clemacs/contract/ert-upstream.tests` to 47 tests by adding `ert-test-messages` and `ert-test-running-tests`,
+  - keep `clemacs/contract/ert-upstream.known-fail.tests` explicit (still 6; XPASS is a gate failure).
+- TODO: Continue expanding upstream ERT coverage (either more tests from `ert-tests.el` or additional upstream ERT test files),
+  keeping the must-pass list monotonic and `known-fail` dated.
 
 ### Milestone B1-10: swap the ELisp engine in a running Emacs
 
