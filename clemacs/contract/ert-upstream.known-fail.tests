@@ -3,7 +3,4 @@
 # Format: <test-name> # <reason> (YYYY-MM-DD)
 # (empty as of 2026-01-03)
 ert-test-explain-equal-strings # explain-equal string output mismatch (2026-01-04)
-ert-test-select-and # test selector semantics mismatch (2026-01-04)
-ert-test-select-regexp # test selector regexp mismatch (2026-01-04)
-ert-test-select-tag # test selector tag semantics mismatch (2026-01-04)
-ert--pp-with-indentation-and-newline # missing format-prompt at current subr.el checkpoint (2026-01-04)
+ert--pp-with-indentation-and-newline # missing ewoc-create for interactive results buffer (2026-01-04)

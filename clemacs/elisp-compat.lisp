@@ -3,6 +3,25 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (cl:require "SB-CLTL2"))
 
+;; Some upstream ELisp assumes these are always bound (typically set by the
+;; byte-compiler or load machinery).  Bind them to NIL for bring-up so
+;; macroexpansion helpers (macroexp.el, pcase.el, etc.) don't trip UNBOUND.
+(defvar byte-compile-current-file nil)
+(defvar load-file-name nil)
+(defvar current-load-list nil)
+
+(cl:defmacro bound-and-true-p (var)
+  "Bring-up subset of ELisp `bound-and-true-p'."
+  `(and (cl:boundp ',var) ,var))
+
+(cl:defmacro interactive (&rest _spec)
+  "Bring-up stub for ELisp `interactive'.
+
+For now, clemacs runs all ELisp non-interactively, so this expands to NIL
+without evaluating the interactive spec."
+  (declare (ignore _spec))
+  nil)
+
 (cl:defun symbol-name (sym)
   "ELisp-ish SYMBOL-NAME that returns lowercase names by default."
   (string-downcase (cl:symbol-name sym)))
@@ -15,6 +34,17 @@ This is a pragmatic compatibility shim, not a full obarray model."
     (string
      (cl:intern (string-upcase name) package))
     (symbol name)))
+
+(cl:defun mapatoms (function &optional _obarray)
+  "Bring-up subset of ELisp `mapatoms'.
+
+Emacs iterates the current obarray; for bring-up we approximate this by
+iterating all symbols accessible in the ELISP package."
+  (declare (ignore _obarray))
+  (let ((pkg (find-package "ELISP")))
+    (do-symbols (s pkg)
+      (cl:funcall function s)))
+  nil)
 
 (cl:defmacro function (arg)
   "ELisp-ish FUNCTION.
@@ -666,6 +696,36 @@ Returns (values LAMBDA-LIST CHECKS BINDINGS), where:
                        (push `(elisp:equal ,g ',p) checks)
                        (list '&rest g))))))
                 ((consp x)
+                 ;; Dotted cdr patterns in backquote templates (e.g.
+                 ;; `(and ,first . ,rest)) are read by Lisp as a proper list
+                 ;; whose tail is the unquote operator and its operand:
+                 ;;   (AND (\, FIRST) \\, REST)
+                 ;; Recognize that suffix and translate it into a dotted
+                 ;; destructuring lambda list: (AND FIRST . REST).
+                 (let* ((proper-len (list-length x)))
+                   (when (and proper-len (>= proper-len 2))
+                     (let* ((tail2 (last x 2))
+                            (marker (first tail2))
+                            (pat (second tail2)))
+                       (when (and (symbolp marker)
+                                  (or (string= (symbol-name marker) ",")
+                                      (string= (symbol-name marker) ",@")))
+                         (let* ((prefix (butlast x 2))
+                                (prefix-ll (mapcar #'gen-elt prefix))
+                                (tail-ll
+                                  (cond
+                                   ((%pcase--dontcare-p pat) (gensym "_"))
+                                   ((symbolp pat) (pushnew pat bindings :test #'eq) pat)
+                                   (t
+                                    (let ((g (gensym "PCASE-TAIL-")))
+                                      (push `(elisp:equal ,g ',pat) checks)
+                                      g))))
+                                (ll (if (null prefix-ll)
+                                        tail-ll
+                                        (reduce (lambda (acc elt) (cons elt acc))
+                                                (reverse prefix-ll)
+                                                :initial-value tail-ll))))
+                           (return-from gen-elt ll))))))
                  (let ((car (gen-elt (car x)))
                        (cdr (gen-elt (cdr x))))
                    (cond
@@ -998,6 +1058,23 @@ an augmented SBCL lexical environment."
            ((functionp test) test)
            (t (cl:error "ELISP:CL-SET-DIFFERENCE unsupported :test: ~S" test)))))
     (cl:set-difference list1 list2 :test test-fn :key key)))
+
+(cl:defun cl-union (list1 list2 &rest args &key (test 'eql) key &allow-other-keys)
+  "Bring-up subset of cl-lib's `cl-union'."
+  (declare (ignore args))
+  (let ((test-fn
+          (cond
+           ((or (eq test 'eq) (eq test 'cl:eq)) #'cl:eq)
+           ((or (eq test 'eql) (eq test 'cl:eql)) #'cl:eql)
+           ((or (eq test 'equal) (eq test 'cl:equal)) #'cl:equalp)
+           ((or (eq test 'equalp) (eq test 'cl:equalp)) #'cl:equalp)
+           ((functionp test) test)
+           (t (cl:error "ELISP:CL-UNION unsupported :test: ~S" test)))))
+    (cl:union list1 list2 :test test-fn :key key)))
+
+(cl:defun cl-remove-if-not (predicate sequence &rest args &key &allow-other-keys)
+  "Bring-up subset of cl-lib's `cl-remove-if-not'."
+  (apply #'cl:remove-if-not predicate sequence args))
 
 (cl:defun cl-position (item sequence &rest args)
   "Bring-up subset of cl-lib's `cl-position'."
@@ -1347,7 +1424,8 @@ as HI*65536 + LO."
 (defstruct elisp-buffer
   (name "" :type string)
   (text "" :type string)
-  (point 1 :type integer))
+  (point 1 :type integer)
+  (locals (cl:make-hash-table :test 'eq) :type hash-table))
 
 (defstruct elisp-marker
   (buffer nil)
@@ -1525,6 +1603,17 @@ Returns a marker with no buffer/position."
 (cl:defun buffer-string ()
   "Bring-up subset of ELisp `buffer-string'."
   (elisp-buffer-text *current-buffer*))
+
+(cl:defun erase-buffer ()
+  "Bring-up subset of ELisp `erase-buffer'."
+  (setf (elisp-buffer-text *current-buffer*) ""
+        (elisp-buffer-point *current-buffer*) 1)
+  nil)
+
+(cl:defun buffer-disable-undo (&optional _buffer)
+  "Bring-up stub for ELisp `buffer-disable-undo'."
+  (declare (ignore _buffer))
+  nil)
 
 (cl:defun buffer-name (&optional buffer)
   "Bring-up subset of ELisp `buffer-name'."
@@ -1743,16 +1832,34 @@ Supports a small set of patterns used by upstream ERT:
                   `(when (eql ,v ,pattern)
                      (return-from ,done (progn ,@body))))
                  ((%pcase--bq-form-p pattern)
-                  (let ((tmp (gensym "PCASE-TMP-")))
+                  (let ((tmp (gensym "PCASE-TMP-"))
+                        (thunk (gensym "PCASE-THUNK-")))
                     (multiple-value-bind (ll checks _vars)
                         (%pcase--template->lambda-list (cadr pattern))
                       (declare (ignore _vars))
-                      `(let ((,tmp ,v))
+                      `(let ((,tmp ,v)
+                             (,thunk nil))
                          (handler-case
-                             (destructuring-bind ,ll ,tmp
-                               (when (and ,@checks)
-                                 (return-from ,done (progn ,@body))))
-                           (cl:error () nil))))))
+                             ,(cond
+                                ;; CL:DESTRUCTURING-BIND requires a list lambda
+                                ;; list; for atomic templates like `t` our
+                                ;; template->lambda-list returns a single
+                                ;; binding symbol.
+                                ((symbolp ll)
+                                 `(let ((,ll ,tmp))
+                                    (when (and ,@checks)
+                                      (setf ,thunk (lambda () (progn ,@body))))))
+                                ;; Future-proofing: treat vector templates as a
+                                ;; mismatch for now.
+                                ((vectorp ll)
+                                 nil)
+                                (t
+                                 `(destructuring-bind ,ll ,tmp
+                                    (when (and ,@checks)
+                                      (setf ,thunk (lambda () (progn ,@body)))))))
+                           (cl:error () (setf ,thunk nil)))
+                         (when ,thunk
+                           (return-from ,done (cl:funcall ,thunk)))))))
                  ((null pattern)
                   `(when (null ,v)
                      (return-from ,done (progn ,@body))))
@@ -2363,12 +2470,28 @@ implementation-specific ones."
 
 (cl:defun symbol-value (symbol)
   "ELisp-ish SYMBOL-VALUE (respects `defvaralias')."
-  (cl:symbol-value (%resolve-variable-alias symbol)))
+  (let* ((sym (%resolve-variable-alias symbol))
+         (locals (and (cl:boundp '*current-buffer*)
+                      (elisp-buffer-p *current-buffer*)
+                      (elisp-buffer-locals *current-buffer*))))
+    (if locals
+        (multiple-value-bind (val presentp) (gethash sym locals)
+          (if presentp val (cl:symbol-value sym)))
+        (cl:symbol-value sym))))
 
 (cl:defun set (symbol value)
   "ELisp-ish SET (respects `defvaralias')."
-  (let ((sym (%resolve-variable-alias symbol)))
-    (setf (cl:symbol-value sym) value)
+  (let* ((sym (%resolve-variable-alias symbol))
+         (locals (and (cl:boundp '*current-buffer*)
+                      (elisp-buffer-p *current-buffer*)
+                      (elisp-buffer-locals *current-buffer*))))
+    (if locals
+        (multiple-value-bind (_ presentp) (gethash sym locals)
+          (declare (ignore _))
+          (if presentp
+              (setf (gethash sym locals) value)
+              (setf (cl:symbol-value sym) value)))
+        (setf (cl:symbol-value sym) value))
     value))
 
 (cl:defun defvaralias (new-alias base-variable &optional _docstring)
@@ -2419,25 +2542,47 @@ Evaluate BODY, but if an error is signaled, demote it and return nil."
   "Stub for ELisp `make-variable-buffer-local'."
   variable)
 
+(cl:defun make-local-variable (variable)
+  "Bring-up subset of ELisp `make-local-variable'.
+
+Marks VARIABLE as having a buffer-local value in the current buffer, seeding it
+from the current default value (or nil if unbound). Returns VARIABLE."
+  (unless (symbolp variable)
+    (error "ELISP:MAKE-LOCAL-VARIABLE expects a symbol, got: ~S" variable))
+  (let* ((sym (%resolve-variable-alias variable))
+         (locals (elisp-buffer-locals *current-buffer*)))
+    (multiple-value-bind (_ presentp) (gethash sym locals)
+      (declare (ignore _))
+      (unless presentp
+        (setf (gethash sym locals)
+              (if (cl:boundp sym) (cl:symbol-value sym) nil))))
+    variable))
+
 (cl:defun default-boundp (symbol)
   "Stub for ELisp `default-boundp'.
 
-Currently treats \"default\" binding as CL's global binding model (no
-buffer-local values yet)."
+The \"default\" value is CL's global binding model."
   (cl:boundp (%resolve-variable-alias symbol)))
 
 (cl:defun local-variable-if-set-p (_symbol &optional _buffer)
-  "Stub for ELisp `local-variable-if-set-p'."
-  (declare (ignore _symbol _buffer))
-  nil)
+  "Bring-up subset of ELisp `local-variable-if-set-p'."
+  (let* ((sym (%resolve-variable-alias _symbol))
+         (buf (or (and _buffer (get-buffer _buffer)) *current-buffer*)))
+    (unless (elisp-buffer-p buf)
+      (error "ELISP:LOCAL-VARIABLE-IF-SET-P invalid buffer: ~S" _buffer))
+    (multiple-value-bind (_ presentp) (gethash sym (elisp-buffer-locals buf))
+      (declare (ignore _))
+      presentp)))
 
 (cl:defun default-value (symbol)
   "Stub for ELisp `default-value'."
-  (symbol-value symbol))
+  (cl:symbol-value (%resolve-variable-alias symbol)))
 
 (cl:defun set-default (symbol value)
   "Stub for ELisp `set-default'."
-  (set symbol value))
+  (let ((sym (%resolve-variable-alias symbol)))
+    (setf (cl:symbol-value sym) value)
+    value))
 
 (cl:defmacro setq (&environment env &rest pairs)
   (unless (evenp (length pairs))
