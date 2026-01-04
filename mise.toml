@@ -8,3 +8,11 @@ CLMACS_BUILD_DIR = "build/macos-tty"
 # implementation during install. On macOS, installing ECL via Homebrew works:
 #   brew install ecl
 sbcl = "2.6.0"
+
+[tasks."run:c"]
+description = "Run the built clmacs binary (TTY-only baseline, C-hosted)"
+run = 'mise run run -- "$@"'
+
+[tasks."run:clemacs"]
+description = "Run the SBCL-hosted emacs executable (clemacs)"
+run = 'mise run clemacs:emacs:run -- "$@"'

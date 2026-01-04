@@ -722,6 +722,9 @@ Status (TODO, 2026-01-04)
   - `build/clemacs/bin/emacs` loads `clemacs/contract/startup.smoke.files` by default.
   - Flags: `--no-elisp`, `--startup-level smoke|check`, `--startup-limit N`.
   - Fix `mise run clemacs:emacs:run` to pass arguments through to the `emacs` binary.
-- TODO: Define how `mise run run` transitions from the C-hosted baseline to clemacs:
-  - keep the current baseline as `mise run run:c` (or similar),
-  - promote clemacs to `mise run run` only once it can start as a usable editor and exit cleanly.
+- DONE (2026-01-04): Define the transition path for `mise run run`:
+  - Baseline remains `mise run run` (C-hosted TTY build).
+  - New explicit entrypoints:
+    - `mise run run:c` (baseline; same as `mise run run`)
+    - `mise run run:clemacs` (SBCL-hosted clemacs)
+  - TODO: Promote clemacs to `mise run run` once `run:clemacs` starts as a usable editor and exits cleanly.
