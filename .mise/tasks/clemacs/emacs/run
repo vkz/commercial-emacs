@@ -18,7 +18,25 @@ build_dir="${usage_build_dir}"
 bin_dir="${project_root}/${build_dir}/bin"
 emacs_bin="${bin_dir}/emacs"
 
-declare -a usage_args
+emacs_args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      shift
+      ;;
+    --build-dir)
+      shift
+      shift
+      ;;
+    --build-dir=*)
+      shift
+      ;;
+    *)
+      emacs_args+=("$1")
+      shift
+      ;;
+  esac
+done
 
 stale=true
 if [[ -x "${emacs_bin}" ]]; then
@@ -38,7 +56,7 @@ fi
 
 export CLEMACS_SUBSTRATE_DYLIB="${bin_dir}/libemxsubstrate.dylib"
 
-if [[ "${#usage_args[@]}" -gt 0 ]]; then
-  exec "${emacs_bin}" "${usage_args[@]}"
+if [[ "${#emacs_args[@]}" -gt 0 ]]; then
+  exec "${emacs_bin}" "${emacs_args[@]}"
 fi
 exec "${emacs_bin}"

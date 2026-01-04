@@ -718,8 +718,10 @@ Status (TODO, 2026-01-04)
   - fix `cl-loop` BY `#'` interop (unblocks plist tests),
   - add/adjust compat shims used by ERT explainers and helpers (`memq`, `substring`, `cl-position`, `equal-including-properties`, `type-of`, `string=`/`string-equal`, `with-demoted-errors`),
   - re-run `mise run clemacs:test:ert-upstream` and shrink `clemacs/contract/ert-upstream.known-fail.tests` to empty (no XPASS/XFAIL).
-- TODO: Decide the first "real editor core" ELisp subset to target for clemacs startup
-  (a curated, monotonic list of files) and wire it into `clemacs:emacs:run`.
+- DONE (2026-01-04): Wire the startup manifest into the SBCL-hosted `emacs` entrypoint:
+  - `build/clemacs/bin/emacs` loads `clemacs/contract/startup.smoke.files` by default.
+  - Flags: `--no-elisp`, `--startup-level smoke|check`, `--startup-limit N`.
+  - Fix `mise run clemacs:emacs:run` to pass arguments through to the `emacs` binary.
 - TODO: Define how `mise run run` transitions from the C-hosted baseline to clemacs:
   - keep the current baseline as `mise run run:c` (or similar),
   - promote clemacs to `mise run run` only once it can start as a usable editor and exit cleanly.
