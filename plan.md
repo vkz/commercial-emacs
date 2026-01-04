@@ -728,3 +728,64 @@ Status (TODO, 2026-01-04)
     - `mise run run:c` (baseline; same as `mise run run`)
     - `mise run run:clemacs` (SBCL-hosted clemacs)
   - TODO: Promote clemacs to `mise run run` once `run:clemacs` starts as a usable editor and exits cleanly.
+
+## Post-B1-10 roadmap (toward "all shipped ELisp runs under clemacs")
+
+Note (status, TODO): We have *not* yet "replaced all inventory sites".
+Concretely, that remaining work has two intertwined parts:
+
+1) Implement the inventory-defined ELisp surface area in clemacs (CL-side) so
+   shipped ELisp can load/run.
+2) Migrate any remaining editor subsystems that still live in C behind the
+   substrate boundary (only those that must stay in C: OS/TTY/files, etc.).
+
+### Milestone B1-11: finish `subr.el` bring-up (full file load)
+
+Deliverables
+- `lisp/subr.el` loads completely under clemacs (no max-forms limit).
+- The "missing primitive" failures are driven down to (ideally) zero for `subr.el`,
+  and any remaining shims are explicitly timeboxed.
+
+Gate
+- `mise run clemacs:test:load-bootstrap` succeeds with no form limit.
+- `mise run clemacs:test:ert-upstream` remains green.
+
+Status (TODO, 2026-01-04)
+- TODO: Keep advancing `clemacs/contract/bootstrap.maxforms` until it reaches the end of `lisp/subr.el`.
+- TODO: Once it reaches the end, replace `bootstrap.maxforms` with a sentinel (or remove the max-forms limit in the task) and keep the gate monotonic.
+
+### Milestone B1-12: inventory closure for "startup.check"
+
+Deliverables
+- All C-defined primitives referenced by `clemacs/contract/startup.check.files` are either:
+  - implemented in `clemacs/elisp-compat.lisp`, or
+  - explicitly marked as a planned semantic divergence (requires user decision).
+
+Gate
+- `mise run clemacs:test:contract -- --level elisp-core` stays green while increasing
+  `startup.check.files` checkpoints beyond the current 1-form/2-form stubs.
+
+Status (TODO, 2026-01-04)
+- TODO: Use `mise run clemacs:inventory:used` on `startup.check.files` and implement the missing primitives first.
+- TODO: Grow `startup.check.files` checkpoints (monotonic), preferring the pdump load order as the guide.
+
+### Milestone B1-13: (reserved)
+
+This work is currently tracked under **Milestone B1-9** ("run upstream ERT suites under clemacs"),
+including the `ert-tests.maxforms` and `ert-upstream.tests` monotonic expansion loop.
+
+### Milestone B1-14: clemacs "real editor core" boot
+
+Deliverables
+- `mise run run:clemacs` starts an interactive editor loop that:
+  - loads a curated startup manifest,
+  - can open a file, edit, save, quit,
+  - and can evaluate ELisp in-process (initially for tests / tooling).
+
+Acceptance criteria (promotion gate)
+- Promote clemacs to `mise run run` only when `run:clemacs` is a usable terminal editor
+  and exits cleanly (both interactive and `--batch`).
+
+Status (TODO, 2026-01-04)
+- TODO: Define the first "editor-core" startup manifest (monotonic) as a sibling of `startup.{smoke,check}.files`.
+- DONE (2026-01-04): Add a minimal `--eval` path in `build/clemacs/bin/emacs --batch` (non-interactive) for scripting/tests.

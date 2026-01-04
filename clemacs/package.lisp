@@ -52,6 +52,7 @@
            #:set)
   (:export
    #:equal
+   #:eval
    #:load-elisp-file
    #:load-elisp-manifest
    #:load-bootstrap-set
@@ -60,4 +61,6 @@
    #:ert-reset
    #:should
    #:plist-get
-   #:plist-put))
+   #:plist-put
+   #:prin1-to-string
+   #:read-from-string))

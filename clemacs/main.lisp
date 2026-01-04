@@ -25,6 +25,25 @@
   (or (ignore-errors (cdr sb-ext:*posix-argv*))
       (uiop:command-line-arguments)))
 
+(defun %collect-arg-values (args flag prefix)
+  (let ((out nil))
+    (loop for (a b) on args do
+      (cond
+       ((and (stringp a) (string= a flag) (stringp b))
+        (push b out))
+       ((and (stringp a)
+             (<= (length prefix) (length a))
+             (string= prefix a :end2 (length prefix)))
+        (push (subseq a (length prefix)) out))))
+    (nreverse out)))
+
+(defun %batch-eval-string (string &key (stream *standard-output*))
+  (let* ((pair (elisp:read-from-string string))
+         (form (car pair)))
+    (elisp:eval form)
+    (finish-output stream)
+    0))
+
 (defun %maybe-load-startup-elisp (&key (project-root (uiop:getcwd))
                                       (level "smoke")
                                       (limit nil)
@@ -74,14 +93,26 @@ and a few batch-friendly flags."
                         "smoke"))
              (limit-str (or (%arg-value/equals args "--startup-limit=")
                             (%arg-value args "--startup-limit")))
-             (limit (and limit-str (parse-integer limit-str :junk-allowed nil))))
+             (limit (and limit-str (parse-integer limit-str :junk-allowed nil)))
+             (eval-strings (%collect-arg-values args "--eval" "--eval=")))
         (unless no-elisp
           (let ((rc (%maybe-load-startup-elisp :level level :limit limit :stream stream)))
             (when (not (zerop rc))
               (return-from emacs-main rc))))
-        (format stream "clemacs: batch mode (not implemented yet)~%")
-        (finish-output stream)
-        0))
+        (if eval-strings
+            (handler-case
+                (progn
+                  (dolist (s eval-strings)
+                    (%batch-eval-string s :stream stream))
+                  0)
+              (error (e)
+                (format *error-output* "[clemacs] --eval failed: ~A~%" e)
+                (finish-output *error-output*)
+                1))
+            (progn
+              (format stream "clemacs: batch mode (not implemented yet)~%")
+              (finish-output stream)
+              0))))
      (t
       (let* ((no-elisp (%arg-has-p args "--no-elisp"))
              (level (or (%arg-value/equals args "--startup-level=")
