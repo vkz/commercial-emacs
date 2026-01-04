@@ -21,14 +21,19 @@ This is a pragmatic compatibility shim, not a full obarray model."
 
 Emacs Lisp's `function' special form is more of a \"function designator\"
 than a strict CL:FUNCTION: for symbols, it yields the symbol (resolved later
-by `funcall' / `apply')."
+by `funcall' / `apply').  For lambdas, we keep the form as data so early
+bootstrap loads don't macroexpand/compile lambda bodies."
   (cond
    ((symbolp arg)
     `(quote ,arg))
    ((and (consp arg) (eq (car arg) 'lambda))
-    `(cl:function ,arg))
+    `(quote ,arg))
+   ((and (consp arg) (eq (car arg) '|,|) (null (cddr arg)))
+    (cadr arg))
+   ((and (consp arg) (eq (car arg) '|,@|) (null (cddr arg)))
+    (cadr arg))
    (t
-   `(cl:function ,arg))))
+    `(quote ,arg))))
 
 (defvar *elisp-function-cells* (cl:make-hash-table :test 'eq))
 
@@ -40,6 +45,8 @@ Returns NIL if SYMBOL has no function cell value."
       (gethash symbol *elisp-function-cells*)
     (cond
      (presentp value)
+     ((cl:macro-function symbol)
+      (cons 'macro (cl:macro-function symbol)))
      ((cl:fboundp symbol) (cl:symbol-function symbol))
      (t nil))))
 
@@ -2099,11 +2106,24 @@ buffer-local values yet)."
     `(progn ,@(nreverse forms))))
 
 (cl:defun fset (symbol definition)
-  "Set SYMBOL's function cell to DEFINITION."
+  "Set SYMBOL's function cell to DEFINITION.
+
+Also installs a CL-visible definition when needed so that evaluating ELisp as
+CL forms (e.g. calls like (foo ...)) works during bootstrap."
   (when (and (symbolp symbol)
              (eq (symbol-package symbol) (find-package "CL")))
     (return-from fset symbol))
   (setf (gethash symbol *elisp-function-cells*) definition)
+  (when (symbolp symbol)
+    (cond
+     ((and (consp definition) (eq (car definition) 'macro) (functionp (cdr definition)))
+      (setf (cl:macro-function symbol) (cdr definition)))
+     ((functionp definition)
+      (setf (cl:fdefinition symbol) definition))
+     ((not (cl:fboundp symbol))
+      (setf (cl:fdefinition symbol)
+            (lambda (&rest args)
+              (cl:apply (%resolve-function definition) args))))))
   symbol)
 
 (cl:defun defalias (symbol definition &optional _docstring)

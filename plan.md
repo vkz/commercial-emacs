@@ -775,6 +775,10 @@ Status (TODO, 2026-01-04)
 - DONE (2026-01-04): Raise `startup.check.files` `lisp/keymap.el` checkpoint to 50 forms:
   - Implement ELisp reader support for Emacs char modifier literals like `?\A-\0` / `?\C-\0` / `?\C-\M-a` (required by `lisp/keymap.el`).
   - Catch reader errors in `elisp:load-elisp-file` so failures are wrapped as `elisp-load-error` and can be logged via `CLEMACS_LOAD_DEBUG_FILE`.
+- DONE (2026-01-04): Raise `startup.check.files` `lisp/emacs-lisp/byte-run.el` checkpoint to 20 forms:
+  - Make `defalias`/`fset` install CL-visible definitions for new function cells (without clobbering existing implementations).
+  - Represent macros from `symbol-function` as `(macro . FN)` so ELisp patterns like `(defalias 'x (symbol-function 'some-macro))` work.
+  - Make ELisp `function` keep lambdas as data to avoid premature macroexpansion/compilation during early bootstrap loads.
 
 ### Milestone B1-13: (reserved)
 

@@ -10,7 +10,7 @@
 
 # pdump: debug-early, byte-run, backquote, subr, keymap, version.
 lisp/emacs-lisp/debug-early.el
-lisp/emacs-lisp/byte-run.el 1
+lisp/emacs-lisp/byte-run.el 20
 lisp/emacs-lisp/backquote.el
 lisp/subr.el -
 lisp/keymap.el 50
