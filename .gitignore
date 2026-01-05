@@ -29,6 +29,9 @@
 !.mailmap
 !.mise
 !.mise/**
+!.codex
+!.codex/skills
+!.codex/skills/**
 
 # Built by 'autogen.sh'.
 /aclocal.m4

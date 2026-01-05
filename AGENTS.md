@@ -35,6 +35,7 @@ Start here for current intent and constraints, in this order:
 - `plan.md`: the current, actionable plan and milestones.
 - `plans/clemacs.md`: Option B ("clemacs") architecture and branch-specific
   decisions (B1 handle-based substrate, CL-first Elisp dialect stance).
+- `plans/agent-playbook.md`: operational bring-up runbook (commands + decision tree).
 
 Related/background (useful when debating architecture, but not the day-to-day plan)
 - `plans/emacl.md`: Option A ("emacl") alternative (C-hosted Emacs, embed SBCL).
@@ -63,6 +64,12 @@ out any issues encountered and propose at least one concrete fix path:
 
 If a tool/task will materially shorten the current work *and* improve future
 iterations, implement it immediately (prefer a `mise` file task).
+
+Introspection rule (required)
+- If you get stuck or rediscover a technique that helps (a reliable debug flag,
+  a missing helper task, a clearer failure interpretation): add exactly **one**
+  new bullet to `plans/agent-playbook.md` **or** add exactly **one** new helper
+  task/subcommand. Keep it minimal and high-signal.
 
 ## Breadcrumb discipline (required for clemacs)
 
@@ -182,10 +189,23 @@ The fastest “port loop” is:
      the manifest prefix first), and writes a report under `build/clemacs/reports/`.
 
 5) Reduce noise when iterating (optional)
-   - `CLEMACS_MUFFLE_STYLE_WARNINGS=1` suppresses SBCL `style-warning`/`compiler-note`
-     spam during cold runs (do not use this when you’re chasing a suspicious warning).
-   - `CLEMACS_LOAD_DEBUG_FILE=build/clemacs/tmp/load-debug.out` appends a host backtrace
-     for loader failures (useful when the failing form isn’t obviously the cause).
+  - `CLEMACS_MUFFLE_STYLE_WARNINGS=1` suppresses SBCL `style-warning`/`compiler-note`
+    spam during cold runs (do not use this when you’re chasing a suspicious warning).
+  - `CLEMACS_LOAD_DEBUG_FILE=build/clemacs/tmp/load-debug.out` appends a host backtrace
+    for loader failures (useful when the failing form isn’t obviously the cause).
+
+### Repo-local Codex skills (use these)
+
+Repo-local skills live under `.codex/skills/` in this repo:
+
+- `clemacs-port-loop`: standard tight loop (gate → first failure → fix → breadcrumbs → repeat).
+- `clemacs-loader-debug`: interpret `elisp-load-error` and first-failure reports; bisect checkpoints.
+- `clemacs-ert-bringup`: expand `ert-upstream.tests` monotonically; manage known-fails/XPASS.
+
+When to use which
+- Adding/raising a startup checkpoint: `clemacs-port-loop`, then `clemacs-loader-debug` if it fails.
+- Implementing a missing primitive / inventory item: `clemacs-loader-debug` + breadcrumb rules.
+- Growing upstream ERT must-pass list: `clemacs-ert-bringup`.
 - Experimental ELisp loader bring-up:
   - `mise run clemacs:load:bootstrap -- --limit 1` (loads the first entry in `clemacs/contract/bootstrap.files` up to `clemacs/contract/bootstrap.maxforms`)
   - Gate: `mise run clemacs:test:load-bootstrap` (checkpointed loader)
