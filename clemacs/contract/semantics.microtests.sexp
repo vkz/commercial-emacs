@@ -44,6 +44,11 @@
   :expected "65"
   :emacs :match)
 
+ (:name "syntax-tables-modify-syntax-entry-prefix-flag"
+  :expr "(let ((st (make-char-table 'syntax-table nil))) (set-char-table-parent st (standard-syntax-table)) (modify-syntax-entry ?\\\" \".   \" st) (modify-syntax-entry ?\\' \"w p\" st) (list (logand (car (aref st ?\\\")) 255) (logand (car (aref st ?\\')) (ash 1 20))))"
+  :expected "(1 1048576)"
+  :emacs :match)
+
  (:name "match-data-basic"
   :expr "(progn (string-match \"b\" \"abc\") (match-beginning 0))"
   :expected "1"

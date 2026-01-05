@@ -107,6 +107,11 @@ compat shim changes any of these, add a microtest and update this section.
 - Preserve dynamic binding + special variable behavior for `defvar`/`defcustom`
   and non-local exits (`catch`/`throw`, `condition-case`).
 - Preserve string byte/char semantics (unibyte vs multibyte) and match-data.
+- Preserve char-table objects (notably syntax tables): `make-syntax-table` builds
+  a char-table with inheritance, and `modify-syntax-entry` stores raw syntax
+  descriptors as conses `(CODE+FLAGS . MATCH)` where the low 8 bits are the
+  syntax class and the prefix flag is bit 20 (see microtest:
+  `clemacs/contract/semantics.microtests.sexp`).
 - Keep function names/arguments visible to `backtrace-get-frames` so ERT batch
   output can include `ert-fail(...)` frames.
 

@@ -647,6 +647,10 @@ Status (TODO, 2026-01-04)
 - DONE (2026-01-05): Keep the upstream ERT gate green (0 XFAIL):
   - load `pp.el` in `clemacs:test:ert-upstream`,
   - implement SBCL-backed `backtrace-to-string` so `ert-test-run-tests-batch-expensive` can pass.
+- DONE (2026-01-05): Advance editor-core startup checkpoints:
+  - raise startup manifests for `minibuffer.el`, `lisp.el`, `text-mode.el`, and `syntax.el`,
+  - implement the char-table / syntax-table primitives needed for `text-mode-syntax-table`,
+  - make `cl-defstruct` ignore slot `:documentation` (used by `syntax.el`).
 - TODO: Continue expanding upstream ERT coverage (either more tests from `ert-tests.el` or additional upstream ERT test files),
   keeping the must-pass list monotonic and `known-fail` dated.
 

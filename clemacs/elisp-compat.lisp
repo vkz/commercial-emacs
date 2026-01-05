@@ -215,11 +215,38 @@ and evaluate the (already CL-shaped) FORM."
     (error "ELISP:% expects integers, got: ~S ~S" x y))
   (cl:rem x y))
 
+(defconstant +char-table-size+ 65536)
+
+(cl:defstruct (elisp-char-table
+               (:constructor %make-elisp-char-table (type default data extra parent)))
+  (type nil :type t)
+  (default nil :type t)
+  (data (make-array +char-table-size+ :initial-element nil) :type simple-vector)
+  (extra (make-array 0 :adjustable t :fill-pointer 0) :type vector)
+  (parent nil :type t))
+
+(cl:defun %char-table-ref (table idx)
+  (unless (and (integerp idx) (<= 0 idx) (< idx +char-table-size+))
+    (error "ELISP: char-table index out of range: ~S" idx))
+  (let ((val (svref (elisp-char-table-data table) idx)))
+    (cond
+     ((not (null val)) val)
+     ((not (null (elisp-char-table-parent table)))
+      (%char-table-ref (elisp-char-table-parent table) idx))
+     (t (elisp-char-table-default table)))))
+
+(cl:defun %char-table-set (table idx value)
+  (unless (and (integerp idx) (<= 0 idx) (< idx +char-table-size+))
+    (error "ELISP: char-table index out of range: ~S" idx))
+  (setf (svref (elisp-char-table-data table) idx) value)
+  value)
+
 (cl:defun aref (array idx)
   "ELisp-ish AREF.
 
 For strings, return a character code integer (Emacs Lisp semantics)."
   (cond
+   ((typep array 'elisp-char-table) (%char-table-ref array idx))
    ((unibyte-string-p array) (cl:aref array idx))
    ((cl:stringp array) (%elisp-char-code (cl:aref array idx)))
    (t (cl:aref array idx))))
@@ -227,6 +254,8 @@ For strings, return a character code integer (Emacs Lisp semantics)."
 (cl:defun (setf aref) (value array idx)
   "Set ARRAY element IDX to VALUE and return VALUE (ELisp-ish)."
   (cond
+   ((typep array 'elisp-char-table)
+    (%char-table-set array idx value))
    ((unibyte-string-p array)
     (unless (and (integerp value) (<= 0 value 255))
       (error "ELISP:AREF set expects byte 0..255 for unibyte string, got: ~S" value))
@@ -1666,9 +1695,26 @@ named constructors."
                                opts)
                     opts))
          (spec* (if (consp spec) (cons name opts*) spec))
+         (slots*
+           (mapcar
+            (lambda (slot)
+              ;; cl-lib sometimes includes :documentation in slot plists;
+              ;; CL:DEFSTRUCT doesn't accept it, so drop it.
+              (cond
+               ((symbolp slot) slot)
+               ((consp slot)
+                (let ((nm (car slot))
+                      (init (cadr slot))
+                      (plist (cddr slot)))
+                  (list* nm init
+                         (loop for (k v) on plist by #'cddr
+                               unless (eq k :documentation)
+                                 append (list k v)))))
+               (t slot)))
+            rest))
          (args* (append (list spec*)
                         (when doc* (list doc*))
-                        rest)))
+                        slots*)))
     (declare (cl:ignore name))
     `(cl:defstruct ,@args*)))
 
@@ -4505,12 +4551,127 @@ implementation-specific ones."
    ((stringp object) 'string)
    ((vectorp object) 'vector)
    ((hash-table-p object) 'hash-table)
+   ((typep object 'elisp-char-table) 'char-table)
    (t (cl:type-of object))))
 
-(cl:defun char-table-p (_object)
-  "Stub for ELisp `char-table-p' (GUI/charset infrastructure not modeled yet)."
-  (declare (cl:ignore _object))
-  nil)
+(cl:defun char-table-p (object)
+  "Return non-nil if OBJECT is a char-table."
+  (typep object 'elisp-char-table))
+
+(cl:defun make-char-table (type &optional init)
+  "Return a new char-table.
+
+This is a minimal bring-up implementation: it supports a fixed range of
+character codes (0..65535), a parent link, and extra slots."
+  (%make-elisp-char-table type init
+                          (make-array +char-table-size+ :initial-element nil)
+                          (make-array 0 :adjustable t :fill-pointer 0)
+                          nil))
+
+(cl:defun set-char-table-parent (table parent)
+  "Set TABLE's parent to PARENT and return PARENT."
+  (unless (char-table-p table)
+    (error "ELISP:set-char-table-parent expects a char-table, got: ~S" table))
+  (unless (or (null parent) (char-table-p parent))
+    (error "ELISP:set-char-table-parent expects nil or char-table parent, got: ~S"
+           parent))
+  (setf (elisp-char-table-parent table) parent)
+  parent)
+
+(cl:defun char-table-parent (table)
+  "Return TABLE's parent, or nil."
+  (unless (char-table-p table)
+    (error "ELISP:char-table-parent expects a char-table, got: ~S" table))
+  (elisp-char-table-parent table))
+
+(cl:defun set-char-table-extra-slot (table n value)
+  "Set TABLE's extra slot N to VALUE and return VALUE."
+  (unless (char-table-p table)
+    (error "ELISP:set-char-table-extra-slot expects a char-table, got: ~S" table))
+  (unless (and (integerp n) (<= 0 n))
+    (error "ELISP:set-char-table-extra-slot expects non-negative slot index, got: ~S"
+           n))
+  (let ((extra (elisp-char-table-extra table)))
+    (when (<= (length extra) n)
+      (adjust-array extra (1+ n) :initial-element nil :fill-pointer (1+ n)))
+    (setf (aref extra n) value))
+  value)
+
+(cl:defun char-table-extra-slot (table n)
+  "Return TABLE's extra slot N."
+  (unless (char-table-p table)
+    (error "ELISP:char-table-extra-slot expects a char-table, got: ~S" table))
+  (unless (and (integerp n) (<= 0 n))
+    (error "ELISP:char-table-extra-slot expects non-negative slot index, got: ~S"
+           n))
+  (let ((extra (elisp-char-table-extra table)))
+    (if (< n (length extra)) (aref extra n) nil)))
+
+(cl:defvar *standard-syntax-table* nil)
+
+(cl:defun standard-syntax-table ()
+  "Return the global standard syntax table."
+  (or *standard-syntax-table*
+      (setf *standard-syntax-table* (make-char-table 'syntax-table (cons 0 nil)))))
+
+(cl:defun %syntax-spec-code (spec)
+  ;; Mirror Emacs's `syntax_spec_code` mapping for the subset we need during
+  ;; early editor-core bring-up.
+  (case spec
+    (32 0)   ; space
+    (46 1)   ; .
+    (119 2)  ; w
+    (95 3)   ; _
+    (40 4)   ; (
+    (41 5)   ; )
+    (39 6)   ; '
+    (34 7)   ; "
+    (36 8)   ; $
+    (92 9)   ; \
+    (47 10)  ; /
+    (60 11)  ; <
+    (62 12)  ; >
+    (64 13)  ; @
+    (33 14)  ; !
+    (124 15) ; |
+    (t nil)))
+
+(defconstant +syntax-flag-prefix+ (ash 1 20))
+
+(cl:defun %syntax-entry-from-spec (syntax)
+  (unless (or (unibyte-string-p syntax) (cl:stringp syntax))
+    (error "ELISP:modify-syntax-entry expects syntax string, got: ~S" syntax))
+  (when (zerop (length syntax))
+    (error "ELISP:modify-syntax-entry expects non-empty syntax string"))
+  (let* ((spec (aref syntax 0))
+         (code (%syntax-spec-code spec)))
+    (unless (and code (<= 0 code))
+      (error "ELISP:unsupported syntax spec code: ~S" spec))
+    (let ((flags 0)
+          (matching nil))
+      (when (and (or (= code 4) (= code 5)) (>= (length syntax) 2))
+        (setf matching (aref syntax 1)))
+      (loop for i from 1 below (length syntax) do
+        (when (= (aref syntax i) 112) ; "p"
+          (setf flags (logior flags +syntax-flag-prefix+))))
+      (cons (logior code flags) matching))))
+
+(cl:defun modify-syntax-entry (ch syntax &optional table)
+  "Set the syntax entry for CH in TABLE according to SYNTAX.
+
+This is a bring-up subset: it supports the common syntax class letters and
+the prefix flag (\"p\")."
+  (let* ((code (cond
+                ((integerp ch) ch)
+                ((characterp ch) (char-code ch))
+                (t (error "ELISP:modify-syntax-entry expects character code, got: ~S"
+                          ch))))
+         (tab (or table (error "ELISP:modify-syntax-entry requires TABLE for now")))
+         (entry (%syntax-entry-from-spec syntax)))
+    (unless (char-table-p tab)
+      (error "ELISP:modify-syntax-entry expects a char-table, got: ~S" tab))
+    (%char-table-set tab code entry)
+    nil))
 
 (cl:defun %lexical-variable-p (symbol env)
   (multiple-value-bind (kind)

@@ -85,7 +85,7 @@ lisp/simple.el 1
 lisp/emacs-lisp/nadvice.el 1
 
 # pdump: minibuffer.
-lisp/minibuffer.el 1
+lisp/minibuffer.el 10
 
 # pdump: frame.
 lisp/frame.el 1
@@ -100,7 +100,7 @@ lisp/term/tty-colors.el 1
 lisp/font-core.el 1
 
 # pdump: syntax.
-lisp/emacs-lisp/syntax.el 1
+lisp/emacs-lisp/syntax.el 20
 
 # pdump: font-lock.
 lisp/font-lock.el 1
@@ -118,10 +118,10 @@ lisp/menu-bar.el 1
 lisp/tab-bar.el 1
 
 # pdump: lisp, page, register, paragraphs, prog-mode, lisp-mode, text-mode.
-lisp/emacs-lisp/lisp.el 1
+lisp/emacs-lisp/lisp.el 20
 lisp/textmodes/page.el 1
 lisp/register.el 1
 lisp/textmodes/paragraphs.el 1
 lisp/progmodes/prog-mode.el 1
 lisp/emacs-lisp/lisp-mode.el 1
-lisp/textmodes/text-mode.el 1
+lisp/textmodes/text-mode.el 20
