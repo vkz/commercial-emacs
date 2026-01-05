@@ -69,6 +69,16 @@
   :expected "(a . b)"
   :emacs :match)
 
+ (:name "reader-bare-colon-symbol"
+  :expr "(let* ((x (car (read-from-string \"(: \\\"\\\\\\\\\\\" nonl)\")))) (list (symbol-name (car x)) (aref (cadr x) 0) (symbol-name (nth 2 x))))"
+  :expected "(\":\" 92 \"nonl\")"
+  :emacs :match)
+
+ (:name "reader-bare-pipe-symbol"
+  :expr "(symbol-name (car (car (read-from-string \"(| a b)\"))))"
+  :expected "\"|\""
+  :emacs :match)
+
  (:name "prin1-to-string-basic"
   :expr "(prin1-to-string '(a . b))"
   :expected "\"(a . b)\""

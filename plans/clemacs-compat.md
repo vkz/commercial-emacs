@@ -114,6 +114,11 @@ compat shim changes any of these, add a microtest and update this section.
   `clemacs/contract/semantics.microtests.sexp`).
 - Keep function names/arguments visible to `backtrace-get-frames` so ERT batch
   output can include `ert-fail(...)` frames.
+- (2026-01-05) Reader/codegen must preserve ELisp symbol tokens like `:` and `|`
+  as ordinary symbols (rx DSL uses `(: ...)` and `(| ...)`). Today we implement
+  this via a loader sanitizer for standalone `:` plus an ELisp readtable tweak
+  for `|` (see microtests `reader-bare-colon-symbol` and
+  `reader-bare-pipe-symbol` in `clemacs/contract/semantics.microtests.sexp`).
 
 ## Contract gate (clemacs)
 

@@ -386,6 +386,10 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
                  (list uq (read stream t nil t))))))
            nil
            rt))
+        ;; Emacs Lisp treats `|' as an ordinary symbol constituent (e.g. rx DSL
+        ;; uses (| ...)). In CL, `|' is a symbol-escape delimiter, so override
+        ;; it so the ELisp reader can consume upstream forms unchanged.
+        (set-syntax-from-char #\| #\A rt)
         (set-macro-character
          #\"
          (lambda (stream char)
@@ -559,68 +563,143 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
          rt)
         (setf *elisp-readtable* rt))))
 
+(cl:defun %sanitize-elisp-source/colon-tokens (s)
+  "Return a sanitized CL string and a list of inserted positions.
+
+This is a narrow compatibility hack for upstream ELisp that uses a bare `:'
+symbol (notably rx's (: ...)). In CL reader syntax, a lone colon is invalid and
+signals a reader error (it expects a symbol name after the package marker).
+
+We rewrite standalone `:' tokens as \\: so CL's reader yields a symbol whose
+name is \":\" in the current package. We leave package syntax like `cl:foo' and
+keywords like `:foo' untouched."
+  (unless (cl:stringp s)
+    (cl:error "ELISP: expected CL string, got: ~S" (cl:type-of s)))
+  (let ((insertions nil))
+    (labels ((delim-p (ch)
+               (or (null ch)
+                   (member ch '(#\Space #\Tab #\Newline #\Return
+                                #\( #\) #\[ #\] #\" #\' #\` #\, #\;)))))
+      (let ((len (length s))
+            (out-pos 0)
+            (in-string nil)
+            (escape nil)
+            (in-comment nil))
+        (cl:values
+         (with-output-to-string (out)
+           (cl:loop for i from 0 below len do
+             (let ((ch (char s i)))
+               (cond
+                (in-comment
+                 (write-char ch out)
+                 (cl:incf out-pos)
+                 (when (char= ch #\Newline)
+                   (setf in-comment nil)))
+                (in-string
+                 (write-char ch out)
+                 (cl:incf out-pos)
+                 (cond
+                  (escape (setf escape nil))
+                  ((char= ch #\\) (setf escape t))
+                  ((char= ch #\") (setf in-string nil))))
+                (t
+                 (cond
+                  ((char= ch #\;)
+                   (setf in-comment t)
+                   (write-char ch out)
+                   (cl:incf out-pos))
+                  ((char= ch #\")
+                   (setf in-string t)
+                   (write-char ch out)
+                   (cl:incf out-pos))
+                  ((and (char= ch #\:)
+                        (or (cl:= i 0) (delim-p (char s (cl:1- i))))
+                        (or (cl:= i (cl:1- len)) (delim-p (char s (cl:1+ i)))))
+                   (cl:push out-pos insertions)
+                   (write-char #\\ out)
+                   (write-char #\: out)
+                   (cl:incf out-pos 2))
+                  (t
+                   (write-char ch out)
+                   (cl:incf out-pos))))))))
+         (nreverse insertions))))))
+
+(cl:declaim
+ (ftype (cl:function (cl:string) (cl:values cl:string list))
+        %sanitize-elisp-source/colon-tokens))
+
+(cl:defun %count-insertions-before (insertions pos)
+  (cl:loop for ins in insertions
+           while (cl:< ins pos)
+           count 1))
+
 (cl:defun load-elisp-file (path &key (package (find-package "ELISP")) (max-forms nil))
-  (with-open-file (in path :external-format :utf-8)
-    (let* ((*package* package)
-           (*readtable* (%ensure-elisp-readtable))
-           (debug-file (uiop:getenv "CLEMACS_LOAD_DEBUG_FILE"))
-           (debugp (or debug-file (and (uiop:getenv "CLEMACS_LOAD_DEBUG") t))))
-      (flet ((%maybe-log-load-error (e form-index)
-               (when debugp
-                 (let ((out (if debug-file
-                                (open debug-file
-                                      :direction :output
-                                      :if-exists :append
-                                      :if-does-not-exist :create)
-                                *standard-output*)))
-                   (unwind-protect
-                       (progn
-                         (cl:format out "[clemacs:load] error in ~A form ~D: ~A~%"
-                                    path form-index e)
-                         #+sbcl
-                         (sb-debug:print-backtrace :stream out :count 80)
-                         (finish-output out))
-                     (when debug-file
-                       (ignore-errors (close out))))))))
-        (loop with form-index = 0 do
-          (let ((form
-                  (handler-case
-                      (read in nil :eof)
-                    (cl:error (e)
-                      (let ((next-index (1+ form-index)))
-                        (%maybe-log-load-error e next-index)
-                        (let ((inv (inventory-entry-for-condition
-                                    e
-                                    :start-dir (uiop:pathname-directory-pathname path))))
-                          (cl:error 'elisp-load-error
-                                    :path path
-                                    :form-index next-index
-                                    :form :read-error
-                                    :cause e
-                                    :inventory-entry inv)))))))
-            (when (eq form :eof)
-              (return))
-            (incf form-index)
-            (handler-case
-                (cl:handler-bind
-                    ((cl:error
-                       (lambda (e)
-                         (%maybe-log-load-error e form-index)
-                         nil)))
-                  (cl:eval (%elisp-rewrite form)))
-              (cl:error (e)
-                (let ((inv (inventory-entry-for-condition
-                            e
-                            :start-dir (uiop:pathname-directory-pathname path))))
-                  (cl:error 'elisp-load-error
-                            :path path
-                            :form-index form-index
-                            :form form
-                            :cause e
-                            :inventory-entry inv))))
-            (when (and max-forms (>= form-index max-forms))
-              (return))))
-        (%maybe-install-post-load-shims path)))))
+  (let ((raw (uiop:read-file-string path :external-format :utf-8)))
+    (multiple-value-bind (sanitized _insertions)
+        (%sanitize-elisp-source/colon-tokens raw)
+      (declare (cl:ignore _insertions)
+               (cl:type cl:string sanitized))
+      (with-input-from-string (in sanitized)
+        (let* ((*package* package)
+               (*readtable* (%ensure-elisp-readtable))
+               (debug-file (uiop:getenv "CLEMACS_LOAD_DEBUG_FILE"))
+               (debugp (or debug-file (and (uiop:getenv "CLEMACS_LOAD_DEBUG") t))))
+          (flet ((%maybe-log-load-error (e form-index)
+                   (when debugp
+                     (let ((out (if debug-file
+                                    (open debug-file
+                                          :direction :output
+                                          :if-exists :append
+                                          :if-does-not-exist :create)
+                                    *standard-output*)))
+                       (unwind-protect
+                           (progn
+                             (cl:format out "[clemacs:load] error in ~A form ~D: ~A~%"
+                                        path form-index e)
+                             #+sbcl
+                             (sb-debug:print-backtrace :stream out :count 80)
+                             (finish-output out))
+                         (when debug-file
+                           (ignore-errors (close out))))))))
+            (loop with form-index = 0 do
+              (let ((form
+                      (handler-case
+                          (read in nil :eof)
+                        (cl:error (e)
+                          (let ((next-index (1+ form-index)))
+                            (%maybe-log-load-error e next-index)
+                            (let ((inv (inventory-entry-for-condition
+                                        e
+                                        :start-dir (uiop:pathname-directory-pathname path))))
+                              (cl:error 'elisp-load-error
+                                        :path path
+                                        :form-index next-index
+                                        :form :read-error
+                                        :cause e
+                                        :inventory-entry inv)))))))
+                (when (eq form :eof)
+                  (return))
+                (incf form-index)
+                (handler-case
+                    (cl:handler-bind
+                        ((cl:error
+                           (lambda (e)
+                             (%maybe-log-load-error e form-index)
+                             nil)))
+                      (cl:eval (%elisp-rewrite form)))
+                  (cl:error (e)
+                    (let ((inv (inventory-entry-for-condition
+                                e
+                                :start-dir (uiop:pathname-directory-pathname path))))
+                      (cl:error 'elisp-load-error
+                                :path path
+                                :form-index form-index
+                                :form form
+                                :cause e
+                                :inventory-entry inv))))
+                (when (and max-forms (>= form-index max-forms))
+                  (return))))
+            (%maybe-install-post-load-shims path)))))))
 
 (cl:defvar *pp-to-string-orig* nil)
 (cl:defvar *pp-to-string-shim* nil)

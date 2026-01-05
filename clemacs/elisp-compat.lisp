@@ -714,6 +714,92 @@ This is used for ELisp `looking-at', which must not search forward past point."
       (setf *match-data* saved-md
             *match-source-string* saved-s))))
 
+(cl:defun %rx--regexp-quote (s)
+  "Very small subset of Emacs's `regexp-quote'."
+  (let ((s (%elisp-string->cl-string s)))
+    (with-output-to-string (out)
+      (loop for ch across s do
+        (when (find ch "\\.[]*+?^$|" :test #'char=)
+          (write-char #\\ out))
+        (write-char ch out)))))
+
+(cl:defun %rx--lookup-definition (name)
+  (let ((d (and (symbolp name) (get name 'rx-definition))))
+    (cond
+     ((null d) nil)
+     ((and (consp d) (null (cdr d))) (car d))
+     (t (cons (intern ":" (find-package "ELISP")) d)))))
+
+(cl:defun %rx--translate (form)
+  ;; Return an Emacs regexp string (not PCRE). This is intentionally tiny and
+  ;; only grows as startup checkpoints demand it.
+  (labels ((op-name (s) (and (symbolp s) (cl:symbol-name s)))
+           (op= (s name) (and (symbolp s) (string= (cl:symbol-name s) name)))
+           (group (s) (concatenate 'cl:string "\\(?:" s "\\)"))
+           (emit (x)
+             (cond
+              ((stringp x) (%rx--regexp-quote x))
+              ((symbolp x)
+               (or (%rx--translate (%rx--lookup-definition x))
+                   (cond
+                    ((memq x '(nonl not-newline any)) ".")
+                    (t (error "ELISP:rx unsupported symbol: %S" x)))))
+              ((consp x)
+               (let ((op (car x))
+                     (args (cdr x)))
+                 (cond
+                  ;; Sequence.
+                  ((op= op ":")
+                   (apply #'concatenate 'cl:string (mapcar #'emit args)))
+                  ;; Alternation.
+                  ((op= op "|")
+                   (group
+                    (with-output-to-string (out)
+                      (loop for a in args
+                            for firstp = t then nil do
+                              (unless firstp (write-string "\\|" out))
+                              (write-string (emit a) out)))))
+                  ;; One-or-more.
+                  ((op= op "+")
+                   (cond
+                    ((/= (length args) 1)
+                     (error "ELISP:rx (+ ...) expects 1 arg, got: %S" x))
+                    (t
+                     (concatenate 'cl:string (group (emit (car args))) "+"))))
+                  ;; (syntax word) / (syntax symbol): approximate for bring-up.
+                  ((op= op "SYNTAX")
+                   (let ((kind (car args)))
+                     (cond
+                      ((or (eq kind 'word) (eq kind 'symbol))
+                       ;; Keep this within the subset understood by
+                       ;; %elisp-regexp->pcre: POSIX classes only inside [...]
+                       ;; and ASCII-only approximations.
+                       "[[:alnum:]_]")
+                      (t
+                       (error "ELISP:rx (syntax ...) unsupported: %S" x)))))
+                  (t
+                   (error "ELISP:rx unsupported form: %S" x)))))
+              (t
+               (error "ELISP:rx unsupported object: %S" x)))))
+    (emit form)))
+
+(cl:defun %rx--runtime (forms)
+  (cond
+   ((null forms) "")
+   ((null (cdr forms)) (%rx--translate (car forms)))
+   (t
+    (%rx--translate (cons (intern ":" (find-package "ELISP")) forms)))))
+
+(cl:defmacro rx (&rest forms)
+  "Bring-up subset of Emacs's `rx' macro."
+  `(%rx--runtime ',forms))
+
+(cl:defmacro rx-define (name &rest definition)
+  "Bring-up subset of Emacs's `rx-define'."
+  `(progn
+     (put ',name 'rx-definition ',definition)
+     ',name))
+
 (cl:defun string-search (needle haystack &optional start)
   "Bring-up subset of the C primitive `string-search'."
   (unless (and (stringp needle) (stringp haystack))
@@ -881,14 +967,19 @@ character in STRING."
       (error "ELISP:READ-FROM-STRING bad start: %S" start))
     (unless (and (integerp end) (<= start end) (<= end (length s)))
       (error "ELISP:READ-FROM-STRING bad end: %S" end))
-    (let ((*package* (find-package "ELISP"))
-          (*readtable* (elisp::%ensure-elisp-readtable))
-          (*read-eval* t))
-      (multiple-value-bind (obj pos)
-          (cl:read-from-string s nil :eof :start start :end end)
-        (when (eq obj :eof)
-          (error "ELISP:READ-FROM-STRING EOF"))
-        (cons obj pos)))))
+    (let* ((sub (subseq s start end)))
+      (multiple-value-bind (sanitized insertions)
+          (elisp::%sanitize-elisp-source/colon-tokens sub)
+        (let ((*package* (find-package "ELISP"))
+              (*readtable* (elisp::%ensure-elisp-readtable))
+              (*read-eval* t))
+          (multiple-value-bind (obj pos)
+              (cl:read-from-string sanitized nil :eof)
+            (when (eq obj :eof)
+              (error "ELISP:READ-FROM-STRING EOF"))
+            (let* ((ins-before (%count-insertions-before insertions pos))
+                   (pos* (- pos ins-before)))
+              (cons obj (+ start pos*)))))))))
 
 (cl:defun string-to-number (string)
   "Bring-up subset of ELisp `string-to-number'."
