@@ -115,7 +115,7 @@ lisp/fringe.el -
 lisp/scroll-bar.el 11
 lisp/select.el -
 lisp/emacs-lisp/timer.el -
-lisp/isearch.el 1
+lisp/isearch.el 54
 
 # pdump: easymenu, rfn-eshadow, menu-bar, tab-bar.
 lisp/emacs-lisp/easymenu.el 1
