@@ -5,6 +5,8 @@
 ert-test-body-runs
 ert-test-abbreviate-string
 ert-test-deftest
+ert-test-abc
+ert-test-def
 ert-test-record-backtrace
 ert-test-nested-test-body-runs
 ert-test-pass
