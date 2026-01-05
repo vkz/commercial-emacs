@@ -64,6 +64,16 @@
   :expected "\"b\""
   :emacs :match)
 
+ (:name "regexp-quote-pipe-not-escaped"
+  :expr "(regexp-quote \"|\")"
+  :expected "\"|\""
+  :emacs :match)
+
+ (:name "regexp-quote-plus-escaped"
+  :expr "(regexp-quote \"+\")"
+  :expected "\"\\\\+\""
+  :emacs :match)
+
  (:name "read-from-string-basic"
   :expr "(car (read-from-string \"(a . b)\"))"
   :expected "(a . b)"

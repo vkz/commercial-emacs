@@ -50,6 +50,68 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
           out)
         name)))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Some upstream ELisp (notably regexp-opt.el) uses `string-lessp'.  If we
+  ;; leave this unshadowed, the ELISP package inherits CL:STRING-LESSP, which
+  ;; doesn't accept our unibyte string representation.
+  (cl:shadow 'string-lessp (find-package "ELISP")))
+
+(cl:defun string-lessp (s1 s2 &optional _start1 _end1 _start2 _end2)
+  "Bring-up subset of ELisp `string-lessp'."
+  (declare (cl:ignore _start1 _end1 _start2 _end2))
+  (unless (and (stringp s1) (stringp s2))
+    (error "ELISP:STRING-LESSP expects strings, got: %S %S" s1 s2))
+  (cl:string< (%elisp-string->cl-string s1)
+              (%elisp-string->cl-string s2)))
+
+(cl:defun try-completion (string collection &optional _predicate)
+  "Bring-up subset of the C primitive `try-completion'.
+
+This currently only supports COLLECTION as a list of strings."
+  (declare (cl:ignore _predicate))
+  (unless (stringp string)
+    (error "ELISP:TRY-COMPLETION expects STRING, got: %S" string))
+  (unless (listp collection)
+    (error "ELISP:TRY-COMPLETION only supports list collections, got: %S" collection))
+  (let* ((prefix (%elisp-string->cl-string string))
+         (cands nil))
+    (dolist (s collection)
+      (when (stringp s)
+        (let ((cs (%elisp-string->cl-string s)))
+          (when (and (<= (length prefix) (length cs))
+                     (cl:string= prefix cs :end2 (length prefix)))
+            (push cs cands)))))
+    (when (null cands)
+      (return-from try-completion nil))
+    (let ((common (copy-seq (first cands))))
+      (dolist (s (rest cands))
+        (let ((n (mismatch common s)))
+          (when n
+            (setf common (subseq common 0 n)))))
+      ;; Emacs returns unibyte strings for ASCII-only completions.
+      (if (every (lambda (ch) (< (char-code ch) 128)) common)
+          (string-to-unibyte common)
+          common))))
+
+(cl:defun all-completions (string collection &optional _predicate)
+  "Bring-up subset of the C primitive `all-completions'.
+
+This currently only supports COLLECTION as a list of strings."
+  (declare (cl:ignore _predicate))
+  (unless (stringp string)
+    (error "ELISP:ALL-COMPLETIONS expects STRING, got: %S" string))
+  (unless (listp collection)
+    (error "ELISP:ALL-COMPLETIONS only supports list collections, got: %S" collection))
+  (let* ((prefix (%elisp-string->cl-string string))
+         (out nil))
+    (dolist (s collection)
+      (when (stringp s)
+        (let ((cs (%elisp-string->cl-string s)))
+          (when (and (<= (length prefix) (length cs))
+                     (cl:string= prefix cs :end2 (length prefix)))
+            (push s out)))))
+    (nreverse out)))
+
 (cl:defun intern (name &optional (package *package*))
   "ELisp-ish INTERN; canonicalizes strings to CL-style names.
 
@@ -714,12 +776,42 @@ This is used for ELisp `looking-at', which must not search forward past point."
       (setf *match-data* saved-md
             *match-source-string* saved-s))))
 
+(cl:defun regexp-quote (string &optional _lax)
+  "Bring-up subset of the C primitive `regexp-quote'."
+  (declare (cl:ignore _lax))
+  (unless (stringp string)
+    (error "ELISP:REGEXP-QUOTE expects a string, got: %S" string))
+  ;; Preserve unibyte vs multibyte: return a unibyte string iff STRING is
+  ;; unibyte (and the output stays byte-representable).
+  (let* ((want-unibyte (unibyte-string-p string))
+         (s (%elisp-string->cl-string string))
+         (codes (make-array 0 :element-type 'integer :adjustable t :fill-pointer 0)))
+    (labels ((emit (code)
+               (vector-push-extend code codes)))
+      (loop for ch across s do
+        ;; Match Emacs: do NOT escape `|', `(', `)', `{', or `}'.
+        (when (find ch "\\.[]*+?^$" :test #'char=)
+          (emit (char-code #\\)))
+        (emit (%elisp-char-code ch)))
+      (if want-unibyte
+          (let ((out (%make-unibyte-string (length codes))))
+            (dotimes (i (length codes))
+              (let ((b (aref codes i)))
+                (unless (and (integerp b) (<= 0 b 255))
+                  (error "ELISP:REGEXP-QUOTE cannot encode byte: %S" b))
+                (setf (aref out i) b)))
+            out)
+          (let ((out (cl:make-string (length codes))))
+            (dotimes (i (length codes))
+              (setf (char out i) (%elisp-code->char (aref codes i))))
+            out)))))
+
 (cl:defun %rx--regexp-quote (s)
   "Very small subset of Emacs's `regexp-quote'."
   (let ((s (%elisp-string->cl-string s)))
     (with-output-to-string (out)
       (loop for ch across s do
-        (when (find ch "\\.[]*+?^$|" :test #'char=)
+        (when (find ch "\\.[]*+?^$" :test #'char=)
           (write-char #\\ out))
         (write-char ch out)))))
 
@@ -738,12 +830,14 @@ This is used for ELisp `looking-at', which must not search forward past point."
            (group (s) (concatenate 'cl:string "\\(?:" s "\\)"))
            (emit (x)
              (cond
+              ((null x) "")
               ((stringp x) (%rx--regexp-quote x))
               ((symbolp x)
-               (or (%rx--translate (%rx--lookup-definition x))
-                   (cond
-                    ((memq x '(nonl not-newline any)) ".")
-                    (t (error "ELISP:rx unsupported symbol: %S" x)))))
+               (let ((def (%rx--lookup-definition x)))
+                 (cond
+                  (def (%rx--translate def))
+                  ((memq x '(nonl not-newline any)) ".")
+                  (t (error "ELISP:rx unsupported symbol: %S" x)))))
               ((consp x)
                (let ((op (car x))
                      (args (cdr x)))
