@@ -79,6 +79,21 @@
   :expected "4"
   :emacs :match)
 
+ (:name "forward-char-basic"
+  :expr "(with-temp-buffer (insert \"abc\") (goto-char 1) (forward-char 2) (point))"
+  :expected "3"
+  :emacs :match)
+
+ (:name "forward-char-end-of-buffer-signals-and-clamps"
+  :expr "(with-temp-buffer (insert \"abc\") (goto-char 1) (condition-case e (progn (forward-char 10) 'ok) (end-of-buffer (point))))"
+  :expected "4"
+  :emacs :match)
+
+ (:name "forward-char-beginning-of-buffer-signals-and-clamps"
+  :expr "(with-temp-buffer (insert \"abc\") (goto-char 4) (condition-case e (progn (forward-char -10) 'ok) (beginning-of-buffer (point))))"
+  :expected "1"
+  :emacs :match)
+
  (:name "backtrace-to-string-basic"
   :expr "(let ((s (backtrace-to-string (backtrace-get-frames nil)))) (and (stringp s) (string-match \"backtrace-get-frames\" s) t))"
   :expected "t"

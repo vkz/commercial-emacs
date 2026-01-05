@@ -653,6 +653,8 @@ Status (TODO, 2026-01-04)
   - raise startup manifests for `minibuffer.el`, `lisp.el`, `text-mode.el`, and `syntax.el`,
   - implement the char-table / syntax-table primitives needed for `text-mode-syntax-table`,
   - make `cl-defstruct` ignore slot `:documentation` (used by `syntax.el`).
+- DONE (2026-01-05): Implement `forward-char` with Emacs-style boundary errors
+  (`beginning-of-buffer` / `end-of-buffer`) and add microtests.
 - TODO: Continue expanding upstream ERT coverage (either more tests from `ert-tests.el` or additional upstream ERT test files),
   keeping the must-pass list monotonic and `known-fail` dated.
 

@@ -1256,7 +1256,13 @@ Records enough symbol properties for upstream ERT's `should-error':
           "Arithmetic domain error")
     (seed 'singularity-error
           (list 'singularity-error 'domain-error 'arith-error 'error)
-          "Arithmetic singularity error")))
+          "Arithmetic singularity error")
+    (seed 'beginning-of-buffer
+          (list 'beginning-of-buffer 'error)
+          "Beginning of buffer")
+    (seed 'end-of-buffer
+          (list 'end-of-buffer 'error)
+          "End of buffer")))
 
 (cl:defmacro cl-assert (form &rest _args)
   "Bring-up subset of cl-lib's `cl-assert'.
@@ -2519,6 +2525,23 @@ Emacs clamps positions outside the buffer to the nearest valid position."
          (p* (max (point-min) (min p (point-max)))))
     (setf (elisp-buffer-point *current-buffer*) p*)
     p*))
+
+(cl:defun forward-char (&optional n)
+  "Bring-up subset of ELisp `forward-char'."
+  (let* ((n (or n 1))
+         (target (+ (point) n)))
+    (unless (integerp n)
+      (error "ELISP:FORWARD-CHAR bad arg: ~S" n))
+    (cond
+     ((< target (point-min))
+      (goto-char (point-min))
+      (signal 'beginning-of-buffer nil))
+     ((> target (point-max))
+      (goto-char (point-max))
+      (signal 'end-of-buffer nil))
+     (t
+      (goto-char target)
+      nil))))
 
 (cl:defun forward-line (&optional n)
   "Bring-up subset of ELisp `forward-line'."
