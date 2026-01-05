@@ -11,6 +11,8 @@
 (cl:defvar current-load-list nil)
 (cl:defvar debugger nil)
 (cl:defvar emacs-basic-display nil)
+(cl:defvar fill-prefix nil)
+(cl:defvar last-command nil)
 
 (cl:defmacro bound-and-true-p (var)
   "Bring-up subset of ELisp `bound-and-true-p'."
@@ -2731,6 +2733,22 @@ STREAM may be a buffer."
             (incf col 1))))
     col))
 
+(cl:defun string-width (string &optional _from _to _buffer)
+  "Bring-up subset of ELisp `string-width'."
+  (declare (cl:ignore _from _to _buffer))
+  (unless (stringp string)
+    (error "ELISP:STRING-WIDTH expects a string, got: ~S" string))
+  (length (%elisp-string->cl-string string)))
+
+(cl:defun window-width (&optional _window _pixelwise)
+  "Bring-up subset of ELisp `window-width'."
+  (declare (cl:ignore _window _pixelwise))
+  (handler-case
+      (multiple-value-bind (_rows cols) (clemacs::tty-winsize)
+        (declare (cl:ignore _rows))
+        (if (and (integerp cols) (> cols 0)) cols 80))
+    (cl:error () 80)))
+
 (cl:defun forward-comment (count &optional limit)
   "Bring-up subset of ELisp `forward-comment'.
 
@@ -2844,6 +2862,107 @@ Emacs clamps positions outside the buffer to the nearest valid position."
         (if nl
             (1+ nl)
             (point-max))))))
+
+(cl:defun line-beginning-position (&optional n)
+  "Bring-up subset of ELisp `line-beginning-position'."
+  (let ((n (or n 1)))
+    (unless (and (integerp n) (> n 0))
+      (error "ELISP:LINE-BEGINNING-POSITION bad arg: ~S" n))
+    (save-excursion
+      (when (> n 1)
+        (forward-line (1- n)))
+      (let* ((txt (elisp-buffer-text *current-buffer*))
+             (idx (1- (point)))
+             (nl (cl:position #\Newline txt :end idx :from-end t)))
+        (if nl
+            (+ nl 2)
+            (point-min))))))
+
+(cl:defun beginning-of-line (&optional n)
+  "Bring-up subset of ELisp `beginning-of-line'."
+  (let ((n (or n 1)))
+    (unless (integerp n)
+      (error "ELISP:BEGINNING-OF-LINE bad arg: ~S" n))
+    (when (/= n 1)
+      (forward-line (1- n)))
+    (goto-char (line-beginning-position))
+    nil))
+
+(cl:defun end-of-line (&optional n)
+  "Bring-up subset of ELisp `end-of-line'."
+  (let ((n (or n 1)))
+    (unless (integerp n)
+      (error "ELISP:END-OF-LINE bad arg: ~S" n))
+    (when (/= n 1)
+      (forward-line (1- n)))
+    (goto-char (line-end-position))
+    nil))
+
+(cl:defun backward-char (&optional n)
+  "Bring-up subset of ELisp `backward-char'."
+  (let ((n (or n 1)))
+    (unless (integerp n)
+      (error "ELISP:BACKWARD-CHAR bad arg: ~S" n))
+    (forward-char (- n))))
+
+(cl:defun back-to-indentation ()
+  "Bring-up subset of ELisp `back-to-indentation'."
+  (beginning-of-line)
+  (skip-chars-forward " \t")
+  nil)
+
+(cl:defun current-indentation ()
+  "Bring-up subset of ELisp `current-indentation'."
+  (save-excursion
+    (back-to-indentation)
+    (current-column)))
+
+(cl:defun delete-horizontal-space (&optional backward-only)
+  "Bring-up subset of ELisp `delete-horizontal-space'."
+  (let ((start (point))
+        (end (point)))
+    (loop while (let ((c (char-before start)))
+                  (and c (or (= c (char-code #\Space))
+                             (= c (char-code #\Tab)))))
+          do (decf start))
+    (unless backward-only
+      (loop while (let ((c (char-after end)))
+                    (and c (or (= c (char-code #\Space))
+                               (= c (char-code #\Tab)))))
+            do (incf end)))
+    (when (< start end)
+      (delete-region start end))
+    nil))
+
+(cl:defun indent-to (column &optional minimum)
+  "Bring-up subset of ELisp `indent-to' (spaces only)."
+  (unless (and (integerp column) (>= column 0))
+    (error "ELISP:INDENT-TO bad column: ~S" column))
+  (when minimum
+    (unless (and (integerp minimum) (>= minimum 0))
+      (error "ELISP:INDENT-TO bad minimum: ~S" minimum)))
+  (let* ((cur (current-column))
+         (need (max 0 (- column cur)))
+         (need (if minimum (max minimum need) need)))
+    (when (> need 0)
+      (insert (cl:make-string need :initial-element #\Space)))
+    (current-column)))
+
+(cl:defun indent-to-left-margin ()
+  "Bring-up subset of ELisp `indent-to-left-margin'."
+  (indent-to 0))
+
+(cl:defun use-region-p ()
+  "Bring-up stub for ELisp `use-region-p'."
+  nil)
+
+(cl:defun region-beginning ()
+  "Bring-up stub for ELisp `region-beginning'."
+  (error "ELISP:REGION-BEGINNING not implemented"))
+
+(cl:defun region-end ()
+  "Bring-up stub for ELisp `region-end'."
+  (error "ELISP:REGION-END not implemented"))
 
 (cl:defun point-max-marker ()
   (let ((m (make-elisp-marker :buffer *current-buffer*
@@ -3253,6 +3372,23 @@ Emacs clamps positions outside the buffer to the nearest valid position."
     (setf (elisp-buffer-text *current-buffer*)
           (concatenate 'cl:string (subseq txt 0 idx) s (subseq txt idx)))
     (goto-char (+ (point) (length s)))
+    nil))
+
+(cl:defun insert-and-inherit (&rest parts)
+  "Bring-up subset of ELisp `insert-and-inherit'."
+  (apply #'insert parts))
+
+(cl:defun insert-before-markers-and-inherit (&rest parts)
+  "Bring-up subset of ELisp `insert-before-markers-and-inherit'."
+  (apply #'insert parts))
+
+(cl:defun newline (&optional n)
+  "Bring-up subset of ELisp `newline'."
+  (let ((n (or n 1)))
+    (unless (and (integerp n) (>= n 0))
+      (error "ELISP:NEWLINE bad arg: ~S" n))
+    (dotimes (_ n)
+      (insert #\Newline))
     nil))
 
 (cl:defun buffer-string ()

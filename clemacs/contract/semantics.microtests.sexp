@@ -140,6 +140,36 @@
   :expected "2"
   :emacs :match)
 
+ (:name "line-beginning-position-basic"
+  :expr "(with-temp-buffer (insert \"a\\nb\") (goto-char 4) (line-beginning-position))"
+  :expected "3"
+  :emacs :match)
+
+ (:name "beginning-of-line-basic"
+  :expr "(with-temp-buffer (insert \"a\\nb\") (goto-char 4) (beginning-of-line) (point))"
+  :expected "3"
+  :emacs :match)
+
+ (:name "end-of-line-basic"
+  :expr "(with-temp-buffer (insert \"a\\nb\") (goto-char 1) (end-of-line) (point))"
+  :expected "2"
+  :emacs :match)
+
+ (:name "insert-and-inherit-basic"
+  :expr "(with-temp-buffer (insert-and-inherit \"a\" \"b\") (buffer-string))"
+  :expected "\"ab\""
+  :emacs :match)
+
+ (:name "string-width-basic"
+  :expr "(string-width \"abc\")"
+  :expected "3"
+  :emacs :match)
+
+ (:name "window-width-positive"
+  :expr "(and (integerp (window-width)) (> (window-width) 0))"
+  :expected "t"
+  :emacs nil)
+
  (:name "debugger-special-dynamic-binding"
   :expr "(progn (defun clemacs--debugger-var-probe () debugger) (let ((debugger 'ok)) (clemacs--debugger-var-probe)))"
   :expected "ok"
