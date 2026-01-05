@@ -135,7 +135,7 @@ lisp/textmodes/text-mode.el 21
 
 # pdump: fill, newcomment.
 lisp/textmodes/fill.el 29
-lisp/newcomment.el 1
+lisp/newcomment.el -
 
 # pdump: replace, tabulated-list, buff-menu.
 lisp/replace.el 1
