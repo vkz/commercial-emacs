@@ -47,6 +47,7 @@
            #:gensym
            #:make-list #:format
            #:make-string
+           #:string
            #:+ #:-
            #:ignore
            #:1+ #:1-

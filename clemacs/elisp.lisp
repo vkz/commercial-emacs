@@ -49,6 +49,22 @@ unibyte strings are `(simple-array (unsigned-byte 8) (*))`, while multibyte
 strings are CL strings."
   (or (cl:stringp x) (unibyte-string-p x)))
 
+(cl:defun string (&rest characters)
+  "Bring-up subset of ELisp `string'."
+  (let ((out (cl:make-string (length characters))))
+    (loop for ch in characters
+          for i from 0 do
+            (cond
+             ((integerp ch)
+              (setf (cl:aref out i) (%elisp-code->char ch)))
+             ((cl:characterp ch)
+              (setf (cl:aref out i) ch))
+             (t
+              (if (fboundp 'signal)
+                  (signal 'wrong-type-argument (list 'characterp ch))
+                  (cl:error "ELISP:STRING expects characters, got: ~S" ch)))))
+    out))
+
 (cl:defun vectorp (x)
   "Bring-up subset of ELisp `vectorp'.
 
@@ -203,14 +219,14 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
                        (push (read-char stream nil nil t) digits))
                (unless digits
                  (cl:error "Missing hex digits in ?\\x escape"))
-               (parse-integer (coerce (nreverse digits) 'string) :radix 16)))
+               (parse-integer (coerce (nreverse digits) 'cl:string) :radix 16)))
            (read-octal (first-digit)
              (let ((digits (list first-digit)))
                (loop repeat 2
                      for ch = (peek-char nil stream nil nil t)
                      while (and ch (digit-char-p ch 8)) do
                        (push (read-char stream nil nil t) digits))
-               (parse-integer (coerce (nreverse digits) 'string) :radix 8))))
+               (parse-integer (coerce (nreverse digits) 'cl:string) :radix 8))))
     (case first
       (#\n (char-code #\Newline))
       (#\t (char-code #\Tab))
@@ -407,7 +423,7 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
                                   (push (read-char stream nil nil t) digits))
                           (unless digits
                             (cl:error "Missing hex digits in \\x escape"))
-                          (parse-integer (coerce (nreverse digits) 'string) :radix 16)))
+                          (parse-integer (coerce (nreverse digits) 'cl:string) :radix 16)))
                       (read-fixed-hex (n)
                         (let ((digits (cl:make-string n)))
                           (dotimes (i n)
@@ -424,7 +440,7 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
                                 for ch = (peek-char nil stream nil nil t)
                                 while (and ch (digit-char-p ch 8)) do
                                   (push (read-char stream nil nil t) digits))
-                          (parse-integer (coerce (nreverse digits) 'string) :radix 8)))
+                          (parse-integer (coerce (nreverse digits) 'cl:string) :radix 8)))
                       (finish ()
                         (if (eq mode :unibyte)
                             (let ((out (%make-unibyte-string (length ub))))

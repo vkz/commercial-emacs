@@ -24,6 +24,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "strings-string-from-int"
+  :expr "(string 97)"
+  :expected "\"a\""
+  :emacs :match)
+
  (:name "strings-aref-multibyte-returns-code"
   :expr "(aref \"A\" 0)"
   :expected "65"
@@ -71,6 +76,16 @@
 
  (:name "condition-case-basic"
   :expr "(condition-case e (/ 1 0) (arith-error 'ok))"
+  :expected "ok"
+  :emacs :match)
+
+ (:name "cl-defmethod-eql-symbol-is-constant"
+  :expr "(progn (cl-defgeneric clemacs--cl-defmethod-eql-test (x)) (cl-defmethod clemacs--cl-defmethod-eql-test ((x (eql foo))) 'ok) (clemacs--cl-defmethod-eql-test 'foo))"
+  :expected "ok"
+  :emacs :match)
+
+ (:name "cl-defmethod-specializer-string"
+  :expr "(progn (cl-defgeneric clemacs--cl-defmethod-string-test (x)) (cl-defmethod clemacs--cl-defmethod-string-test ((x string)) 'ok) (clemacs--cl-defmethod-string-test \"hi\"))"
   :expected "ok"
   :emacs :match)
 

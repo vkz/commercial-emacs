@@ -68,7 +68,7 @@
     (when cache
       (let* ((name
                (etypecase name
-                 (string name)
+                 (cl:string name)
                  (unibyte-string (%elisp-string->cl-string name))
                  (symbol (%elisp-string->cl-string (symbol-name name))))))
         (gethash (string-downcase name) cache)))))

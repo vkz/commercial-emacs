@@ -55,7 +55,7 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
 
 This is a pragmatic compatibility shim, not a full obarray model."
   (etypecase name
-    ((or string unibyte-string)
+    ((or cl:string unibyte-string)
      (cl:intern (string-upcase (%elisp-string->cl-string name)) package))
     (symbol name)))
 
@@ -299,7 +299,7 @@ For strings, return a character code integer (Emacs Lisp semantics)."
       (dolist (p parts)
         (typecase p
           (null nil)
-          ((or string unibyte-string) (emit-string p))
+          ((or cl:string unibyte-string) (emit-string p))
           (character (emit-code (char-code p)))
           (integer (emit-code p))
           (t (emit-object p))))
@@ -664,7 +664,7 @@ This is used for ELisp `looking-at', which must not search forward past point."
     (or cached
         (setf (gethash key *string-match-anchored-scanner-cache*)
               (cl-ppcre:create-scanner
-               (concatenate 'string "\\A(?:" (%elisp-regexp->pcre regexp) ")")
+               (concatenate 'cl:string "\\A(?:" (%elisp-regexp->pcre regexp) ")")
                :case-insensitive-mode
                (and case-fold-search t))))))
 
@@ -738,7 +738,7 @@ This is only intended to be readable by our ELisp `read-from-string'."
               ((eq s nil) "nil")
               ((eq s t) "t")
               ((eq (symbol-package s) (find-package "KEYWORD"))
-               (concatenate 'string ":" (string-downcase (cl:symbol-name s))))
+               (concatenate 'cl:string ":" (string-downcase (cl:symbol-name s))))
               (t (string-downcase (cl:symbol-name s)))))
            (emit-string (s)
              (with-output-to-string (out)
@@ -903,7 +903,7 @@ character in STRING."
   (typecase sequence
     (null nil)
     (cons (copy-list sequence))
-    (string (copy-seq sequence))
+    (cl:string (copy-seq sequence))
     (unibyte-string (copy-seq sequence))
     (vector (copy-seq sequence))
     (t (error "ELISP:COPY-SEQUENCE unsupported type: ~S" (type-of sequence)))))
@@ -1772,17 +1772,58 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
   "Bring-up subset of cl-generic's `cl-defmethod'."
   (unless (and (listp args) (not (null args)))
     (cl:error "ELISP:CL-DEFMETHOD expects (NAME ARGS ...), got: ~S ~S" name args))
-  (let ((method-args
-          (mapcar
-           (lambda (a)
+  (labels ((normalize-class-specializer (spec)
+             ;; We shadow ELISP::STRING as a function, but ELisp cl-generic uses
+             ;; the symbol `string' as a type specializer.  Rewrite to the CL
+             ;; class so the underlying CLOS dispatch works.
              (cond
-              ((symbolp a) a)
-              ((and (consp a) (= (length a) 2) (symbolp (car a)))
-               a)
-              (t (cl:error "ELISP:CL-DEFMETHOD unsupported arg spec: ~S" a))))
-           args)))
-    `(cl:defmethod ,name ,method-args
-       ,@body)))
+              ((eq spec 'string) 'cl:string)
+              ((eq spec 'marker) 'elisp-marker)
+              ((eq spec 'window-configuration) 'elisp-window-configuration)
+              (t spec))))
+    (let* ((saw-string-specializer nil)
+           (method-args
+             (mapcar
+              (lambda (a)
+                (cond
+                 ((symbolp a) a)
+                 ((and (consp a) (= (length a) 2) (symbolp (car a)))
+                  (let ((var (car a))
+                        (spec (cadr a)))
+                    ;; Emacs's cl-generic treats (eql SOME-SYMBOL) as an EQL
+                    ;; specializer on the symbol itself (i.e. effectively
+                    ;; (eql 'SOME-SYMBOL)), not as a variable reference.
+                    (cond
+                     ((and (consp spec)
+                           (eq (car spec) 'eql)
+                           (consp (cdr spec))
+                           (null (cddr spec))
+                           (symbolp (cadr spec)))
+                      (list var (list 'eql (list 'quote (cadr spec)))))
+                     ((symbolp spec)
+                      (when (eq spec 'string)
+                        (setf saw-string-specializer t))
+                      (list var (normalize-class-specializer spec)))
+                     (t a))))
+                 (t (cl:error "ELISP:CL-DEFMETHOD unsupported arg spec: ~S" a))))
+              args)))
+      ;; ELisp `string' specializers must match both CL strings (multibyte) and
+      ;; our unibyte string representation (a specialized (unsigned-byte 8)
+      ;; vector).  For the common 1-arg case, emit a second method to catch
+      ;; unibyte strings.
+      (if (and saw-string-specializer
+               (= (length method-args) 1)
+               (consp (car method-args))
+               (eq (cadar method-args) 'cl:string))
+          (let ((var (caar method-args)))
+            `(progn
+               (cl:defmethod ,name ((,var cl:string)) ,@body)
+               (cl:defmethod ,name ((,var cl:vector))
+                 (if (unibyte-string-p ,var)
+                     (progn ,@body)
+                     (call-next-method)))))
+          `(cl:defmethod ,name ,method-args
+             ,@body)))))
 
 (cl:defun put (symbol prop value)
   "ELisp-ish PUT for symbol plists."
@@ -2057,8 +2098,8 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
   (b 0 :type integer))
 
 (defstruct elisp-buffer
-  (name "" :type (or string unibyte-string))
-  (text "" :type string)
+  (name "" :type (or cl:string unibyte-string))
+  (text "" :type cl:string)
   (point 1 :type integer)
   (syntax-table nil)
   (locals (cl:make-hash-table :test 'eq) :type hash-table)
@@ -2256,7 +2297,7 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
                    (goto-char p0))))
              (strip-indentation ()
                (goto-char line-start)
-               (skip-chars-forward (coerce (list #\Space #\Tab) 'string))
+               (skip-chars-forward (coerce (list #\Space #\Tab) 'cl:string))
                (let ((nonws (point)))
                  (when (> nonws line-start)
                    (delete-region line-start nonws)
@@ -2335,7 +2376,7 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
   "Bring-up subset of ELisp `get-buffer'."
   (etypecase buffer-or-name
     (elisp-buffer buffer-or-name)
-    ((or string unibyte-string)
+    ((or cl:string unibyte-string)
      (gethash (%buffer-name-key buffer-or-name) *buffer-table*))
     (null nil)))
 
@@ -2435,16 +2476,16 @@ STREAM may be a buffer."
   (let ((out (or stream (current-buffer))))
     (cond
      ((bufferp out)
-      (with-current-buffer out
+     (with-current-buffer out
         (typecase object
           (null nil)
-          (string (insert object))
+          (cl:string (insert object))
           (unibyte-string (insert object))
           (t (insert (prin1-to-string object))))))
      ((streamp out)
       (typecase object
         (null nil)
-        (string (write-string object out))
+        (cl:string (write-string object out))
         (unibyte-string (write-string (%elisp-string->cl-string object) out))
         (t (write-string (prin1-to-string object) out))))
      (t
@@ -2766,7 +2807,7 @@ Emacs clamps positions outside the buffer to the nearest valid position."
       (error "ELISP:DELETE-REGION start > end: ~S ~S" start end))
     (%buffer-record-delete *current-buffer* s e)
     (setf (elisp-buffer-text *current-buffer*)
-          (concatenate 'string (subseq txt 0 (1- s)) (subseq txt (1- e))))
+          (concatenate 'cl:string (subseq txt 0 (1- s)) (subseq txt (1- e))))
     (when (> (point) (point-max))
       (goto-char (point-max)))
     nil))
@@ -2981,7 +3022,7 @@ Emacs clamps positions outside the buffer to the nearest valid position."
               (dolist (p parts)
                 (typecase p
                   (null nil)
-                  (string (write-string p out))
+                  (cl:string (write-string p out))
                   (unibyte-string (write-string (%elisp-string->cl-string p) out))
                   (character (write-char p out))
                   (t (write-string (princ-to-string p) out))))))
@@ -3025,7 +3066,7 @@ Emacs clamps positions outside the buffer to the nearest valid position."
                 (finish-output out)))))))
     (%buffer-record-insert *current-buffer* at (length s))
     (setf (elisp-buffer-text *current-buffer*)
-          (concatenate 'string (subseq txt 0 idx) s (subseq txt idx)))
+          (concatenate 'cl:string (subseq txt 0 idx) s (subseq txt idx)))
     (goto-char (+ (point) (length s)))
     nil))
 
@@ -3421,8 +3462,8 @@ for upstream ERT's `ert--make-xrefs-region'."
 (defstruct elisp-ewoc
   (buffer nil)
   (pretty-printer nil)
-  (header "" :type (or string unibyte-string))
-  (footer "" :type (or string unibyte-string))
+  (header "" :type (or cl:string unibyte-string))
+  (footer "" :type (or cl:string unibyte-string))
   (nosep nil)
   (nodes nil))
 
@@ -4328,12 +4369,12 @@ Supports the common pattern of a self-referential closure (used by ERT)."
   (intern (concat (symbol-name mode) "-map")))
 
 (cl:defun %key-id (key)
-  (typecase key
-    (string key)
-    (vector (write-to-string key :escape t))
-    (character (string key))
-    (integer (cl:format nil "#<keycode ~D>" key))
-    (t (write-to-string key :escape t))))
+  (cond
+   ((stringp key) key)
+   ((vectorp key) (write-to-string key :escape t))
+   ((characterp key) (string key))
+   ((integerp key) (cl:format nil "#<keycode ~D>" key))
+   (t (write-to-string key :escape t))))
 
 (cl:defun %key-event-description (event)
   (cond
