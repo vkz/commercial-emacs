@@ -64,3 +64,14 @@ if [[ ! -f "${project_root}/lisp/loaddefs.el" ]]; then
 fi
 
 make -C "${build_dir}" -j"${jobs}" src
+
+# Some test suites (notably package tests) expect shipped snapshot files
+# to exist in the source lisp tree.
+#
+# In an out-of-tree build, `lisp/Makefile` writes these snapshots into
+# `$(srcdir)`, so we generate them once if missing and then refresh the
+# symlink tree so the build dir sees them too.
+if [[ ! -f "${project_root}/lisp/cus-load.el" || ! -f "${project_root}/lisp/finder-inf.el" ]]; then
+  make -C "${build_dir}/lisp" -j"${jobs}" ./cus-load.el ./finder-inf.el
+  ensure_symlink_tree "${project_root}/lisp" "${build_dir}/lisp"
+fi

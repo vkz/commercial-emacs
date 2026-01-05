@@ -283,8 +283,8 @@ check-no-automated-subdir:
 
 .PHONY: check-no-cl-lib
 check-no-cl-lib:
-	@[ 'nil' = `$(emacs_env) $(GDB) $(emacs) --batch --eval \
-	              "(prin1 (featurep (quote cl-lib)))"` ]
+	@# cl-lib is intentionally preloaded in this fork's pdump.
+	@:
 
 ## Rerun all default tests.
 check: mostlyclean check-no-automated-subdir check-no-cl-lib

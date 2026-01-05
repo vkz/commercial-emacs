@@ -38,6 +38,12 @@ Acceptance criteria (still the gate for future changes)
 - `mise run test:smoke` and `mise run test:check` pass.
 - `mise run verify -- --level check` is the one-command “did we break it?” loop.
 
+DONE (2026-01-05)
+- Fix out-of-tree dump/startup load-path to prefer build-tree `.elc` files (vs source `.el`),
+  so `make check` expectations match upstream again.
+- Make `mise run build` generate shipped snapshot files (`lisp/cus-load.el`, `lisp/finder-inf.el`)
+  when missing, so package tests don’t regress on fresh checkouts.
+
 ## Pre-rewrite preparation (before touching the ELisp engine)
 
 ### 1) Freeze a conformance target + carve out “must pass” suites

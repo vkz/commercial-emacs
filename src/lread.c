@@ -4969,8 +4969,22 @@ static Lisp_Object
 load_path_default (void)
 {
   if (will_dump_p ())
-    /* PATH_DUMPLOADSEARCH is the lisp dir in the source directory.  */
-    return decode_env_path (0, PATH_DUMPLOADSEARCH, 0);
+    {
+      /* Prefer the build tree's lisp directory during dumping so we can
+	 load the freshly-built .elc files in out-of-tree builds.  */
+      if (!NILP (Vinstallation_directory))
+	{
+	  Lisp_Object tem = Fexpand_file_name (build_string ("lisp"),
+					       Vinstallation_directory);
+	  if (!NILP (Ffile_accessible_directory_p (tem)))
+	    return nconc2 (list1 (tem),
+			    /* PATH_DUMPLOADSEARCH is the lisp dir in the
+			       source directory.  Keep it as a fallback.  */
+			    decode_env_path (0, PATH_DUMPLOADSEARCH, 0));
+	}
+
+      return decode_env_path (0, PATH_DUMPLOADSEARCH, 0);
+    }
 
   Lisp_Object lpath = decode_env_path (0, PATH_LOADSEARCH, 0);
 
@@ -5019,13 +5033,15 @@ load_path_default (void)
               tem = Fexpand_file_name (build_string ("lisp"),
                                        Vsource_directory);
               if (NILP (Fmember (tem, lpath)))
-                lpath = Fcons (tem, lpath);
+		/* Keep the build lisp directory first so we prefer .elc files
+		   from the build tree over .el files from the source tree.  */
+                lpath = nconc2 (lpath, list1 (tem));
               if (!no_site_lisp)
                 {
                   tem = Fexpand_file_name (build_string ("site-lisp"),
                                            Vsource_directory);
                   if (!NILP (tem) && (NILP (Fmember (tem, lpath))))
-		    lpath = Fcons (tem, lpath);
+		    lpath = nconc2 (lpath, list1 (tem));
                 }
             }
         }
