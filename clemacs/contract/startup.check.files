@@ -122,5 +122,5 @@ lisp/textmodes/page.el 50
 lisp/register.el 50
 lisp/textmodes/paragraphs.el 50
 lisp/progmodes/prog-mode.el 50
-lisp/emacs-lisp/lisp-mode.el 10
+lisp/emacs-lisp/lisp-mode.el 11
 lisp/textmodes/text-mode.el 21
