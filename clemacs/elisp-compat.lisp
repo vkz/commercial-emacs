@@ -4417,6 +4417,19 @@ Supports the common pattern of a self-referential closure (used by ERT)."
     (setf (gethash (%key-id key) (elisp-keymap-table km)) definition)
     definition))
 
+(cl:defun define-abbrev-table (name defs &optional _docstring &rest _rest)
+  "Bring-up stub for ELisp `define-abbrev-table'."
+  (declare (cl:ignore _docstring _rest))
+  (unless (symbolp name)
+    (error "ELISP:DEFINE-ABBREV-TABLE expected symbol, got: ~S" name))
+  ;; During bring-up we ignore DEFS and represent abbrev tables as plain hash
+  ;; tables.  This is enough for mode files that only need the variable bound.
+  (unless (or (null defs) (listp defs))
+    (error "ELISP:DEFINE-ABBREV-TABLE expected defs list or nil, got: ~S" defs))
+  (let ((tbl (cl:make-hash-table :test 'cl:equal)))
+    (set name tbl)
+    tbl))
+
 (cl:defmacro define-derived-mode (child _parent _name &optional docstring &rest _body)
   "Bring-up subset of ELisp `define-derived-mode'.
 
