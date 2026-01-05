@@ -306,6 +306,50 @@ and evaluate the (already CL-shaped) FORM."
   (setf (svref (elisp-char-table-data table) idx) value)
   value)
 
+(cl:defun set-char-table-range (table range value)
+  "Bring-up subset of ELisp `set-char-table-range'."
+  (unless (char-table-p table)
+    (error "ELISP:SET-CHAR-TABLE-RANGE expects a char-table, got: ~S" table))
+  (cond
+   ((eq range t)
+    (setf (elisp-char-table-default table) value)
+    value)
+   ((integerp range)
+    (%char-table-set table range value))
+   ((characterp range)
+    (%char-table-set table (char-code range) value))
+   ((and (consp range) (integerp (car range)) (integerp (cdr range)))
+    (let ((from (car range))
+          (to (cdr range)))
+      (when (> from to)
+        (error "ELISP:SET-CHAR-TABLE-RANGE bad range: ~S" range))
+      (loop for i from from to to do
+        (%char-table-set table i value))
+      value))
+   (t
+    (error "ELISP:SET-CHAR-TABLE-RANGE bad range: ~S" range))))
+
+(cl:defun map-char-table (function table)
+  "Bring-up subset of ELisp `map-char-table'."
+  (unless (char-table-p table)
+    (error "ELISP:MAP-CHAR-TABLE expects a char-table, got: ~S" table))
+  (let ((default (elisp-char-table-default table)))
+    (labels ((emit (start end val)
+               (when (and start end (not (cl:equal val default)))
+                 (funcall function
+                          (if (= start end) start (cons start end))
+                          val))))
+      (let ((run-start 0)
+            (run-val (%char-table-ref table 0)))
+        (loop for i from 1 below +char-table-size+ do
+          (let ((v (%char-table-ref table i)))
+            (unless (cl:equal v run-val)
+              (emit run-start (1- i) run-val)
+              (setf run-start i
+                    run-val v))))
+        (emit run-start (1- +char-table-size+) run-val))))
+  nil)
+
 (cl:defun aref (array idx)
   "ELisp-ish AREF.
 
@@ -4998,6 +5042,8 @@ character codes (0..65535), a parent link, and extra slots."
                           (make-array +char-table-size+ :initial-element nil)
                           (make-array 0 :adjustable t :fill-pointer 0)
                           nil))
+
+(cl:defvar char-script-table (make-char-table 'char-script nil))
 
 (cl:defun set-char-table-parent (table parent)
   "Set TABLE's parent to PARENT and return PARENT."

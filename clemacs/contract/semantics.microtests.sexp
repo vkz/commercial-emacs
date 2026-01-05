@@ -54,6 +54,16 @@
   :expected "(1 1048576)"
   :emacs :match)
 
+ (:name "char-script-table-bound-and-char-table"
+  :expr "(and (boundp 'char-script-table) (char-table-p char-script-table) t)"
+  :expected "t"
+  :emacs :match)
+
+ (:name "char-table-set-char-table-range-basic"
+  :expr "(let ((ct (make-char-table 'x nil))) (set-char-table-range ct '(1 . 3) 'a) (list (aref ct 1) (aref ct 2) (aref ct 3)))"
+  :expected "(a a a)"
+  :emacs :match)
+
  (:name "match-data-basic"
   :expr "(progn (string-match \"b\" \"abc\") (match-beginning 0))"
   :expected "1"
