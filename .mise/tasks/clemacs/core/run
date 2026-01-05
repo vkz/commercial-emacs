@@ -18,7 +18,7 @@ build_dir="${usage_build_dir}"
 core_path="${project_root}/${build_dir}/clemacs.core"
 
 if [[ ! -f "${core_path}" ]]; then
-  mise run clemacs:core:build -- --build-dir "${build_dir}"
+  usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/core/build"
 fi
 
 export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
@@ -39,10 +39,10 @@ if find "${project_root}/clemacs" \
 fi
 
 if [[ "${stale}" == "true" ]]; then
-  mise run clemacs:core:build -- --build-dir "${build_dir}"
+  usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/core/build"
 fi
 
-mise x -- sbcl \
+sbcl \
   --core "${core_path}" \
   --noinform \
   --no-sysinit \

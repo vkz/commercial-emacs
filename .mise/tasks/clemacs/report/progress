@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Write a lightweight clemacs progress dashboard (startup+ERT+inventory+stamps)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+out_dir="${project_root}/${build_dir}/reports"
+mkdir -p "${out_dir}"
+
+report_path="${out_dir}/progress.md"
+now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+git_rev="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+
+count_noncomment_lines() {
+  local path="$1"
+  if [[ ! -f "${path}" ]]; then
+    echo "0"
+    return
+  fi
+  awk '
+    /^[[:space:]]*#/ {next}
+    /^[[:space:]]*$/ {next}
+    {c++}
+    END {print c+0}
+  ' "${path}"
+}
+
+summarize_manifest() {
+  local path="$1"
+  if [[ ! -f "${path}" ]]; then
+    echo "missing"
+    return
+  fi
+  awk '
+    /^[[:space:]]*#/ {next}
+    /^[[:space:]]*$/ {next}
+    {
+      n++
+      if ($2 ~ /^[0-9]+$/) { capped++; sum += $2 }
+      else if ($2 == "-") { nolimit++ }
+    }
+    END {
+      printf("entries=%d capped=%d nolimit=%d sum_maxforms=%d", n+0, capped+0, nolimit+0, sum+0)
+    }
+  ' "${path}"
+}
+
+startup_smoke="clemacs/contract/startup.smoke.files"
+startup_check="clemacs/contract/startup.check.files"
+startup_editor="clemacs/contract/startup.editor-core.files"
+
+ert_upstream_tests="clemacs/contract/ert-upstream.tests"
+ert_known_fail="clemacs/contract/ert-upstream.known-fail.tests"
+
+ert_upstream_count="$(count_noncomment_lines "${ert_upstream_tests}")"
+ert_known_fail_count="$(count_noncomment_lines "${ert_known_fail}")"
+
+startup_smoke_summary="$(summarize_manifest "${startup_smoke}")"
+startup_check_summary="$(summarize_manifest "${startup_check}")"
+startup_editor_summary="$(summarize_manifest "${startup_editor}")"
+
+mise run clemacs:inventory:used-startup-check -- --build-dir "${build_dir}" >/dev/null
+
+inv_json="${project_root}/${build_dir}/tmp/inventory-used.json"
+inv_line="(missing inventory-used.json)"
+if [[ -f "${inv_json}" ]]; then
+  inv_line="$(
+    python3 - <<PY
+import json
+from pathlib import Path
+p=Path("${inv_json}")
+d=json.loads(p.read_text())
+print(f"used_runtime_subrs_unique={d.get('used_runtime_subrs_unique')} runtime_subrs_total={d.get('runtime_subrs_total')} respect_maxforms={d.get('respect_maxforms')}")
+PY
+  )"
+fi
+
+stamp_dir="${project_root}/${build_dir}/stamps"
+stamp_smoke="${stamp_dir}/clemacs-contract-smoke.ok"
+stamp_elisp="${stamp_dir}/clemacs-contract-elisp-core.ok"
+stamp_check="${stamp_dir}/clemacs-contract-check.ok"
+
+stamp_summary() {
+  local path="$1"
+  if [[ ! -f "${path}" ]]; then
+    echo "missing"
+    return
+  fi
+  awk -F= '
+    $1=="status"{status=$2}
+    $1=="when"{when=$2}
+    $1=="git"{git=$2}
+    END{
+      if (status=="") status="unknown";
+      if (when=="") when="unknown";
+      if (git=="") git="unknown";
+      printf("status=%s when=%s git=%s", status, when, git)
+    }
+  ' "${path}"
+}
+
+stamp_smoke_summary="$(stamp_summary "${stamp_smoke}")"
+stamp_elisp_summary="$(stamp_summary "${stamp_elisp}")"
+stamp_check_summary="$(stamp_summary "${stamp_check}")"
+
+{
+  echo "# clemacs progress dashboard"
+  echo
+  echo "Generated: ${now_utc}"
+  echo
+  echo "- git: ${git_rev}"
+  echo "- build-dir: \`${build_dir}\`"
+  echo
+  echo "## Contract stamps"
+  echo
+  echo "- smoke: ${stamp_smoke_summary} (\`${stamp_smoke}\`)"
+  echo "- elisp-core: ${stamp_elisp_summary} (\`${stamp_elisp}\`)"
+  echo "- check: ${stamp_check_summary} (\`${stamp_check}\`)"
+  echo
+  echo "## Startup manifests"
+  echo
+  echo "- \`${startup_smoke}\`: ${startup_smoke_summary}"
+  echo "- \`${startup_check}\`: ${startup_check_summary}"
+  echo "- \`${startup_editor}\`: ${startup_editor_summary}"
+  echo
+  echo "## Upstream ERT bring-up"
+  echo
+  echo "- must-pass tests: ${ert_upstream_count} (\`${ert_upstream_tests}\`)"
+  echo "- known-fail tests: ${ert_known_fail_count} (\`${ert_known_fail}\`)"
+  echo
+  echo "## Inventory usage (checkpoint-aware)"
+  echo
+  echo "- ${inv_line}"
+  echo "- details: \`${inv_json}\`"
+} >"${report_path}"
+
+echo "[clemacs:report:progress] wrote ${report_path}"

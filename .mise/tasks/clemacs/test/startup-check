@@ -17,13 +17,8 @@ cd "${project_root}"
 build_dir="${usage_build_dir}"
 mkdir -p "${build_dir}"
 
-export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
-export XDG_CONFIG_HOME="${project_root}/${build_dir}/xdg-config"
-export XDG_DATA_HOME="${project_root}/${build_dir}/xdg-data"
-
-home_dir="${project_root}/${build_dir}/home"
-mkdir -p "${home_dir}"
-export HOME="${home_dir}"
+source "${project_root}/.mise/tasks/clemacs/lib/sbcl.sh"
+clemacs_setup_xdg_and_home "${project_root}" "${build_dir}"
 
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
 
@@ -40,17 +35,12 @@ fi
 manifest="${project_root}/clemacs/contract/startup.check.files"
 skip_file="${project_root}/clemacs/contract/lisp.allowed-skip.files"
 
-cd "${deps_dir}"
-"${qlot_bin}" exec sbcl \
-  --dynamic-space-size "${sbcl_dynamic_space}" \
-  --noinform \
-  --no-sysinit \
-  --no-userinit \
-  --non-interactive \
-  --disable-debugger \
-  --eval '(require :asdf)' \
-  --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
-  --eval '(asdf:load-system :clemacs)' \
+clemacs_sbcl_eval \
+  "${project_root}" \
+  "${build_dir}" \
+  "${deps_dir}" \
+  "${qlot_bin}" \
+  "${sbcl_dynamic_space}" \
   --eval "(uiop:quit (elisp:load-elisp-manifest :project-root #p\"${project_root}/\" :manifest #p\"${manifest}\" :skip-file #p\"${skip_file}\" :limit ${limit_eval}))"
 
 echo "clemacs startup (check): ok"

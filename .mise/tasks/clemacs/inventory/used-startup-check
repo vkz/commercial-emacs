@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Report C-defined ELisp primitive usage for startup.check manifest (inventory-driven)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+
+mise run clemacs:inventory:used -- \
+  --build-dir "${build_dir}" \
+  --manifest "clemacs/contract/startup.check.files" \
+  --respect-maxforms

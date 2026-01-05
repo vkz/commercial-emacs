@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Parse clemacs loader output and extract the first ELisp load error (writes JSON+MD)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--log <path>" help="Path to a captured log file"
+#USAGE flag "--out-prefix <path>" help="Output prefix (default: build/.../reports/first-failure)" default=""
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+log_path="${usage_log:-}"
+out_prefix="${usage_out_prefix:-}"
+
+if [[ -z "${log_path}" ]]; then
+  echo "[clemacs:report:scan-load-log] missing --log" >&2
+  exit 2
+fi
+if [[ ! -f "${log_path}" ]]; then
+  echo "[clemacs:report:scan-load-log] missing log: ${log_path}" >&2
+  exit 2
+fi
+
+out_dir="${project_root}/${build_dir}/reports"
+mkdir -p "${out_dir}"
+
+if [[ -z "${out_prefix}" ]]; then
+  out_prefix="${out_dir}/first-failure"
+fi
+
+python3 - <<'PY'
+import json
+import os
+import re
+from pathlib import Path
+
+project_root = Path(os.environ.get("MISE_PROJECT_ROOT") or os.getcwd())
+build_dir = os.environ.get("usage_build_dir") or "build/clemacs"
+log_path = Path(os.environ.get("usage_log") or "")
+out_prefix = os.environ.get("usage_out_prefix") or ""
+
+if not out_prefix:
+    out_prefix = str(project_root / build_dir / "reports" / "first-failure")
+
+text = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+header_re = re.compile(r"^ELisp load error in (.+) \\(form (\\d+)\\):$")
+inv_re = re.compile(r"^Inventory: (.+)$")
+inv_parse_re = re.compile(r"^(?P<kind>\\S+)\\s+(?P<lisp_name>.+)\\s+\\((?P<c_name>[^)]+)\\)\\s+@\\s+(?P<source_path>.+):(?P<source_line>\\d+)$")
+
+block = None
+for i, line in enumerate(text):
+    m = header_re.match(line)
+    if not m:
+        continue
+    path = m.group(1).strip()
+    form_index = int(m.group(2))
+    # Capture until next header or EOF.
+    j = i + 1
+    lines = []
+    while j < len(text) and not header_re.match(text[j]):
+        lines.append(text[j])
+        j += 1
+    inv = None
+    for l in lines:
+        im = inv_re.match(l)
+        if im:
+            inv = im.group(1).strip()
+            break
+    inv_parsed = None
+    if inv:
+        pm = inv_parse_re.match(inv)
+        if pm:
+            inv_parsed = {
+                "kind": pm.group("kind"),
+                "lisp_name": pm.group("lisp_name"),
+                "c_name": pm.group("c_name"),
+                "source_path": pm.group("source_path"),
+                "source_line": int(pm.group("source_line")),
+            }
+    block = {
+        "path": path,
+        "form_index": form_index,
+        "recommended_max_forms": max(form_index - 1, 0),
+        "inventory": inv,
+        "inventory_parsed": inv_parsed,
+        "raw_block": [line] + lines,
+    }
+    break
+
+tail = text[-120:] if len(text) > 120 else text
+report = {
+    "log": str(log_path),
+    "found": block is not None,
+    "first_error": block,
+    "tail": tail,
+}
+
+out_json = Path(out_prefix + ".json")
+out_md = Path(out_prefix + ".md")
+out_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+md = []
+md.append("# clemacs first failure report")
+md.append("")
+md.append(f"- Log: `{log_path}`")
+md.append("")
+if not block:
+    md.append("No `elisp-load-error` found in this log.")
+else:
+    md.append("## First `elisp-load-error`")
+    md.append("")
+    md.append(f"- Path: `{block['path']}`")
+    md.append(f"- Form index: {block['form_index']}")
+    md.append(f"- Recommended checkpoint (max-forms): {block['recommended_max_forms']}")
+    if block["inventory"]:
+        md.append(f"- Inventory: {block['inventory']}")
+    md.append("")
+    md.append("### Raw block")
+    md.append("")
+    md.append("```")
+    md.extend(block["raw_block"][:80])
+    if len(block["raw_block"]) > 80:
+        md.append(f"... ({len(block['raw_block']) - 80} more lines)")
+    md.append("```")
+
+md.append("")
+md.append("## Tail (last ~120 lines)")
+md.append("")
+md.append("```")
+md.extend(tail)
+md.append("```")
+
+out_md.write_text("\n".join(md) + "\n", encoding="utf-8")
+print(f"[clemacs:report:scan-load-log] wrote {out_json}")
+print(f"[clemacs:report:scan-load-log] wrote {out_md}")
+PY

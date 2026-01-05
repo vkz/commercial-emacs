@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Bisect a startup manifest checkpoint for a single file (find max passing max-forms)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--manifest <path>" help="Manifest to load prefix from (repo-relative)" default="clemacs/contract/startup.check.files"
+#USAGE flag "--skip-file <path>" help="Skip list file (repo-relative)" default="clemacs/contract/lisp.allowed-skip.files"
+#USAGE flag "--file <path>" help="Target ELisp file path (repo-relative; must appear in manifest)"
+#USAGE flag "--max <n>" help="Upper bound for search (0 = auto)" default="0"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+manifest_rel="${usage_manifest}"
+skip_rel="${usage_skip_file}"
+target_rel="${usage_file:-}"
+max_bound="${usage_max}"
+
+if [[ -z "${target_rel}" ]]; then
+  echo "[clemacs:bisect:file] missing --file" >&2
+  exit 2
+fi
+
+manifest_path="${project_root}/${manifest_rel}"
+if [[ ! -f "${manifest_path}" ]]; then
+  echo "[clemacs:bisect:file] missing manifest: ${manifest_path}" >&2
+  exit 2
+fi
+
+source "${project_root}/.mise/tasks/clemacs/lib/sbcl.sh"
+clemacs_setup_xdg_and_home "${project_root}" "${build_dir}"
+
+mkdir -p "${build_dir}"
+usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
+usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/substrate/build"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+sbcl_dynamic_space="${CLEMACS_SBCL_DYNAMIC_SPACE_SIZE:-4096}"
+
+export CLEMACS_SUBSTRATE_DYLIB="${project_root}/${build_dir}/substrate/libemxsubstrate.dylib"
+
+target_index="$(
+  awk -v want="${target_rel}" '
+    /^[[:space:]]*#/ {next}
+    /^[[:space:]]*$/ {next}
+    {p=$1; i++; if (p==want) {print i; exit 0}}
+    END {exit 1}
+  ' "${manifest_path}" || true
+)"
+
+if [[ -z "${target_index}" ]]; then
+  echo "[clemacs:bisect:file] file not found in manifest: ${target_rel}" >&2
+  exit 2
+fi
+
+prefix_limit=$((target_index - 1))
+tmp_dir="${project_root}/${build_dir}/tmp"
+mkdir -p "${tmp_dir}"
+
+safe="${target_rel//\//_}"
+safe="${safe//./_}"
+prefix_manifest_path="${tmp_dir}/bisect-prefix.${safe}.files"
+if [[ "${prefix_limit}" -gt 0 ]]; then
+  awk -v want="${target_rel}" '
+    /^[[:space:]]*#/ {next}
+    /^[[:space:]]*$/ {next}
+    {
+      if ($1==want) {exit 0}
+      print
+    }
+  ' "${manifest_path}" >"${prefix_manifest_path}"
+else
+  : >"${prefix_manifest_path}"
+fi
+
+target_src="${project_root}/${target_rel}"
+target_ported="${project_root}/clemacs/ported/${target_rel}"
+
+run_trial() {
+  local n="$1"
+  local load_target="nil"
+  if [[ "${n}" -gt 0 ]]; then
+    load_target="(elisp:load-elisp-file path :max-forms ${n})"
+  elif [[ "${n}" -lt 0 ]]; then
+    load_target="(elisp:load-elisp-file path)"
+  fi
+
+  clemacs_sbcl_eval \
+    "${project_root}" \
+    "${build_dir}" \
+    "${deps_dir}" \
+    "${qlot_bin}" \
+    "${sbcl_dynamic_space}" \
+    --eval "(uiop:quit (progn
+      (when (probe-file #p\"${prefix_manifest_path}\")
+        (elisp:load-elisp-manifest :project-root #p\"${project_root}/\" :manifest #p\"${prefix_manifest_path}\" :skip-file #p\"${skip_rel}\"))
+      (let* ((src #p\"${target_src}\")
+             (ported #p\"${target_ported}\")
+             (path (if (probe-file ported) ported src)))
+        ${load_target})
+      0))"
+}
+
+if ! run_trial 0 >/dev/null 2>&1; then
+  echo "[clemacs:bisect:file] prefix load failed; fix earlier manifest entries first (prefix entries: ${prefix_limit})." >&2
+  exit 1
+fi
+
+if run_trial -1 >/dev/null 2>&1; then
+  echo "[clemacs:bisect:file] full file loads cleanly in this context: ${target_rel}"
+  exit 0
+fi
+
+if [[ "${max_bound}" == "0" ]]; then
+  max_bound="65536"
+fi
+
+lo=0
+hi=1
+while [[ "${hi}" -lt "${max_bound}" ]]; do
+  if run_trial "${hi}" >/dev/null 2>&1; then
+    lo="${hi}"
+    hi=$((hi * 2))
+  else
+    break
+  fi
+done
+
+if [[ "${hi}" -ge "${max_bound}" ]]; then
+  hi="${max_bound}"
+  if run_trial "${hi}" >/dev/null 2>&1; then
+    echo "[clemacs:bisect:file] did not find a failing bound up to ${max_bound} forms (but full load fails)." >&2
+    echo "[clemacs:bisect:file] re-run with a larger --max (or investigate non-determinism / side effects)." >&2
+    exit 1
+  fi
+fi
+
+if [[ "${lo}" -eq 0 && "${hi}" -eq 1 ]]; then
+  echo "[clemacs:bisect:file] fails at the first form; cannot set a positive max-forms checkpoint for ${target_rel}."
+  echo "[clemacs:bisect:file] run: CLEMACS_LOAD_DEBUG_FILE=build/clemacs/tmp/load-debug.out mise run clemacs:test:startup-check"
+  exit 1
+fi
+
+while [[ $((hi - lo)) -gt 1 ]]; do
+  mid=$(((lo + hi) / 2))
+  if run_trial "${mid}" >/dev/null 2>&1; then
+    lo="${mid}"
+  else
+    hi="${mid}"
+  fi
+done
+
+out_dir="${project_root}/${build_dir}/reports"
+mkdir -p "${out_dir}"
+report_path="${out_dir}/bisect-${safe}.md"
+
+{
+  echo "# clemacs bisect report"
+  echo
+  echo "- Target: \`${target_rel}\`"
+  echo "- Manifest: \`${manifest_rel}\` (index ${target_index}, prefix ${prefix_limit})"
+  echo "- Result: max passing max-forms = ${lo}"
+  echo "- Next failing max-forms = ${hi}"
+  echo
+  echo "Recommended action:"
+  echo "- If the manifest currently sets a higher checkpoint for this file, set it down to ${lo} while implementing the missing primitive(s)."
+  echo "- After implementing, raise past ${hi} and re-run the gate."
+} >"${report_path}"
+
+echo "[clemacs:bisect:file] wrote ${report_path}"
+echo "[clemacs:bisect:file] max passing max-forms: ${lo}"
+echo "[clemacs:bisect:file] first failing max-forms: ${hi}"

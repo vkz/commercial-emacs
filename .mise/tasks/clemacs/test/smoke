@@ -45,7 +45,7 @@ if [[ -f "${core_path}" ]]; then
 fi
 
 if [[ "${core_fresh}" == "true" ]]; then
-  mise x -- sbcl \
+  sbcl \
     --dynamic-space-size "${sbcl_dynamic_space}" \
     --core "${core_path}" \
     --noinform \

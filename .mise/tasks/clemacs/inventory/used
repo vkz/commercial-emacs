@@ -5,6 +5,7 @@ set -euo pipefail
 #USAGE flag "-h --help" help="Print help"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
 #USAGE flag "--manifest <path>" help="Bootstrap file list (repo-relative)" default="clemacs/contract/bootstrap.files"
+#USAGE flag "--respect-maxforms" help="Respect per-file max-forms limits in the manifest"
 
 if [[ "${usage_help:-false}" == "true" ]]; then
   mise tasks info "${MISE_TASK_NAME}"
@@ -30,6 +31,7 @@ from collections import Counter
 project_root = os.environ.get("MISE_PROJECT_ROOT") or os.getcwd()
 build_dir = os.environ.get("usage_build_dir") or "build/clemacs"
 manifest = os.environ.get("usage_manifest") or "clemacs/contract/bootstrap.files"
+respect_maxforms = (os.environ.get("usage_respect_maxforms") or "false") == "true"
 out_dir = os.path.join(project_root, build_dir, "tmp")
 os.makedirs(out_dir, exist_ok=True)
 
@@ -95,6 +97,136 @@ def tokenize_elisp(text: str):
         if tok:
             yield tok
 
+def slice_to_maxforms(text: str, max_forms: int) -> str:
+    if max_forms <= 0:
+        return ""
+
+    i = 0
+    n = len(text)
+    depth = 0
+    in_str = False
+    in_comment = False
+    escape = False
+
+    prefixes = 0  # quote/backquote/comma/# reader prefixes at top-level
+    in_form = False
+    atom_mode = False  # true for top-level atoms/strings
+
+    def is_ws(ch: str) -> bool:
+        return ch.isspace()
+
+    def is_delim(ch: str) -> bool:
+        return ch in "()[]{}\";" or is_ws(ch) or ch in "'`,"
+
+    forms = 0
+    while i < n:
+        c = text[i]
+
+        if in_comment:
+            if c == "\n":
+                in_comment = False
+            i += 1
+            continue
+
+        if in_str:
+            if escape:
+                escape = False
+                i += 1
+                continue
+            if c == "\\":
+                escape = True
+                i += 1
+                continue
+            if c == "\"":
+                in_str = False
+                i += 1
+                if depth == 0 and in_form and atom_mode:
+                    forms += 1
+                    if forms >= max_forms:
+                        return text[:i]
+                    in_form = False
+                    atom_mode = False
+                    prefixes = 0
+                continue
+            i += 1
+            continue
+
+        if c == ";":
+            in_comment = True
+            i += 1
+            continue
+
+        if depth == 0 and not in_form:
+            if is_ws(c):
+                i += 1
+                continue
+
+            # Top-level reader prefixes: stack until we consume the following form.
+            if c in "'`," or c == "#":
+                prefixes += 1
+                i += 1
+                if c == "," and i < n and text[i] == "@":
+                    i += 1
+                continue
+
+            if c in "([{" :
+                in_form = True
+                depth = 1
+                i += 1
+                continue
+
+            if c == "\"":
+                in_form = True
+                atom_mode = True
+                in_str = True
+                i += 1
+                continue
+
+            # Atom form (symbol/number/keyword/etc.)
+            in_form = True
+            atom_mode = True
+            i += 1
+            continue
+
+        # Inside a form (list/vector/atom) at depth>=0.
+        if atom_mode and depth == 0:
+            if is_delim(c):
+                forms += 1
+                if forms >= max_forms:
+                    return text[:i]
+                in_form = False
+                atom_mode = False
+                prefixes = 0
+                continue
+            i += 1
+            continue
+
+        if c in "([{" :
+            depth += 1
+            i += 1
+            continue
+
+        if c in ")]}" :
+            depth -= 1
+            i += 1
+            if depth <= 0:
+                depth = 0
+                forms += 1
+                if forms >= max_forms:
+                    return text[:i]
+                in_form = False
+                prefixes = 0
+            continue
+
+        if c == "\"":
+            in_str = True
+            i += 1
+            continue
+
+        i += 1
+
+    return text
+
 manifest_path = os.path.join(project_root, manifest)
 if not os.path.exists(manifest_path):
     raise SystemExit(f"missing manifest: {manifest_path}")
@@ -104,33 +236,51 @@ for line in open(manifest_path, "r", encoding="utf-8"):
     line = line.strip()
     if not line or line.startswith("#"):
         continue
-    # Manifest entries are: <path> [<max-forms>]. We only care about paths here.
+    # Manifest entries are: <path> [<max-forms>].
     parts = line.split()
-    if parts:
-        files.append(parts[0])
+    if not parts:
+        continue
+    rel = parts[0]
+    max_forms = None
+    if len(parts) >= 2:
+        try:
+            max_forms = int(parts[1])
+        except ValueError:
+            max_forms = None
+    files.append((rel, max_forms))
 
-missing_files = [f for f in files if not os.path.exists(os.path.join(project_root, f))]
+missing_files = [rel for (rel, _) in files if not os.path.exists(os.path.join(project_root, rel))]
 if missing_files:
     raise SystemExit("missing files in manifest: " + ", ".join(missing_files))
 
 counts = Counter()
 file_hits = {}
-for rel in files:
+for (rel, max_forms) in files:
     p = os.path.join(project_root, rel)
     text = open(p, "r", encoding="utf-8", errors="replace").read()
+    effective_max = None
+    if respect_maxforms and isinstance(max_forms, int) and max_forms > 0:
+        effective_max = max_forms
+        text = slice_to_maxforms(text, max_forms)
     used = Counter()
     for tok in tokenize_elisp(text):
         if tok in subrs:
             used[tok] += 1
             counts[tok] += 1
-    file_hits[rel] = {"unique_subrs": len(used), "top": used.most_common(20)}
+    file_hits[rel] = {
+        "max_forms": max_forms,
+        "effective_max_forms": effective_max,
+        "unique_subrs": len(used),
+        "top": used.most_common(20),
+    }
 
 out_json = os.path.join(out_dir, "inventory-used.json")
 out_txt = os.path.join(out_dir, "inventory-used.txt")
 
 report = {
     "manifest": manifest,
-    "files": files,
+    "respect_maxforms": respect_maxforms,
+    "files": [{"path": rel, "max_forms": max_forms} for (rel, max_forms) in files],
     "runtime_subrs_total": len(subrs),
     "used_runtime_subrs_unique": len(counts),
     "used_runtime_subrs_top": counts.most_common(50),
@@ -141,6 +291,7 @@ open(out_json, "w", encoding="utf-8").write(json.dumps(report, indent=2, sort_ke
 
 with open(out_txt, "w", encoding="utf-8") as f:
     f.write(f"manifest: {manifest}\n")
+    f.write(f"respect max-forms: {respect_maxforms}\n")
     f.write(f"files: {len(files)}\n")
     f.write(f"runtime subrs total: {len(subrs)}\n")
     f.write(f"used runtime subrs (unique): {len(counts)}\n")

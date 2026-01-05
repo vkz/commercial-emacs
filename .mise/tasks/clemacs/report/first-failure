@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Run a clemacs load gate, capture output, and extract the first ELisp load error"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--mode <mode>" help="What to run: startup-smoke|startup-check|bootstrap|ert-upstream" default="startup-check"
+#USAGE flag "--debug" help="Enable CLEMACS_LOAD_DEBUG_FILE backtraces for the run"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+mode="${usage_mode}"
+mkdir -p "${build_dir}"
+
+out_dir="${project_root}/${build_dir}/reports"
+tmp_dir="${project_root}/${build_dir}/tmp"
+mkdir -p "${out_dir}" "${tmp_dir}"
+
+log_path="${tmp_dir}/first-failure.${mode}.log"
+debug_path="${tmp_dir}/load-debug.${mode}.out"
+
+cmd=(mise run)
+case "${mode}" in
+  startup-smoke) cmd+=(clemacs:test:startup -- --build-dir "${build_dir}" --level smoke) ;;
+  startup-check) cmd+=(clemacs:test:startup-check -- --build-dir "${build_dir}") ;;
+  bootstrap) cmd+=(clemacs:test:load-bootstrap -- --build-dir "${build_dir}") ;;
+  ert-upstream) cmd+=(clemacs:test:ert-upstream -- --build-dir "${build_dir}") ;;
+  *)
+    echo "[clemacs:report:first-failure] unknown mode: ${mode}" >&2
+    exit 2
+    ;;
+esac
+
+set +e
+if [[ "${usage_debug:-false}" == "true" ]]; then
+  : >"${debug_path}"
+  env "CLEMACS_LOAD_DEBUG_FILE=${debug_path}" "${cmd[@]}" >"${log_path}" 2>&1
+else
+  "${cmd[@]}" >"${log_path}" 2>&1
+fi
+status=$?
+set -e
+
+out_prefix="${out_dir}/first-failure.${mode}"
+mise run clemacs:report:scan-load-log -- \
+  --build-dir "${build_dir}" \
+  --log "${log_path}" \
+  --out-prefix "${out_prefix}"
+
+# Keep the "latest" report at stable paths.
+cp -f "${out_prefix}.md" "${out_dir}/first-failure.md"
+cp -f "${out_prefix}.json" "${out_dir}/first-failure.json"
+
+if [[ "${status}" -eq 0 ]]; then
+  echo "[clemacs:report:first-failure] ok (${mode})"
+  echo "[clemacs:report:first-failure] log: ${log_path}"
+  if [[ "${usage_debug:-false}" == "true" ]]; then
+    echo "[clemacs:report:first-failure] debug: ${debug_path}"
+  fi
+  exit 0
+fi
+
+echo "[clemacs:report:first-failure] FAIL (${mode}) exit=${status}" >&2
+echo "[clemacs:report:first-failure] log: ${log_path}" >&2
+if [[ "${usage_debug:-false}" == "true" ]]; then
+  echo "[clemacs:report:first-failure] debug: ${debug_path}" >&2
+fi
+exit "${status}"

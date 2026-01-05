@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eEuo pipefail
 
 #MISE description="Run clemacs contract gate (successor to Emacs test:smoke for clemacs)"
 #USAGE flag "-h --help" help="Print help"
@@ -16,6 +16,31 @@ cd "${project_root}"
 
 level="${usage_level}"
 build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}"
+
+stamp_dir="${project_root}/${build_dir}/stamps"
+mkdir -p "${stamp_dir}"
+ok_stamp="${stamp_dir}/clemacs-contract-${level}.ok"
+fail_stamp="${stamp_dir}/clemacs-contract-${level}.fail"
+now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+git_rev="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+cur_task=""
+
+on_err() {
+  local exit_code=$?
+  local now_utc_fail
+  now_utc_fail="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  {
+    echo "status=fail"
+    echo "when=${now_utc_fail}"
+    echo "git=${git_rev}"
+    echo "level=${level}"
+    echo "build_dir=${build_dir}"
+    echo "task=${cur_task:-unknown}"
+  } >"${fail_stamp}"
+  exit "${exit_code}"
+}
+trap on_err ERR
 
 contract_dir="${project_root}/clemacs/contract"
 case "${level}" in
@@ -36,5 +61,17 @@ fi
 while IFS= read -r task; do
   [[ -z "${task}" ]] && continue
   [[ "${task}" =~ ^# ]] && continue
+  cur_task="${task}"
   mise run "${task}" -- --build-dir "${build_dir}"
 done < "${manifest}"
+
+{
+  echo "status=ok"
+  echo "when=${now_utc}"
+  echo "git=${git_rev}"
+  echo "level=${level}"
+  echo "build_dir=${build_dir}"
+  echo "manifest=${manifest}"
+} >"${ok_stamp}"
+
+rm -f "${fail_stamp}" 2>/dev/null || true
