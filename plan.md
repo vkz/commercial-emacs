@@ -52,6 +52,8 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
 DONE (2026-01-05)
 - Fix out-of-tree dump/startup load-path to prefer build-tree `.elc` files (vs source `.el`).
 - Make `mise run build` generate shipped snapshot files (`lisp/cus-load.el`, `lisp/finder-inf.el`) when missing.
+- Fix `clemacs:report:startup-delta` to resolve pdump load paths to real `lisp/**` files.
+- Grow clemacs startup manifests (check/editor-core): add fill/comment/replace/tabulated-list/buff-menu and related TTY bits.
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 

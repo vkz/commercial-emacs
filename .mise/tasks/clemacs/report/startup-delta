@@ -44,6 +44,7 @@ report_path = Path(os.environ.get("CLEMACS_REPORT_PATH") or (out_dir / "startup-
 
 pdump = project_root / "admin" / "pdump-common.el"
 startup_smoke = project_root / "clemacs" / "contract" / "startup.smoke.files"
+lisp_root = project_root / "lisp"
 
 def read_manifest(path: Path):
     out = []
@@ -56,6 +57,42 @@ def read_manifest(path: Path):
         out.append(line.split()[0])
     return out
 
+def _ensure_el_suffix(path: str) -> str:
+    return path if path.endswith(".el") else f"{path}.el"
+
+def resolve_pdump_load(name: str) -> str:
+    """
+    Resolve a (load "NAME") entry in admin/pdump-common.el to a concrete repo
+    path under lisp/.
+
+    This is intentionally best-effort and deterministic; it exists to produce
+    an actionable candidate list for updating startup manifests.
+    """
+    # Explicit subdirs in pdump-common.el (e.g. "emacs-lisp/macroexp").
+    if "/" in name:
+        rel = name[5:] if name.startswith("lisp/") else f"lisp/{name}"
+        return _ensure_el_suffix(rel)
+
+    # For bare names, emulate load-path resolution by searching lisp/**.
+    base = name[:-3] if name.endswith(".el") else name
+    preferred = [
+        lisp_root / f"{base}.el",
+        lisp_root / "emacs-lisp" / f"{base}.el",
+    ]
+    for p in preferred:
+        if p.exists():
+            return p.relative_to(project_root).as_posix()
+
+    matches = sorted(lisp_root.rglob(f"{base}.el"))
+    if len(matches) == 1:
+        return matches[0].relative_to(project_root).as_posix()
+    if matches:
+        # Deterministic fallback for ambiguous names.
+        return matches[0].relative_to(project_root).as_posix()
+
+    # As a last resort, keep the previous behavior.
+    return f"lisp/{base}.el"
+
 startup = read_manifest(startup_smoke)
 startup_set = set(startup)
 
@@ -65,13 +102,7 @@ loads = re.findall(r'\(load\s+"([^"]+)"', text)
 
 pdump_paths = []
 for name in loads:
-    if name.startswith("lisp/"):
-        rel = name
-    else:
-        rel = "lisp/" + name
-    if not rel.endswith(".el"):
-        rel = rel + ".el"
-    pdump_paths.append(rel)
+    pdump_paths.append(resolve_pdump_load(name))
 
 missing = [p for p in pdump_paths if p not in startup_set]
 present = [p for p in pdump_paths if p in startup_set]

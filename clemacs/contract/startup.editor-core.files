@@ -71,6 +71,10 @@ lisp/international/charprop.el -
 # pdump: characters.
 lisp/international/characters.el 20
 
+# pdump: legacy encodings (temporarily skipped; see lisp.allowed-skip.files).
+lisp/international/cp51932.el 1
+lisp/international/eucjp-ms.el 1
+
 # pdump: composite, indent.
 lisp/composite.el 1
 lisp/indent.el 1
@@ -108,6 +112,9 @@ lisp/font-lock.el 1
 # pdump: jit-lock, mouse, timer, isearch.
 lisp/jit-lock.el 1
 lisp/mouse.el 1
+lisp/fringe.el 1
+lisp/scroll-bar.el 1
+lisp/select.el 1
 lisp/emacs-lisp/timer.el 1
 lisp/isearch.el 1
 
@@ -125,3 +132,12 @@ lisp/textmodes/paragraphs.el 50
 lisp/progmodes/prog-mode.el 50
 lisp/emacs-lisp/lisp-mode.el 11
 lisp/textmodes/text-mode.el 21
+
+# pdump: fill, newcomment.
+lisp/textmodes/fill.el 1
+lisp/newcomment.el 1
+
+# pdump: replace, tabulated-list, buff-menu.
+lisp/replace.el 1
+lisp/emacs-lisp/tabulated-list.el 1
+lisp/buff-menu.el 1
