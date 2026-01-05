@@ -10,6 +10,7 @@
 (cl:defvar load-file-name nil)
 (cl:defvar current-load-list nil)
 (cl:defvar debugger nil)
+(cl:defvar emacs-basic-display nil)
 
 (cl:defmacro bound-and-true-p (var)
   "Bring-up subset of ELisp `bound-and-true-p'."
@@ -1211,6 +1212,25 @@ Supports destructuring patterns of the form:
   "Stub for ELisp `defface'."
   (declare (cl:ignore _spec _docstring _args))
   `(progn ',face))
+
+(cl:defmacro define-globalized-minor-mode (global-mode mode turn-on &rest args)
+  "Bring-up stub for ELisp `define-globalized-minor-mode'.
+
+This defines GLOBAL-MODE as a global minor mode toggler.  During bring-up we
+don't yet walk buffers or manage mode hooks, but we do define the variable and
+command so preloaded startup files can be checkpointed."
+  (declare (cl:ignore mode turn-on))
+  (let ((init-value nil))
+    (loop for (k v) on args by #'cddr do
+      (when (eq k :init-value)
+        (setf init-value v)))
+    `(progn
+       (defvar ,global-mode ,init-value)
+       (defun ,global-mode (&optional arg)
+         (declare (cl:ignore arg))
+         (setf ,global-mode (not (not ,global-mode)))
+         ,global-mode)
+       ',global-mode)))
 
 (cl:defun define-error (name message &optional parent)
   "Bring-up subset of ELisp `define-error'.
@@ -3646,6 +3666,19 @@ back to a tiny stub list."
 (cl:defun macroexp-file-name ()
   "Stub for ELisp `macroexp-file-name'."
   nil)
+
+(cl:defun macroexp-copyable-p (exp)
+  "Bring-up subset of ELisp `macroexp-copyable-p'."
+  (cond
+   ;; In upstream `macroexp.el` this is (or (symbolp exp) (macroexp-const-p exp)).
+   ;; We keep it self-contained to avoid pulling in the full macroexp const
+   ;; machinery just to unblock `pcase-let*` expansion during startup.
+   ((consp exp)
+    (or (eq (car exp) 'quote)
+        (and (eq (car exp) 'function)
+             (consp (cdr exp))
+             (symbolp (cadr exp)))))
+   (t t)))
 
 (cl:defvar macroexpand-all-environment nil)
 
