@@ -113,7 +113,7 @@ lisp/font-lock.el 1
 lisp/jit-lock.el 1
 lisp/mouse.el 1
 lisp/fringe.el -
-lisp/scroll-bar.el 1
+lisp/scroll-bar.el 11
 lisp/select.el -
 lisp/emacs-lisp/timer.el 1
 lisp/isearch.el 1
