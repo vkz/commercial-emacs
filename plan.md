@@ -55,6 +55,7 @@ DONE (2026-01-05)
 - Fix `clemacs:report:startup-delta` to resolve pdump load paths to real `lisp/**` files.
 - Grow clemacs startup manifests (check/editor-core): add fill/comment/replace/tabulated-list/buff-menu and related TTY bits.
 - Raise several startup.check checkpoints (fill, replace, tabulated-list, buff-menu, isearch) and uncap timer/newcomment/fringe/select.
+- Add core editor ELisp shims (BOL/EOL motion, indentation, string/window width) and capture behavior in semantics microtests.
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 
