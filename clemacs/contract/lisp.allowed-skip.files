@@ -3,3 +3,10 @@
 # One relative path per line; comments allowed. Keep reasons and dates.
 # Use this for files that are intentionally out of scope (GUI/nativecomp/modules)
 # or temporarily blocked; prefer shrinking this list over time.
+
+# 2026-01-05: Defer legacy non-Unicode encodings; focus on UTF-8/editor bring-up.
+lisp/international/cp51932.el
+lisp/international/eucjp-ms.el
+
+# 2026-01-05: Depends on full `oclosure' (closure/bytecode machinery not modeled yet).
+lisp/emacs-lisp/nadvice.el

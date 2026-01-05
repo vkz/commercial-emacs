@@ -42,16 +42,25 @@
 (defpackage #:elisp
   (:use #:cl)
   (:shadow #:defmacro #:defun #:equal #:eval #:funcall #:function #:intern #:make-hash-table #:provide #:require #:setq
+           #:defvar #:defconst
+           #:make-symbol
+           #:gensym
            #:make-list #:format
            #:make-string
+           #:+ #:-
+           #:ignore
+           #:1+ #:1-
            #:append
-           #:prin1-to-string #:read-from-string
+           #:prin1 #:princ #:prin1-to-string #:read-from-string
            #:string= #:string-equal
            #:aref
+           #:stringp
+           #:vectorp
            #:characterp
            #:type-of
            #:symbol-function #:symbol-name #:fboundp #:values #:symbol-value
            #:signal #:handler-bind #:error
+           #:< #:<= #:= #:> #:>=
            #:set)
   (:export
    #:equal

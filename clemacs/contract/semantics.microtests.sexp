@@ -1,0 +1,145 @@
+;; clemacs semantics microtests (living)
+;;
+;; Purpose:
+;; - Capture small, load-order-independent ELisp semantics “breadcrumbs”.
+;; - Keep interpreter behavior honest while we bootstrap.
+;; - Provide a ready-made corpus to A/B test compiled-vs-interpreted later.
+;;
+;; Format: a list of plists.
+;; Keys:
+;; - :name      string (unique, stable identifier)
+;; - :expr      string (ELisp expression to eval)
+;; - :expected  string (expected prin1 of the result, as clemacs prints it)
+;; - :emacs     nil | :match  (when :match, compare clemacs prin1 to system Emacs)
+;; - :notes     optional string
+;;
+;; Policy:
+;; - Prefer :emacs :match when we aim for Emacs-faithful semantics.
+;; - If clemacs intentionally diverges, set :emacs nil and document the decision
+;;   in `plans/clemacs-compat.md` (dated) and keep :expected as the chosen
+;;   clemacs behavior.
+(
+ (:name "strings-stringp"
+  :expr "(and (stringp \"abc\") t)"
+  :expected "t"
+  :emacs :match)
+
+ (:name "strings-aref-multibyte-returns-code"
+  :expr "(aref \"A\" 0)"
+  :expected "65"
+  :emacs :match)
+
+ (:name "strings-string-to-unibyte-multibyte-string-p"
+  :expr "(multibyte-string-p (string-to-unibyte \"abc\"))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "strings-string-to-multibyte-multibyte-string-p"
+  :expr "(multibyte-string-p (string-to-multibyte (string-to-unibyte \"abc\")))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "strings-aref-unibyte-returns-byte"
+  :expr "(aref (string-to-unibyte \"A\") 0)"
+  :expected "65"
+  :emacs :match)
+
+ (:name "match-data-basic"
+  :expr "(progn (string-match \"b\" \"abc\") (match-beginning 0))"
+  :expected "1"
+  :emacs :match)
+
+ (:name "match-string-basic"
+  :expr "(progn (string-match \"b\" \"abc\") (match-string 0 \"abc\"))"
+  :expected "\"b\""
+  :emacs :match)
+
+ (:name "read-from-string-basic"
+  :expr "(car (read-from-string \"(a . b)\"))"
+  :expected "(a . b)"
+  :emacs :match)
+
+ (:name "prin1-to-string-basic"
+  :expr "(prin1-to-string '(a . b))"
+  :expected "\"(a . b)\""
+  :emacs :match)
+
+ (:name "condition-case-basic"
+  :expr "(condition-case e (/ 1 0) (arith-error 'ok))"
+  :expected "ok"
+  :emacs :match)
+
+ (:name "save-excursion-point-tracks-insert-before"
+  :expr "(with-temp-buffer (insert \"abc\") (goto-char 3) (save-excursion (goto-char 1) (insert \"X\")) (point))"
+  :expected "4"
+  :emacs :match)
+
+ (:name "backtrace-to-string-basic"
+  :expr "(let ((s (backtrace-to-string (backtrace-get-frames nil)))) (and (stringp s) (string-match \"backtrace-get-frames\" s) t))"
+  :expected "t"
+  :emacs nil
+  :notes "Bring-up subset: backtrace frames are (FUN . ARGS) conses, not Emacs backtrace-frame structs.")
+
+ (:name "line-end-position-basic"
+  :expr "(with-temp-buffer (insert \"a\\nb\") (goto-char 1) (line-end-position))"
+  :expected "2"
+  :emacs :match)
+
+ (:name "debugger-special-dynamic-binding"
+  :expr "(progn (defun clemacs--debugger-var-probe () debugger) (let ((debugger 'ok)) (clemacs--debugger-var-probe)))"
+  :expected "ok"
+  :emacs :match)
+
+ (:name "file-names-locate-user-emacs-file-unibyte"
+  :expr "(multibyte-string-p (locate-user-emacs-file \"foo\"))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "hash-tables-puthash-basic"
+  :expr "(let ((h (make-hash-table :test 'eq))) (puthash 'a 1 h) (gethash 'a h))"
+  :expected "1"
+  :emacs :match)
+
+ (:name "lists-delq-basic"
+  :expr "(delq 'a '(a b a c))"
+  :expected "(b c)"
+  :emacs :match)
+
+ (:name "custom-autoload-basic"
+  :expr "(progn (custom-autoload 'clemacs--ca \"foo\" t) (symbol-function 'clemacs--ca))"
+  :expected "(autoload \"foo\")"
+  :emacs nil
+  :notes "Bring-up stub used by ldefs-boot/loaddefs: stores an (autoload FILE) marker in the function cell.")
+
+ (:name "function-preserves-local-function-binding"
+  :expr "(cl:labels ((rec (x) x)) (cl:mapcar #'rec '(1 2 3)))"
+  :expected "(1 2 3)"
+  :emacs nil
+  :notes "Compiler/codegen breadcrumb: (function SYMBOL) must preserve local function bindings (labels/flet), not just return SYMBOL.")
+
+ (:name "charprop-define-char-code-property-registers"
+  :expr "(progn (setq char-code-property-alist nil) (define-char-code-property 'x \"f\" \"d\") (and (assq 'x char-code-property-alist) t))"
+  :expected "t"
+  :emacs nil)
+
+ (:name "categories-define-category-registers"
+  :expr "(progn (setq *defined-categories* (make-hash-table :test 'eql)) (define-category ?a \"ASCII\") (and (equal (gethash ?a *defined-categories*) \"ASCII\") t))"
+  :expected "t"
+  :emacs nil)
+
+ (:name "cl-type-list-of-accepted"
+  :expr "(cl:typep '(a b) '(list-of symbol))"
+  :expected "t"
+  :emacs nil
+  :notes "Compilation aid: accept cl-lib's (list-of TYPE) declarations as a conservative CL type.")
+
+ (:name "cl-deftype-defines-cl-type"
+  :expr "(progn (cl-deftype clemacs--tiny nil 'integer) (cl:typep 1 'clemacs--tiny))"
+  :expected "t"
+  :emacs nil)
+
+ (:name "cl--arglist-args-basic"
+  :expr "(equal (cl--arglist-args '(&key a (b nil) &allow-other-keys)) '(a b))"
+  :expected "t"
+  :emacs nil)
+)

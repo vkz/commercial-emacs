@@ -1,6 +1,4 @@
 # Upstream ERT tests that are currently known to fail under clemacs.
 #
 # Format: <test-name> # <reason> (YYYY-MM-DD)
-# (empty as of 2026-01-03)
-ert-test-explain-equal-strings # explain-equal string output mismatch (2026-01-04)
-ert--pp-with-indentation-and-newline # missing pp pretty printer (2026-01-04)
+# Keep this list as small and temporary as possible.

@@ -1,13 +1,172 @@
 (in-package #:elisp)
 
-(defvar *elisp-readtable* nil)
+(cl:defvar *elisp-readtable* nil)
+
+(cl:defun + (&rest args)
+  "Temporary numeric-only ELisp `+'.
+
+This is defined early so the bring-up code can use `+' at toplevel while
+`elisp-compat.lisp` is still later in the ASDF load order."
+  (if (null args)
+      0
+      (cl:apply #'cl:+ args)))
+
+(cl:defun - (x &rest more)
+  "Temporary numeric-only ELisp `-'."
+  (if (null more)
+      (cl:- x)
+      (reduce #'cl:- more :initial-value x)))
+
+(defconstant +raw-byte-base+ #x3fff00)
+(defconstant +raw-byte-max+ #x3fffff)
+;; Represent raw-byte multibyte chars (#x3fff00..#x3fffff) in CL strings using a
+;; private-use range. This keeps "multibyte strings are CL strings" workable
+;; while still exposing the correct ELisp character codes via AREF and FORMAT.
+(defconstant +raw-byte-private-base+ #xE000)
+(defconstant +raw-byte-private-max+ (cl:+ +raw-byte-private-base+ 255))
+
+(deftype unibyte-string ()
+  '(array (unsigned-byte 8) (*)))
+
+(deftype list-of (&optional (element-type t))
+  "Accept `cl-lib' style (list-of TYPE) declarations.
+
+This is primarily a compilation aid for ELisp that uses `cl-lib' macros which
+emit type declarations like (list-of symbol). SBCL's type system can't express
+\"list of X\" precisely without runtime checks, so we conservatively treat it
+as just `list`."
+  (declare (cl:ignore element-type))
+  'list)
+
+(cl:defun unibyte-string-p (x)
+  (typep x 'unibyte-string))
+
+(cl:defun stringp (x)
+  "ELisp-ish STRINGP.
+
+In Emacs, unibyte strings and multibyte strings are distinct. In clemacs,
+unibyte strings are `(simple-array (unsigned-byte 8) (*))`, while multibyte
+strings are CL strings."
+  (or (cl:stringp x) (unibyte-string-p x)))
+
+(cl:defun vectorp (x)
+  "Bring-up subset of ELisp `vectorp'.
+
+In ELisp, strings are arrays but *not* vectors."
+  (and (cl:vectorp x) (not (stringp x)) t))
+
+(cl:defun multibyte-string-p (s)
+  "Bring-up subset of the C primitive `multibyte-string-p'."
+  (and (stringp s) (not (unibyte-string-p s)) t))
+
+(cl:defun %raw-byte-char-code-p (code)
+  (and (integerp code) (<= +raw-byte-base+ code +raw-byte-max+)))
+
+(cl:defun %raw-byte-private-char-p (ch)
+  (and (cl:characterp ch)
+       (let ((cc (char-code ch)))
+         (<= +raw-byte-private-base+ cc +raw-byte-private-max+))))
+
+(cl:defun %raw-byte-code->private-char (code)
+  (unless (%raw-byte-char-code-p code)
+    (error "ELISP: not a raw-byte char code: ~S" code))
+  (let* ((byte (- code +raw-byte-base+))
+         (cc (+ +raw-byte-private-base+ byte))
+         (ch (code-char cc)))
+    (or ch (error "ELISP: cannot represent raw-byte ~S as CL character" code))))
+
+(cl:defun %private-char->raw-byte-code (ch)
+  (unless (%raw-byte-private-char-p ch)
+    (error "ELISP: not a raw-byte private char: ~S" ch))
+  (+ +raw-byte-base+ (- (char-code ch) +raw-byte-private-base+)))
+
+(cl:defun %elisp-char-code (ch)
+  "Return the ELisp character code integer for CL character CH."
+  (if (%raw-byte-private-char-p ch)
+      (%private-char->raw-byte-code ch)
+      (char-code ch)))
+
+(cl:defun %elisp-code->char (code)
+  "Return a CL character for ELisp CODE (including raw-byte codes)."
+  (cond
+   ((%raw-byte-char-code-p code)
+    (%raw-byte-code->private-char code))
+   ((cl:characterp code) code)
+   ((and (integerp code) (<= 0 code))
+    (or (code-char code)
+        (error "ELISP: invalid character code: ~S" code)))
+   (t
+    (error "ELISP: expected character code, got: ~S" code))))
+
+(cl:defun %make-unibyte-string (len &key (initial-element 0))
+  (let ((b (typecase initial-element
+             (integer initial-element)
+             (character (char-code initial-element))
+             (t (error "ELISP: bad unibyte init element: ~S" initial-element)))))
+    (unless (and (integerp b) (<= 0 b 255))
+      (error "ELISP: unibyte init out of range: ~S" initial-element))
+    (make-array len :element-type '(unsigned-byte 8) :initial-element b)))
+
+(cl:defun %unibyte->cl-string (bytes)
+  (unless (unibyte-string-p bytes)
+    (error "ELISP: expected unibyte string, got: ~S" (type-of bytes)))
+  (let ((out (cl:make-string (length bytes))))
+    (dotimes (i (length bytes))
+      (setf (char out i) (code-char (aref bytes i))))
+    out))
+
+(cl:defun %elisp-string->cl-string (s)
+  "Return a CL string for S (unibyte or multibyte).
+
+For unibyte strings, this is a lossy view for bytes >= 128 if later treated as
+Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
+  (cond
+   ((cl:stringp s) s)
+   ((unibyte-string-p s) (%unibyte->cl-string s))
+   (t (error "ELISP: expected string, got: ~S" (type-of s)))))
+
+(cl:defun string-to-multibyte (s)
+  "Bring-up subset of ELisp `string-to-multibyte'."
+  (unless (stringp s)
+    (error "ELISP:STRING-TO-MULTIBYTE expects a string, got: ~S" s))
+  (cond
+   ((unibyte-string-p s)
+    (let ((out (cl:make-string (length s))))
+      (dotimes (i (length s))
+        (let ((b (aref s i)))
+          (setf (char out i)
+                (if (< b 128)
+                    (code-char b)
+                    (%raw-byte-code->private-char (+ +raw-byte-base+ b))))))
+      out))
+   (t s)))
+
+(cl:defun string-to-unibyte (s)
+  "Bring-up subset of ELisp `string-to-unibyte'."
+  (unless (stringp s)
+    (error "ELISP:STRING-TO-UNIBYTE expects a string, got: ~S" s))
+  (cond
+   ((unibyte-string-p s) s)
+   (t
+    (let* ((n (length s))
+           (out (make-array n :element-type '(unsigned-byte 8))))
+      (dotimes (i n)
+        (let ((ch (char s i)))
+          (setf (aref out i)
+                (cond
+                 ((%raw-byte-private-char-p ch)
+                  (- (char-code ch) +raw-byte-private-base+))
+                 ((<= (char-code ch) 255) (char-code ch))
+                 (t
+                  (error "ELISP:STRING-TO-UNIBYTE cannot encode char: ~S" ch))))))
+      out))))
 
 (defstruct text-prop-interval
   (start 0 :type integer)
   (end 0 :type integer)
   (plist nil))
 
-(defvar *string-text-properties*
+(cl:defvar *string-text-properties*
   (cl:make-hash-table :test 'eq))
 
 (cl:defun %string-text-properties (string)
@@ -133,10 +292,11 @@
              (cond
               ((atom x) x)
               ;; Do not rewrite under QUOTE.
-              ((and (consp x) (eq (car x) 'quote) (= (length x) 2))
+              ;; Avoid LIST/LENGTH on dotted pairs (e.g. alists like (quote . "...")).
+              ((and (consp x) (eq (car x) 'quote) (consp (cdr x)) (null (cddr x)))
                x)
               ;; Rewrite FUNCTION only when it wraps a lambda form.
-              ((and (consp x) (eq (car x) 'function) (= (length x) 2))
+              ((and (consp x) (eq (car x) 'function) (consp (cdr x)) (null (cddr x)))
                (let ((arg (cadr x)))
                  (if (and (consp arg) (eq (car arg) 'lambda))
                      (list 'function (rw arg))
@@ -144,7 +304,7 @@
               ;; ELisp IF allows multiple else forms; CL:IF does not.
               ((and (consp x) (eq (car x) 'cl:if))
                (destructuring-bind (op test then &rest else) x
-                 (declare (ignore op))
+                 (declare (cl:ignore op))
                  (cond
                   ((null else) (list 'cl:if (rw test) (rw then) nil))
                   ((null (cdr else)) (list 'cl:if (rw test) (rw then) (rw (car else))))
@@ -154,7 +314,7 @@
               ;; condition objects.
               ((and (consp x) (eq (car x) 'cl:handler-bind))
                (destructuring-bind (op bindings &rest body) x
-                 (declare (ignore op))
+                 (declare (cl:ignore op))
                  (cons 'elisp::handler-bind
                        (cons (mapcar #'rw bindings)
                              (mapcar #'rw body)))))
@@ -175,7 +335,7 @@
           (set-macro-character
            #\'
            (lambda (stream char)
-             (declare (ignore char))
+             (declare (cl:ignore char))
              (let ((next (peek-char t stream nil nil t)))
                 (cond
                  ((and next (char= next #\.))
@@ -193,14 +353,14 @@
           (set-macro-character
            #\`
            (lambda (stream char)
-             (declare (ignore char))
+             (declare (cl:ignore char))
              (list bq (read stream t nil t)))
            nil
            rt)
           (set-macro-character
            #\,
            (lambda (stream char)
-             (declare (ignore char))
+             (declare (cl:ignore char))
              (let ((next (peek-char nil stream nil nil t)))
                (cond
                 ((and next (char= next #\@))
@@ -213,40 +373,123 @@
         (set-macro-character
          #\"
          (lambda (stream char)
-           (declare (ignore char))
-           (with-output-to-string (out)
-             (loop
-               for ch = (read-char stream nil nil t) do
-                 (when (null ch)
-                   (cl:error "EOF while reading string"))
-                 (cond
-                  ((char= ch #\")
-                   (return))
-                  ((char= ch #\\)
-                   (let ((e (read-char stream nil nil t)))
-                     (when (null e)
-                       (cl:error "EOF in string escape"))
-                     (case e
-                       (#\n (write-char #\Newline out))
-                       (#\t (write-char #\Tab out))
-                       (#\r (write-char #\Return out))
-                       (#\b (write-char (code-char 8) out))
-                       (#\f (write-char (code-char 12) out))
-                       (#\a (write-char (code-char 7) out))
-                       (#\e (write-char (code-char 27) out))
-                       (#\\ (write-char #\\ out))
-                       (#\" (write-char #\" out))
-                       (#\Newline nil) ; line continuation
-                       (otherwise (write-char e out)))))
-                  (t
-                   (write-char ch out))))))
+           (declare (cl:ignore char))
+           ;; Build an Emacs-style string. Default is unibyte; encountering any
+           ;; non-ASCII literal or Unicode escape upgrades to multibyte.
+           (let ((mode :unibyte)
+                 (ub (make-array 0 :element-type '(unsigned-byte 8) :adjustable t :fill-pointer 0))
+                 (codes (make-array 0 :element-type 'integer :adjustable t :fill-pointer 0)))
+             (labels ((ensure-multibyte ()
+                        (when (eq mode :unibyte)
+                          (setf mode :multibyte)
+                          (dotimes (i (length ub))
+                            (let ((b (aref ub i)))
+                              (vector-push-extend (if (< b 128) b (+ +raw-byte-base+ b)) codes)))
+                          (setf ub nil)))
+                      (push-byte (b)
+                        (unless (and (integerp b) (<= 0 b 255))
+                          (cl:error "Bad byte in string escape: ~S" b))
+                        (if (eq mode :unibyte)
+                            (vector-push-extend b ub)
+                            (vector-push-extend (if (< b 128) b (+ +raw-byte-base+ b)) codes)))
+                      (push-char (ch)
+                        (let ((cc (char-code ch)))
+                          (cond
+                           ((and (eq mode :unibyte) (< cc 128))
+                            (push-byte cc))
+                           (t
+                            (ensure-multibyte)
+                            (vector-push-extend cc codes)))))
+                      (read-hex ()
+                        (let ((digits nil))
+                          (loop for ch = (peek-char nil stream nil nil t)
+                                while (and ch (digit-char-p ch 16)) do
+                                  (push (read-char stream nil nil t) digits))
+                          (unless digits
+                            (cl:error "Missing hex digits in \\x escape"))
+                          (parse-integer (coerce (nreverse digits) 'string) :radix 16)))
+                      (read-fixed-hex (n)
+                        (let ((digits (cl:make-string n)))
+                          (dotimes (i n)
+                            (let ((ch (read-char stream nil nil t)))
+                              (when (null ch)
+                                (cl:error "EOF in Unicode escape"))
+                              (unless (digit-char-p ch 16)
+                                (cl:error "Bad hex digit in Unicode escape: ~S" ch))
+                              (setf (char digits i) ch)))
+                          (parse-integer digits :radix 16)))
+                      (read-octal (first-digit)
+                        (let ((digits (list first-digit)))
+                          (loop repeat 2
+                                for ch = (peek-char nil stream nil nil t)
+                                while (and ch (digit-char-p ch 8)) do
+                                  (push (read-char stream nil nil t) digits))
+                          (parse-integer (coerce (nreverse digits) 'string) :radix 8)))
+                      (finish ()
+                        (if (eq mode :unibyte)
+                            (let ((out (%make-unibyte-string (length ub))))
+                              (replace out ub)
+                              out)
+                            (let ((out (cl:make-string (length codes))))
+                              (dotimes (i (length codes))
+                                (setf (char out i) (%elisp-code->char (aref codes i))))
+                              out))))
+               (loop
+                 for ch = (read-char stream nil nil t) do
+                   (when (null ch)
+                     (cl:error "EOF while reading string"))
+                   (cond
+                    ((char= ch #\")
+                     (return (finish)))
+                    ((char= ch #\\)
+                     (let ((e (read-char stream nil nil t)))
+                       (when (null e)
+                         (cl:error "EOF in string escape"))
+                       (case e
+                         (#\n (push-byte (char-code #\Newline)))
+                         (#\t (push-byte (char-code #\Tab)))
+                         (#\r (push-byte (char-code #\Return)))
+                         (#\b (push-byte 8))
+                         (#\f (push-byte 12))
+                         (#\a (push-byte 7))
+                         (#\e (push-byte 27))
+                         (#\\ (push-byte (char-code #\\)))
+                         (#\" (push-byte (char-code #\")))
+                         (#\Newline nil) ; line continuation
+                         (#\x
+                          (let ((v (read-hex)))
+                            (if (<= v 255)
+                                (push-byte v)
+                                (progn
+                                  (ensure-multibyte)
+                                  (vector-push-extend v codes)))))
+                         (#\u
+                          (ensure-multibyte)
+                          (vector-push-extend (read-fixed-hex 4) codes))
+                         (#\U
+                          (ensure-multibyte)
+                          (vector-push-extend (read-fixed-hex 8) codes))
+                         (otherwise
+                          (cond
+                           ((digit-char-p e 8)
+                            (let ((v (read-octal e)))
+                              (if (<= v 255)
+                                  (push-byte v)
+                                  (progn
+                                    (ensure-multibyte)
+                                    (vector-push-extend v codes)))))
+                           (t
+                            ;; Unknown escapes yield the escaped character.
+                            (push-char e)))))))
+                    (t
+                     (push-char ch)))))))
          nil
          rt)
         (set-dispatch-macro-character
          #\#
          #\'
          (lambda (stream sub-char arg)
-           (declare (ignore sub-char arg))
+           (declare (cl:ignore sub-char arg))
            (list (cl:intern "FUNCTION" (find-package "ELISP"))
                  (read stream t nil t)))
          rt)
@@ -254,13 +497,13 @@
          #\#
          #\(
          (lambda (stream sub-char arg)
-           (declare (ignore sub-char arg))
+           (declare (cl:ignore sub-char arg))
            ;; In Emacs Lisp, #("foo" 0 3 (a b)) is a string with text properties,
            ;; not a vector. Vectors are read via [...].
            (let* ((items (read-delimited-list #\) stream t))
                   (base (first items))
                   (rest (rest items)))
-             (unless (cl:stringp base)
+             (unless (stringp base)
                (cl:error "#(...) expects a string first element, got: ~S" base))
              (when (and rest (not (zerop (mod (length rest) 3))))
                (cl:error "#(...) property syntax expects triples: START END PLIST; got: ~S" items))
@@ -280,21 +523,21 @@
         (set-macro-character
          #\[
          (lambda (stream char)
-           (declare (ignore char))
+           (declare (cl:ignore char))
            (coerce (read-delimited-list #\] stream t) 'vector))
          nil
          rt)
         (set-macro-character
          #\]
          (lambda (stream char)
-           (declare (ignore stream char))
+           (declare (cl:ignore stream char))
            (cl:error "unexpected ]"))
          nil
          rt)
         (set-macro-character
          #\?
          (lambda (stream char)
-           (declare (ignore char))
+           (declare (cl:ignore char))
            (%read-elisp-char-literal stream))
          nil
          rt)
@@ -360,4 +603,65 @@
                             :cause e
                             :inventory-entry inv))))
             (when (and max-forms (>= form-index max-forms))
-              (return))))))))
+              (return))))
+        (%maybe-install-post-load-shims path)))))
+
+(cl:defvar *pp-to-string-orig* nil)
+(cl:defvar *pp-to-string-shim* nil)
+
+(cl:defun %pp--whitespace-only-line-p (s start end)
+  (and (< start end)
+       (loop for i from start below end
+             for ch = (char s i)
+             always (or (char= ch #\Space)
+                        (char= ch #\Tab)
+                        (char= ch #\Return)))))
+
+(cl:defun %pp--delete-whitespace-only-lines (s)
+  (unless (cl:stringp s)
+    (error "ELISP: expected CL string, got: ~S" (type-of s)))
+  (let ((len (length s)))
+    (with-output-to-string (out)
+      (let ((i 0))
+        (loop while (< i len) do
+          (let ((nl (position #\Newline s :start i)))
+            (cond
+             ((null nl)
+              (write-string s out :start i :end len)
+              (setf i len))
+             ((%pp--whitespace-only-line-p s i nl)
+              ;; Drop the whole whitespace-only line, including its newline.
+              (setf i (1+ nl)))
+             (t
+              ;; Keep the line (including its newline).
+              (write-string s out :start i :end (1+ nl))
+              (setf i (1+ nl))))))))))
+
+(cl:defun %install-pp-to-string-shim ()
+  "Wrap `pp-to-string' to match upstream output more closely.
+
+This is a temporary bring-up shim: our current `pp-fill' + indentation model
+can introduce whitespace-only lines.  Emacs's `pp-to-string' does not, and this
+causes upstream ERT's `ert--pp-with-indentation-and-newline' to fail."
+  (when (and (fboundp 'pp-to-string)
+             (not (and *pp-to-string-shim*
+                       (eq (fdefinition 'pp-to-string) *pp-to-string-shim*))))
+    (setf *pp-to-string-orig* (fdefinition 'pp-to-string))
+    (setf *pp-to-string-shim*
+          (lambda (object &optional pp-function)
+            (let ((s (funcall *pp-to-string-orig* object pp-function)))
+              (cond
+               ((cl:stringp s) (%pp--delete-whitespace-only-lines s))
+               (t s)))))
+    (setf (fdefinition 'pp-to-string) *pp-to-string-shim*))
+  nil)
+
+(cl:defun %maybe-install-post-load-shims (path)
+  (let* ((p (and path (pathname path)))
+         (name (and p (pathname-name p)))
+         (type (and p (pathname-type p))))
+    (when (and (stringp name) (stringp type)
+               (string= (string-downcase name) "pp")
+               (string= (string-downcase type) "el"))
+      (%install-pp-to-string-shim)))
+  nil)

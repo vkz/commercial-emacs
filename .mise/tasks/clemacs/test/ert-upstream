@@ -106,6 +106,7 @@ cd "${deps_dir}"
   --eval '(asdf:load-system :clemacs)' \
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/backquote.el\")" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/subr.el\" :max-forms ${bootstrap_eval})" \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/pp.el\")" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert.el\" :max-forms ${ert_eval})" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-tests.el\" :max-forms ${tests_eval})" \
   --eval "(uiop:quit (clemacs:run-upstream-ert-tests :names ${names_lisp} :known-fail ${known_fail_lisp}))"

@@ -69,7 +69,7 @@ Return (values PATH MAX-FORMS), where MAX-FORMS is one of:
     (when (and skip-file (probe-file skip-file))
       (dolist (line (%read-noncomment-lines skip-file))
         (multiple-value-bind (path _max) (%parse-manifest-entry line)
-          (declare (ignore _max))
+          (declare (cl:ignore _max))
           (setf (gethash path out) t))))
     out))
 

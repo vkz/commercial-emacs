@@ -14,7 +14,7 @@
 lisp/emacs-lisp/debug-early.el
 lisp/emacs-lisp/byte-run.el 1
 lisp/emacs-lisp/backquote.el
-lisp/subr.el 340
+lisp/subr.el -
 lisp/keymap.el 1
 lisp/version.el 2
 

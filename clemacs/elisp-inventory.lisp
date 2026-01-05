@@ -7,8 +7,8 @@
   source-path
   source-line)
 
-(defvar *elisp-inventory-cache* nil)
-(defvar *elisp-inventory-tsv* nil)
+(cl:defvar *elisp-inventory-cache* nil)
+(cl:defvar *elisp-inventory-tsv* nil)
 
 (cl:defun %parent-directory (dir)
   (let* ((dir (uiop:ensure-directory-pathname dir))
@@ -41,7 +41,7 @@
     (let ((cache (make-hash-table :test 'cl:equal)))
       (with-open-file (in tsv :external-format :utf-8)
         (let ((header (read-line in nil nil)))
-          (declare (ignore header))
+          (declare (cl:ignore header))
           (loop for line = (read-line in nil nil)
                 while line do
                   (when (and (> (length line) 0)
@@ -66,7 +66,12 @@
 (cl:defun inventory-lookup (name &key (start-dir *default-pathname-defaults*))
   (let ((cache (%ensure-elisp-inventory-loaded :start-dir start-dir)))
     (when cache
-      (gethash (string-downcase name) cache))))
+      (let* ((name
+               (etypecase name
+                 (string name)
+                 (unibyte-string (%elisp-string->cl-string name))
+                 (symbol (%elisp-string->cl-string (symbol-name name))))))
+        (gethash (string-downcase name) cache)))))
 
 (cl:defun inventory-entry-string (entry)
   (when entry

@@ -12,18 +12,30 @@ upstream Emacs Lisp, and how we expect migration to work.
 - When in doubt, prefer **explicit, documentable semantics** over historical
   quirks, but keep the surface close enough that porting is straightforward.
 
-## Supported today (2026-01-03)
+## Breadcrumbs (required)
+
+Bring-up work creates lots of one-off “discoveries” that a future ELisp→CL
+compiler/codegen pass will need. To keep this from rotting:
+
+- Any time we implement or intentionally diverge on a semantic edge case,
+  add a microtest to `clemacs/contract/semantics.microtests.sexp`.
+- If a microtest is intentionally not Emacs-faithful, document the why as a
+  dated entry in “Semantic decisions (dated)” below.
+- Keep known failures explicit and dated in `clemacs/contract/*known-fail*`.
+
+## Supported today (2026-01-05)
 
 Reader / syntax
 - `[]` vectors read as CL vectors.
-- `?x` reads as an integer character code (with a small set of escapes).
+- `?x` reads as an integer character code, including modifier forms like
+  `?\C-\M-a`.
+- String literals with text properties: `#("foo" 0 3 (a b))`.
 
 Compatibility shims (ELISP package)
-- `plist-get`, `plist-put`.
-- `setq`:
-  - preserves lexical bindings inside `let`,
-  - otherwise assigns via `(setf (symbol-value 'x) ...)` to model global `setq`
-    and avoid CL undefined-variable warnings.
+- Value + function cells (so `fset`/`symbol-function` can store non-CL-callables).
+- Enough of `pcase`/backquote for early bootstrap + upstream ERT bring-up.
+- `string-to-unibyte` / `string-to-multibyte` (incremental unibyte split).
+- Minimal match-data/regexp plumbing used by early startup and ERT.
 
 Runtime
 - A minimal TTY loop exists (`clemacs:tty-main`) with:
@@ -33,10 +45,70 @@ Runtime
 ## Known differences / missing pieces
 
 - This is not a full Emacs Lisp implementation:
-  - no `defun`/`defvar`/dynamic binding model yet,
-  - no `symbol-function`/function cells yet,
-  - no macroexpander/bytecode compatibility.
+  - most of the shipped `lisp/` tree is not yet loaded in clemacs at startup
+    (see `clemacs/contract/startup.*.files`),
+  - upstream ERT is partially enabled (see `clemacs/contract/ert-upstream.tests`),
+  - Emacs bytecode (`.elc`) compatibility is intentionally not a priority.
 - Data model is CL-native; there is no `Lisp_Object` identity to preserve.
+
+## Semantic decisions (dated)
+
+- 2026-01-05: Incremental unibyte split for strings
+  - Decision: treat CL strings as “multibyte”, introduce a distinct unibyte
+    representation, and implement only the conversions/printers needed for
+    early startup and ERT.
+  - Rationale: preserves “run shipped ELisp unchanged” goals while keeping the
+    implementation incremental (vs reimplementing Emacs strings up-front).
+  - Test breadcrumbs: `clemacs/contract/semantics.microtests.sexp` (string cases).
+
+- 2026-01-05: SBCL-backed backtrace subset for upstream ERT
+  - Decision: implement `backtrace-get-frames` by capturing the host SBCL call
+    stack and converting frames into a simple “(FUN . ARGS)” list; implement
+    `backtrace-to-string` to render those frames in an Emacs-ish way.
+    - Implementation note: `backtrace-get-frames` may synthesize an `ert-fail`
+      frame from the corresponding `signal` frame, since SBCL can omit tail-call
+      frames; it also drops most frame args to avoid huge/cyclic prints.
+  - Rationale: upstream `ert-test-run-tests-batch-expensive` expects the batch
+    backtrace output to include an `ert-fail(...)` frame with arguments.
+  - Test breadcrumbs: `clemacs/contract/semantics.microtests.sexp` (backtrace-to-string).
+
+- 2026-01-05: Defer full `oclosure`/`nadvice` bring-up (advice system)
+  - Decision: load only the early portion of `lisp/emacs-lisp/oclosure.el`
+    (enough to parse/define its type stubs), and temporarily skip
+    `lisp/emacs-lisp/nadvice.el` in clemacs startup manifests.
+  - Rationale: upstream `oclosure.el` assumes Emacs's closure/bytecode
+    substrate (`closurep`, `make-closure`, `make-interpreted-closure`,
+    `byte-code-function-p`, and the interpreted-closure vector layout). Those
+    are not modeled in clemacs yet, so enabling `nadvice.el` would force an
+    early detour into “Emacs closure emulation” rather than the CL-first
+    runtime we ultimately want.
+  - Breadcrumbs:
+    - Skip entry: `clemacs/contract/lisp.allowed-skip.files`.
+    - Checkpoints: `clemacs/contract/startup.*.files` (`oclosure.el` form limit).
+
+## Compiler/codegen notes (for later)
+
+These are constraints the eventual ELisp→CL compiler must preserve; if a new
+compat shim changes any of these, add a microtest and update this section.
+
+- Don’t compile “to Emacs bytecode”: compile (expanded) ELisp to CL forms that
+  call the ELisp runtime helpers, then let SBCL compile.
+- Preserve ELisp function/value cell behavior (`fset` can store non-callables;
+  `funcall` resolves symbols/lambdas via ELisp rules).
+- Preserve local function bindings for `#'` / `(function F)` inside `labels` /
+  `flet` / `cl-labels`-style constructs: a symbol designator alone can’t refer
+  to a local function in host CL, so codegen must emit a host function object
+  when a local function binding exists (see microtest:
+  `clemacs/contract/semantics.microtests.sexp`).
+- `macroexpand-all` must treat ELisp special operators as non-macros even when
+  bootstrapped as CL macros (notably `setq` and `function`), otherwise deep
+  macroexpansion can rewrite code in the wrong host lexical environment (ERT
+  nested `should` is a canary here).
+- Preserve dynamic binding + special variable behavior for `defvar`/`defcustom`
+  and non-local exits (`catch`/`throw`, `condition-case`).
+- Preserve string byte/char semantics (unibyte vs multibyte) and match-data.
+- Keep function names/arguments visible to `backtrace-get-frames` so ERT batch
+  output can include `ert-fail(...)` frames.
 
 ## Contract gate (clemacs)
 

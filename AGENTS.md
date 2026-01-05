@@ -64,6 +64,32 @@ out any issues encountered and propose at least one concrete fix path:
 If a tool/task will materially shorten the current work *and* improve future
 iterations, implement it immediately (prefer a `mise` file task).
 
+## Breadcrumb discipline (required for clemacs)
+
+Interpreter-first bring-up is intentionally temporary: the long-term goal is to
+compile ELisp to CL (or a CL-ish IR) and let SBCL compile it. That means we
+must not “lose” the semantic discoveries we make while bootstrapping.
+
+When you change ELisp semantics, compatibility shims, or loader behavior:
+
+- Add a focused microtest to `clemacs/contract/semantics.microtests.sexp`.
+  - Prefer `:emacs :match` tests when we aim to be Emacs-faithful.
+  - If a test is intentionally not Emacs-faithful, set `:emacs nil` and add a
+    dated rationale to `plans/clemacs-compat.md` (“Semantic decisions”).
+- If the discovery constrains the eventual ELisp→CL compiler/codegen, update
+  `plans/clemacs-compat.md` (“Compiler/codegen notes”) in the same patch.
+- If the change affects what “startup” means in clemacs, update the relevant
+  manifest(s) under `clemacs/contract/startup.*.files` (and keep growth
+  monotonic: add new entries or advance checkpoints; don’t delete to “get green”).
+- If the change affects upstream ERT bring-up status, update:
+  - `clemacs/contract/ert-upstream.tests` (must-pass list; monotonic growth)
+  - `clemacs/contract/ert-upstream.known-fail.tests` (dated reasons; XPASS is a gate failure)
+- Keep contract manifests monotonic (prefer adding new entries; don’t delete to
+  “get green”).
+
+These breadcrumbs must be updated in the same patch as the code change; don’t
+leave the repo in a state where documentation/tests are knowingly stale.
+
 ## Workflows (use mise)
 
 All project tasks should be run via `mise` (prefer `mise run ...`).

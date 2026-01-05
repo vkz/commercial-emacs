@@ -52,12 +52,20 @@ This is an incremental bring-up gate: we run named tests via upstream
     (error "Upstream ERT is not loaded (missing ELISP::ERT-TEST-PASSED-P)"))
 
   (let ((debugp (and (uiop:getenv "CLEMACS_ERT_DEBUG") t))
+        (timeout-secs
+          (let ((s (uiop:getenv "CLEMACS_ERT_TEST_TIMEOUT_SECS")))
+            (cond
+             ((null s) 30)
+             ((string= s "") 30)
+             (t (parse-integer s)))))
         (total 0)
         (failed 0)
         (xfail 0)
         (xpass 0))
     (dolist (name names)
       (incf total)
+      (format stream "RUN  ~A~%" name)
+      (finish-output stream)
       (handler-case
           (handler-bind
               ((error
@@ -68,7 +76,63 @@ This is an incremental bring-up gate: we run named tests via upstream
                      (sb-debug:print-backtrace :stream stream :count 50))
                    nil)))
             (let* ((test (%upstream-ert-test name))
-                   (result (funcall 'elisp::ert-run-test test))
+                   (result
+                     #+sbcl
+                     (if (and (integerp timeout-secs) (plusp timeout-secs))
+                         (let* ((values nil)
+                                (err nil)
+                                (thr
+                                  (sb-thread:make-thread
+                                   (lambda ()
+                                     (handler-case
+                                         (setf values (multiple-value-list
+                                                       (funcall 'elisp::ert-run-test test)))
+                                       (error (e) (setf err e)))))))
+                           (multiple-value-bind (default why)
+                               (sb-thread:join-thread thr :timeout timeout-secs :default :timeout)
+                             (cond
+                              ((eq why :timeout)
+                               (format stream "TIMEOUT ~A (~Ds)~%" name timeout-secs)
+                               (finish-output stream)
+                               (ignore-errors
+                                (sb-thread:interrupt-thread
+                                 thr
+                                 (lambda ()
+                                   (format stream "      backtrace (timeout):~%")
+                                    (ignore-errors
+                                     (let* ((buf elisp::*current-buffer*)
+                                            (txt (and (typep buf 'elisp::elisp-buffer)
+                                                      (elisp::elisp-buffer-text buf)))
+                                            (pt (and (typep buf 'elisp::elisp-buffer)
+                                                     (elisp::elisp-buffer-point buf)))
+                                            (nm (and (typep buf 'elisp::elisp-buffer)
+                                                     (elisp::elisp-buffer-name buf))))
+                                      (format stream "      buffer: ~S point=~S len=~S edits=~S~%"
+                                              (ignore-errors (elisp::%elisp-string->cl-string nm))
+                                              pt
+                                              (and (stringp txt) (length txt))
+                                              (and (typep buf 'elisp::elisp-buffer)
+                                                   (fill-pointer (elisp::elisp-buffer-marker-edits buf))))
+                                      (when (and (stringp txt) (integerp pt))
+                                        (let* ((idx (max 0 (min (length txt) (1- pt))))
+                                               (a (max 0 (- idx 80)))
+                                               (b (min (length txt) (+ idx 80))))
+                                          (format stream "      around point: ~S~%"
+                                                  (substitute #\Space #\Newline (subseq txt a b)))))))
+                                    (sb-debug:print-backtrace :stream stream :count 80)
+                                    (finish-output stream))))
+                               (sleep 0.05)
+                               (ignore-errors (sb-thread:terminate-thread thr))
+                               (error "Timed out after ~D seconds" timeout-secs))
+                              ((eq why :abort)
+                               (error "Test thread aborted: ~S" default))
+                              (err
+                               (error err))
+                              (t
+                               (values-list values)))))
+                         (funcall 'elisp::ert-run-test test))
+                     #-sbcl
+                     (funcall 'elisp::ert-run-test test))
                    (ok (funcall 'elisp::ert-test-passed-p result))
                    (expected-fail (member name known-fail :test #'string=)))
               (cond

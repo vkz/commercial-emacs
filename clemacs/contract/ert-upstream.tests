@@ -5,12 +5,19 @@
 ert-test-body-runs
 ert-test-abbreviate-string
 ert-test-deftest
+ert-test-record-backtrace
 ert-test-nested-test-body-runs
 ert-test-pass
 ert-test-fail
+ert-test-fail-debug-with-debugger-1
+ert-test-fail-debug-with-debugger-2
+ert-test-fail-debug-nested-with-debugger
 ert-test-error
 ert-test-get-explainer
 ert-test-parse-keys-and-body
+ert-test-run-tests-batch
+ert-test-run-tests-batch-expensive
+ert-test-run-tests-interactively
 ert-test-plist-difference-explanation
 ert-test-should
 ert-test-should-not
@@ -22,6 +29,7 @@ ert-test-should-error-argument
 ert-test-should-error-macroexpansion
 ert-test-skip-when
 ert-test-skip-unless
+ert-test-should-failure-debugging
 ert-test-deftest-lexical-binding-t
 ert-test-special-operator-p
 ert-test-list-of-should-forms

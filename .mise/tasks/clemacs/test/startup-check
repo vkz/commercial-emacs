@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Load the clemacs startup manifest (check)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--limit <n>" help="Stop after N manifest entries (0 = no limit)" default="0"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}"
+
+export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
+export XDG_CONFIG_HOME="${project_root}/${build_dir}/xdg-config"
+export XDG_DATA_HOME="${project_root}/${build_dir}/xdg-data"
+
+home_dir="${project_root}/${build_dir}/home"
+mkdir -p "${home_dir}"
+export HOME="${home_dir}"
+
+usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+sbcl_dynamic_space="${CLEMACS_SBCL_DYNAMIC_SPACE_SIZE:-4096}"
+
+limit="${usage_limit}"
+limit_eval="nil"
+if [[ "${limit}" != "0" ]]; then
+  limit_eval="${limit}"
+fi
+
+manifest="${project_root}/clemacs/contract/startup.check.files"
+skip_file="${project_root}/clemacs/contract/lisp.allowed-skip.files"
+
+cd "${deps_dir}"
+"${qlot_bin}" exec sbcl \
+  --dynamic-space-size "${sbcl_dynamic_space}" \
+  --noinform \
+  --no-sysinit \
+  --no-userinit \
+  --non-interactive \
+  --disable-debugger \
+  --eval '(require :asdf)' \
+  --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
+  --eval '(asdf:load-system :clemacs)' \
+  --eval "(uiop:quit (elisp:load-elisp-manifest :project-root #p\"${project_root}/\" :manifest #p\"${manifest}\" :skip-file #p\"${skip_file}\" :limit ${limit_eval}))"
+
+echo "clemacs startup (check): ok"

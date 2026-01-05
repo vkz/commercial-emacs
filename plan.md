@@ -617,8 +617,7 @@ Status (TODO, 2026-01-04)
   - `mise run clemacs:report:ert-upstream-list` writes `build/clemacs/reports/ert-upstream-tests.txt`.
 - DONE (2026-01-04): Grow the upstream ERT gate list monotonically:
   - expand `clemacs/contract/ert-upstream.tests` to 45 tests,
-  - introduce `clemacs/contract/ert-upstream.known-fail.tests` entries for the then-current failing tests
-    (dated reasons; started at 6).
+  - introduce `clemacs/contract/ert-upstream.known-fail.tests` as the one place for dated XFAIL reasons (XPASS is a gate failure).
 - DONE (2026-01-03): Make upstream ERT's `should-error` semantics runnable:
   - seed C-defined error hierarchy properties (at least `error`, `arith-error`, `domain-error`, `singularity-error`),
   - implement `cl-intersection` (used by `ert--should-error-handle-error`).
@@ -630,7 +629,7 @@ Status (TODO, 2026-01-04)
 - DONE (2026-01-04): Grow upstream ERT coverage:
   - bump `clemacs/contract/ert-tests.maxforms` to 400 (no change in registered test count; still 55 at this checkpoint),
   - expand `clemacs/contract/ert-upstream.tests` to 47 tests by adding `ert-test-messages` and `ert-test-running-tests`,
-  - keep `clemacs/contract/ert-upstream.known-fail.tests` explicit (XPASS is a gate failure; now down to 2 as of 2026-01-04).
+  - keep `clemacs/contract/ert-upstream.known-fail.tests` explicit (XPASS is a gate failure; now 0 as of 2026-01-05).
 - DONE (2026-01-04): Start modeling string text properties well enough for ERT explainers:
   - add ELisp reader support for `#("foo" 0 3 (a b))` (string literal with text properties),
   - add minimal `propertize`, `text-properties-at`, `substring-no-properties`, `equal-including-properties`,
@@ -643,7 +642,11 @@ Status (TODO, 2026-01-04)
 - DONE (2026-01-04): Advance interactive ERT results printing bring-up:
   - implement minimal `ewoc-*` and `insert-text-button` shims plus time helpers (`time-add`, `time-subtract`, `time-less-p`),
   - add `make-string` ELisp wrapper and `cl-check-type`/`cl-typep` shims,
-  - `ert--pp-with-indentation-and-newline` now fails only on missing `pp`.
+- DONE (2026-01-05): Fix `ert-test-explain-equal-strings` by introducing an explicit unibyte string representation
+  and implementing `string-to-unibyte` / `string-to-multibyte` conversions.
+- DONE (2026-01-05): Keep the upstream ERT gate green (0 XFAIL):
+  - load `pp.el` in `clemacs:test:ert-upstream`,
+  - implement SBCL-backed `backtrace-to-string` so `ert-test-run-tests-batch-expensive` can pass.
 - TODO: Continue expanding upstream ERT coverage (either more tests from `ert-tests.el` or additional upstream ERT test files),
   keeping the must-pass list monotonic and `known-fail` dated.
 

@@ -3,6 +3,12 @@
 (fiveam:def-suite clemacs-smoke)
 (fiveam:in-suite clemacs-smoke)
 
+(defun %project-root ()
+  (uiop:ensure-directory-pathname
+   (or (uiop:getenv "MISE_PROJECT_ROOT")
+       (uiop:pathname-parent-directory-pathname
+        (asdf:system-source-directory :clemacs)))))
+
 (defun %maybe-emacs-prin1 (expr)
   (handler-case
       (multiple-value-bind (out err code)
@@ -21,7 +27,7 @@
 (defun %clemacs-prin1 (value)
   (labels ((p1 (v)
              (cond
-              ((vectorp v)
+              ((and (vectorp v) (not (elisp::stringp v)))
                (with-output-to-string (s)
                  (write-char #\[ s)
                  (dotimes (i (length v))
@@ -29,17 +35,14 @@
                    (write-string (p1 (aref v i)) s))
                  (write-char #\] s)))
               (t
-               (let ((*package* (find-package "ELISP"))
-                     (*print-case* :downcase)
-                     (*print-pretty* nil)
-                     (*print-escape* t))
-                 (prin1-to-string v))))))
+               (elisp::%elisp-string->cl-string
+                (elisp:prin1-to-string v))))))
     (p1 value)))
 
 (defun %elisp-eval-1 (string)
   (let ((*package* (find-package "ELISP"))
         (*readtable* (elisp::%ensure-elisp-readtable)))
-    (cl:eval (read-from-string string))))
+    (elisp:eval (read-from-string string))))
 
 (defun %elisp-read-1 (string)
   (let ((*package* (find-package "ELISP"))
@@ -125,10 +128,7 @@
 
 (fiveam:test elisp-backquote-vectors
   (let* ((project-root
-           (uiop:ensure-directory-pathname
-            (or (uiop:getenv "MISE_PROJECT_ROOT")
-                (uiop:pathname-parent-directory-pathname
-                 (asdf:system-source-directory :clemacs)))))
+           (%project-root))
          (backquote-el (merge-pathnames #p"lisp/emacs-lisp/backquote.el" project-root)))
     (unless (fboundp 'elisp::backquote)
       (elisp::load-elisp-file backquote-el))
@@ -144,6 +144,33 @@
           (%elisp-eval-1
            "(let ((states '((a t 1) (b nil 2))) (out nil)) (pcase-dolist (`(,v ,l ,val) states) (setq out (cons v out))) out)")))
     (fiveam:is (string= (%clemacs-prin1 value) "(b a)"))))
+
+(defun %read-semantics-microtests (&key (project-root (%project-root)))
+  (let ((path (merge-pathnames #p"clemacs/contract/semantics.microtests.sexp"
+                               project-root)))
+    (with-open-file (in path :direction :input :external-format :utf-8)
+      (read in))))
+
+(fiveam:test elisp-semantics-microtests
+  (dolist (test (%read-semantics-microtests))
+    (let* ((name (getf test :name))
+           (expr (getf test :expr))
+           (expected (getf test :expected))
+           (emacs (getf test :emacs)))
+      (unless (and (stringp name) (stringp expr) (stringp expected))
+        (error "Bad semantics microtest entry: ~S" test))
+      (let* ((value (%elisp-eval-1 expr))
+             (clemacs-out (%clemacs-prin1 value)))
+        (fiveam:is (string= clemacs-out expected)
+                   "~A: expected ~S, got ~S for expr: ~A"
+                   name expected clemacs-out expr)
+        (when (eql emacs :match)
+          (let ((emacs-out (%maybe-emacs-prin1 expr)))
+            (if emacs-out
+                (fiveam:is (string= emacs-out clemacs-out)
+                           "~A: clemacs != emacs: ~S vs ~S for expr: ~A"
+                           name clemacs-out emacs-out expr)
+                (fiveam:skip "emacs not on PATH"))))))))
 
 (defun run-smoke (&key (stream *standard-output*))
   (let ((fiveam:*test-dribble* stream))

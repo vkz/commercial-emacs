@@ -29,20 +29,22 @@ lisp/window.el 10
 lisp/files.el 10
 
 # pdump: macroexp, pcase, cus-face, faces, regexp-opt, rx.
-lisp/emacs-lisp/macroexp.el 10
+lisp/emacs-lisp/macroexp.el 30
 lisp/emacs-lisp/pcase.el 200
 lisp/cus-face.el 10
 lisp/faces.el 10
 lisp/emacs-lisp/regexp-opt.el 10
 lisp/emacs-lisp/rx.el 10
+lisp/emacs-lisp/pp.el 50
+lisp/ldefs-boot.el 50
 
 # pdump: button, gv, cl-lib, cl-macs, cl-preloaded, oclosure, cl-seq, seq.
 lisp/button.el 10
 lisp/emacs-lisp/gv.el 10
 lisp/emacs-lisp/cl-lib.el 10
 lisp/emacs-lisp/cl-macs.el 10
-lisp/emacs-lisp/cl-preloaded.el 19
-lisp/emacs-lisp/oclosure.el 3
+lisp/emacs-lisp/cl-preloaded.el 60
+lisp/emacs-lisp/oclosure.el 15
 lisp/emacs-lisp/cl-seq.el 10
 lisp/emacs-lisp/seq.el 10
 
@@ -52,3 +54,73 @@ lisp/abbrev.el 10
 lisp/help.el 10
 lisp/international/mule-util.el 10
 lisp/case-table.el 10
+
+# pdump: jka-cmpr-hook.
+lisp/jka-cmpr-hook.el 20
+
+# pdump: epa-hook.
+lisp/epa-hook.el 10
+
+# pdump: mule-cmds.
+lisp/international/mule-cmds.el 6
+
+# pdump: charprop (Unicode char-code properties).
+lisp/international/charprop.el -
+
+# pdump: characters.
+lisp/international/characters.el 20
+
+# pdump: composite, indent.
+lisp/composite.el 1
+lisp/indent.el 1
+
+# pdump: cl-generic.
+lisp/emacs-lisp/cl-generic.el 1
+
+# pdump: simple.
+lisp/simple.el 1
+
+# pdump: nadvice.
+lisp/emacs-lisp/nadvice.el 1
+
+# pdump: minibuffer.
+lisp/minibuffer.el 1
+
+# pdump: frame.
+lisp/frame.el 1
+
+# pdump: startup.
+lisp/startup.el 1
+
+# pdump: tty-colors.
+lisp/term/tty-colors.el 1
+
+# pdump: font-core.
+lisp/font-core.el 1
+
+# pdump: syntax.
+lisp/emacs-lisp/syntax.el 1
+
+# pdump: font-lock.
+lisp/font-lock.el 1
+
+# pdump: jit-lock, mouse, timer, isearch.
+lisp/jit-lock.el 1
+lisp/mouse.el 1
+lisp/emacs-lisp/timer.el 1
+lisp/isearch.el 1
+
+# pdump: easymenu, rfn-eshadow, menu-bar, tab-bar.
+lisp/emacs-lisp/easymenu.el 1
+lisp/rfn-eshadow.el 1
+lisp/menu-bar.el 1
+lisp/tab-bar.el 1
+
+# pdump: lisp, page, register, paragraphs, prog-mode, lisp-mode, text-mode.
+lisp/emacs-lisp/lisp.el 1
+lisp/textmodes/page.el 1
+lisp/register.el 1
+lisp/textmodes/paragraphs.el 1
+lisp/progmodes/prog-mode.el 1
+lisp/emacs-lisp/lisp-mode.el 1
+lisp/textmodes/text-mode.el 1
