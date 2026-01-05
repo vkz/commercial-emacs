@@ -148,69 +148,18 @@ alongside the baseline C-hosted Emacs build.
   - Report: `mise run clemacs:report:progress` (writes `build/clemacs/reports/progress.md`)
   - Compatibility report: `plans/clemacs-compat.md`
 
-### clemacs bring-up: iteration accelerators (use these)
+### clemacs bring-up: iteration accelerators
 
-The fastest “port loop” is:
+Canonical bring-up loop, debugging flags, and \"first failure\" interpretation live in
+`plans/agent-playbook.md` (keep this file focused on invariants).
 
-1) Keep a saved SBCL core warm (reduces load/compile churn)
-   - Build/refresh: `mise run clemacs:core:build`
-   - Most clemacs loader/test tasks will automatically use the core when present.
-   - Control:
-     - `CLEMACS_USE_CORE=0` forces cold SBCL runs (useful when debugging core staleness).
+Short version:
+- Gate: `mise run clemacs:test:contract -- --level elisp-core`
+- If it fails: `mise run clemacs:report:first-failure -- --mode startup-check --debug`
 
-2) Run the constant gate and capture a progress snapshot
-   - Constant loop: `mise run clemacs:test:contract -- --level elisp-core`
-   - Snapshot: `mise run clemacs:report:progress`
-   - Success stamps (useful across sessions/agents) are written to:
-     - `build/clemacs/stamps/clemacs-contract-smoke.ok`
-     - `build/clemacs/stamps/clemacs-contract-elisp-core.ok`
-     - `build/clemacs/stamps/clemacs-contract-check.ok`
+### Repo-local Codex skills
 
-3) When a load fails: extract the signal, don’t eyeball the wall of output
-   - Capture + summarize the first loader error:
-     - `mise run clemacs:report:first-failure -- --mode startup-check`
-     - `mise run clemacs:report:first-failure -- --mode ert-upstream`
-   - The parsed report is written to:
-     - `build/clemacs/reports/first-failure.md` (latest)
-     - `build/clemacs/reports/first-failure.json` (latest)
-     - `build/clemacs/reports/first-failure.<mode>.md` (mode-specific)
-     - `build/clemacs/reports/first-failure.<mode>.json` (mode-specific)
-   - How to interpret it:
-     - “Path” tells you which file to checkpoint or port next.
-     - “Form index” is the *exact* failing top-level form number.
-     - “Recommended checkpoint (max-forms)” is the safe value to put in
-       `clemacs/contract/startup.*.files` while you implement the missing piece.
-     - “Inventory” maps undefined-function/unbound-variable failures to the C-defined
-       primitive entry (`inventory/c-elisp.tsv` source location).
-
-4) When adjusting a startup manifest checkpoint: bisect to a stable max-forms
-   - `mise run clemacs:bisect:file -- --file lisp/…/foo.el --manifest clemacs/contract/startup.check.files`
-   - This finds “max passing max-forms” for the target file *in manifest context* (loads
-     the manifest prefix first), and writes a report under `build/clemacs/reports/`.
-
-5) Reduce noise when iterating (optional)
-  - `CLEMACS_MUFFLE_STYLE_WARNINGS=1` suppresses SBCL `style-warning`/`compiler-note`
-    spam during cold runs (do not use this when you’re chasing a suspicious warning).
-  - `CLEMACS_LOAD_DEBUG_FILE=build/clemacs/tmp/load-debug.out` appends a host backtrace
-    for loader failures (useful when the failing form isn’t obviously the cause).
-
-### Repo-local Codex skills (use these)
-
-Repo-local skills live under `.codex/skills/` in this repo:
-
-- `clemacs-port-loop`: standard tight loop (gate → first failure → fix → breadcrumbs → repeat).
-- `clemacs-loader-debug`: interpret `elisp-load-error` and first-failure reports; bisect checkpoints.
-- `clemacs-ert-bringup`: expand `ert-upstream.tests` monotonically; manage known-fails/XPASS.
-
-When to use which
-- Adding/raising a startup checkpoint: `clemacs-port-loop`, then `clemacs-loader-debug` if it fails.
-- Implementing a missing primitive / inventory item: `clemacs-loader-debug` + breadcrumb rules.
-- Growing upstream ERT must-pass list: `clemacs-ert-bringup`.
-- Experimental ELisp loader bring-up:
-  - `mise run clemacs:load:bootstrap -- --limit 1` (loads the first entry in `clemacs/contract/bootstrap.files` up to `clemacs/contract/bootstrap.maxforms`)
-  - Gate: `mise run clemacs:test:load-bootstrap` (checkpointed loader)
-- Timing (iteration cost signal):
-  - `mise run clemacs:bench:cold`
+See `plans/agent-playbook.md` for when to use which.
 
 ### Canonical build flow (macOS TTY)
 

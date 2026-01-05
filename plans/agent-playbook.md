@@ -16,6 +16,14 @@ If it fails, run:
 mise run clemacs:report:first-failure -- --mode startup-check --debug
 ```
 
+## Repo-local agent skills (use these)
+
+Repo-local skills live under `.codex/skills/` in this repo. Use them as the default workflow:
+
+- `clemacs-port-loop`: when raising startup checkpoints / adding startup files (gate → first-failure → fix → breadcrumbs → repeat).
+- `clemacs-loader-debug`: when a loader failure needs interpretation (inventory mapping, checkpoint bisection, loader backtraces).
+- `clemacs-ert-bringup`: when expanding `clemacs/contract/ert-upstream.tests` (must-pass/known-fail monotonic protocol).
+
 ## Canonical port loop (tight iteration)
 
 1) Run the constant gate:

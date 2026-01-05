@@ -28,7 +28,7 @@ This file is for *ongoing* notes. The Step 0/1 historical notes are archived in
 - `lisp/loaddefs.el` is generated/ignored; avoid editing it. Regenerate via the
   normal build/autoload machinery if needed.
 
-## Next dev focus (prep for the SBCL-hosted engine rewrite)
+## Next dev focus (clemacs bring-up)
 
-- Add explicit inventory tooling for the C-defined ELisp surface area (see
-  `plan.md`).
+- Grow shipped ELisp loading and upstream ERT coverage under clemacs (see
+  `plan.md` and `plans/agent-playbook.md`).
