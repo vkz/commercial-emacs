@@ -112,7 +112,7 @@ lisp/font-lock.el 1
 # pdump: jit-lock, mouse, timer, isearch.
 lisp/jit-lock.el 1
 lisp/mouse.el 1
-lisp/fringe.el 1
+lisp/fringe.el -
 lisp/scroll-bar.el 1
 lisp/select.el 1
 lisp/emacs-lisp/timer.el 1
