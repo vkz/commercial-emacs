@@ -51,13 +51,16 @@ if not out_prefix:
 
 text = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
 
-header_re = re.compile(r"^ELisp load error in (.+) \\(form (\\d+)\\):$")
+# Some logs indent the condition report (e.g. under "Unhandled ELISP-LOAD-ERROR"),
+# so treat leading whitespace as insignificant for pattern matching.
+header_re = re.compile(r"^ELisp load error in (.+) \(form (\d+)\):$")
 inv_re = re.compile(r"^Inventory: (.+)$")
-inv_parse_re = re.compile(r"^(?P<kind>\\S+)\\s+(?P<lisp_name>.+)\\s+\\((?P<c_name>[^)]+)\\)\\s+@\\s+(?P<source_path>.+):(?P<source_line>\\d+)$")
+inv_parse_re = re.compile(r"^(?P<kind>\S+)\s+(?P<lisp_name>.+)\s+\((?P<c_name>[^)]+)\)\s+@\s+(?P<source_path>.+):(?P<source_line>\d+)$")
 
 block = None
 for i, line in enumerate(text):
-    m = header_re.match(line)
+    s = line.lstrip()
+    m = header_re.match(s)
     if not m:
         continue
     path = m.group(1).strip()
@@ -65,12 +68,12 @@ for i, line in enumerate(text):
     # Capture until next header or EOF.
     j = i + 1
     lines = []
-    while j < len(text) and not header_re.match(text[j]):
+    while j < len(text) and not header_re.match(text[j].lstrip()):
         lines.append(text[j])
         j += 1
     inv = None
     for l in lines:
-        im = inv_re.match(l)
+        im = inv_re.match(l.lstrip())
         if im:
             inv = im.group(1).strip()
             break
