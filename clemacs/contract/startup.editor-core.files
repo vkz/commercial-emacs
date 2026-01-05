@@ -118,7 +118,7 @@ lisp/menu-bar.el 1
 lisp/tab-bar.el 1
 
 # pdump: lisp, page, register, paragraphs, prog-mode, lisp-mode, text-mode.
-lisp/emacs-lisp/lisp.el 20
+lisp/emacs-lisp/lisp.el 21
 lisp/textmodes/page.el 50
 lisp/register.el 50
 lisp/textmodes/paragraphs.el 50
