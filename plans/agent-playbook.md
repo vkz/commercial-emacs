@@ -57,6 +57,8 @@ Repo-local skills live under `.codex/skills/` in this repo. Use them as the defa
    - **Inventory**: if present, points to the C-defined primitive symbol and its
      source location in `inventory/c-elisp.tsv`.
 
+- If the report says "No `elisp-load-error` found", still scan the Tail for an unhandled `ELISP-LOAD-ERROR` (line wrapping can evade the parser).
+
 Then choose one:
 
 - **Missing primitive / unbound variable**
