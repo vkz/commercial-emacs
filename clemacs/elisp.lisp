@@ -318,7 +318,9 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
                      (list 'function (rw arg))
                      x)))
               ;; ELisp IF allows multiple else forms; CL:IF does not.
-              ((and (consp x) (eq (car x) 'cl:if))
+              ;; Guard against non-expression lists like (IF INIT) in LET
+              ;; bindings when a variable name happens to be CL:IF.
+              ((and (consp x) (eq (car x) 'cl:if) (consp (cdr x)) (consp (cddr x)))
                (destructuring-bind (op test then &rest else) x
                  (declare (cl:ignore op))
                  (cond

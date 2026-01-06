@@ -45,7 +45,7 @@ lisp/emacs-lisp/gv.el 10
 lisp/emacs-lisp/cl-lib.el 10
 lisp/emacs-lisp/cl-macs.el 10
 lisp/emacs-lisp/cl-preloaded.el 60
-lisp/emacs-lisp/oclosure.el 15
+lisp/emacs-lisp/oclosure.el -
 lisp/emacs-lisp/cl-seq.el 10
 lisp/emacs-lisp/seq.el 10
 
@@ -83,7 +83,7 @@ lisp/indent.el -
 lisp/emacs-lisp/cl-generic.el 1
 
 # pdump: simple.
-lisp/simple.el 151
+lisp/simple.el 194
 
 # pdump: nadvice.
 lisp/emacs-lisp/nadvice.el 1

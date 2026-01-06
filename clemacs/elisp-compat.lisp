@@ -17,16 +17,6 @@
 (cl:defvar text-property-default-nonsticky nil)
 (cl:defvar comment-start-skip nil)
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  ;; Bring-up shim: `lisp/simple.el` installs generic methods specialized on the
-  ;; `accessor` type (defined later by `oclosure.el` upstream).  We currently
-  ;; load only a small prefix of `oclosure.el` during startup, so ensure the
-  ;; class exists early to avoid a hard load error.
-  (unless (cl:find-class 'accessor nil)
-    (cl:defclass accessor () ()))
-  (unless (cl:find-class 'cconv--interactive-helper nil)
-    (cl:defclass cconv--interactive-helper () ())))
-
 (cl:defmacro bound-and-true-p (var)
   "Bring-up subset of ELisp `bound-and-true-p'."
   `(and (cl:boundp ',var) ,var))

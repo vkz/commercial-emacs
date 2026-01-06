@@ -59,6 +59,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "rewrite-let-binding-if-variable"
+  :expr "(let ((if 1)) (if (numberp if) if 0))"
+  :expected "1"
+  :emacs :match)
+
  (:name "text-props-get-text-property-string-default-nil"
   :expr "(get-text-property 0 'foo \"abc\")"
   :expected "nil"

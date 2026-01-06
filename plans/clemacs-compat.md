@@ -86,6 +86,18 @@ Runtime
     - Skip entry: `clemacs/contract/lisp.allowed-skip.files`.
     - Checkpoints: `clemacs/contract/startup.*.files` (`oclosure.el` form limit).
 
+- 2026-01-06: Port `oclosure.el` as funcallable CLOS objects (SBCL-only)
+  - Decision: replace the early-load `oclosure.el` prefix with a clemacs-local
+    port that models the bring-up-needed oclosure types (`accessor` and
+    `cconv--interactive-helper`) as SBCL funcallable standard objects.
+  - Rationale: clemacs currently maps ELisp `cl-defmethod` to host CLOS
+    dispatch, so specializers need real CLOS classes; this approach unblocks
+    `lisp/simple.el` bring-up without reintroducing Emacs bytecode/closure
+    vector emulation.
+  - Breadcrumbs:
+    - Port: `clemacs/ported/lisp/emacs-lisp/oclosure.el`
+    - Startup checkpoints: `clemacs/contract/startup.*.files` (`oclosure.el`)
+
 ## Compiler/codegen notes (for later)
 
 These are constraints the eventual ELisp→CL compiler must preserve; if a new
