@@ -39,6 +39,7 @@ Repo-local skills live under `.codex/skills/` in this repo. Use them as the defa
 
 5) Re-run the same gate until green, then optionally:
    - `mise run clemacs:test:contract -- --level check` (upstream ERT bring-up must-pass list)
+   - `timeout -k 1s 2s mise run clemacs:tty:run` (quick TTY smoke; run in a real TTY, avoid output redirection)
 
 6) Write a progress snapshot:
    - `mise run clemacs:report:progress`
