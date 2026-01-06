@@ -497,4 +497,34 @@
   :expr "(minibufferp)"
   :expected "nil"
   :emacs :match)
+
+ (:name "keymaps-lookup-key-single-char"
+  :expr "(let ((m (make-sparse-keymap))) (define-key m \"a\" 'foo) (eq (lookup-key m \"a\") 'foo))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "keymaps-lookup-key-vector-sequence"
+  :expr "(let ((m (make-sparse-keymap))) (define-key m [24 97] 'bar) (eq (lookup-key m [24 97]) 'bar))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "keymaps-map-keymap-collect-keys"
+  :expr "(let ((m (make-sparse-keymap)) (ks nil)) (define-key m \"a\" 'foo) (define-key m \"b\" 'bar) (map-keymap (lambda (k _v) (push k ks)) m) (and (= (length ks) 2) (memq ?a ks) (memq ?b ks) t))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "overlays-basic-start-end"
+  :expr "(with-temp-buffer (insert \"abc\") (let ((ov (make-overlay 1 3))) (and (= (overlay-start ov) 1) (= (overlay-end ov) 3) (bufferp (overlay-buffer ov)) t)))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "overlays-put-get"
+  :expr "(with-temp-buffer (insert \"abc\") (let ((ov (make-overlay 1 2))) (overlay-put ov 'foo 7) (equal (overlay-get ov 'foo) 7)))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "overlays-delete-clears-buffer-and-start"
+  :expr "(with-temp-buffer (insert \"abc\") (let ((ov (make-overlay 1 2))) (delete-overlay ov) (and (null (overlay-buffer ov)) (null (overlay-start ov)))))"
+  :expected "t"
+  :emacs :match)
 )

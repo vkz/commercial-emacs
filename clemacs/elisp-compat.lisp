@@ -2816,6 +2816,7 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
 (defvar *global-map* nil)
 (cl:defvar special-mode-map (make-elisp-keymap))
 (defparameter minibuffer-local-map (make-elisp-keymap))
+(cl:defvar local-map nil)
 (defparameter find-function-space-re "")
 (cl:defvar find-function-regexp-alist nil)
 (defparameter buffer-file-name nil)
@@ -2984,7 +2985,8 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
   (markers #+sbcl (make-hash-table :test 'eq :weakness :key)
            #-sbcl (make-hash-table :test 'eq)
            :type hash-table)
-  (marker-edits (make-array 0 :adjustable t :fill-pointer 0) :type vector))
+  (marker-edits (make-array 0 :adjustable t :fill-pointer 0) :type vector)
+  (overlays nil))
 
 (defstruct elisp-marker
   (buffer nil)
@@ -3780,6 +3782,87 @@ Emacs clamps positions outside the buffer to the nearest valid position."
             (elisp-marker-edit-index marker) (%buffer-edit-index buf))
       (%buffer-register-marker buf marker))))
   marker)
+
+(defstruct elisp-overlay
+  (start-marker (make-elisp-marker))
+  (end-marker (make-elisp-marker))
+  (buffer nil)
+  (plist nil))
+
+(cl:defun overlayp (x)
+  (elisp-overlay-p x))
+
+(cl:defun overlay-buffer (overlay)
+  (unless (elisp-overlay-p overlay)
+    (error "ELISP:OVERLAY-BUFFER expected overlay, got: ~S" overlay))
+  (elisp-overlay-buffer overlay))
+
+(cl:defun overlay-start (overlay)
+  (unless (elisp-overlay-p overlay)
+    (error "ELISP:OVERLAY-START expected overlay, got: ~S" overlay))
+  (let ((m (elisp-overlay-start-marker overlay)))
+    (and (elisp-marker-p m) (marker-position m))))
+
+(cl:defun overlay-end (overlay)
+  (unless (elisp-overlay-p overlay)
+    (error "ELISP:OVERLAY-END expected overlay, got: ~S" overlay))
+  (let ((m (elisp-overlay-end-marker overlay)))
+    (and (elisp-marker-p m) (marker-position m))))
+
+(cl:defun overlay-properties (overlay)
+  (unless (elisp-overlay-p overlay)
+    (error "ELISP:OVERLAY-PROPERTIES expected overlay, got: ~S" overlay))
+  (elisp-overlay-plist overlay))
+
+(cl:defun overlay-put (overlay prop value)
+  (unless (elisp-overlay-p overlay)
+    (error "ELISP:OVERLAY-PUT expected overlay, got: ~S" overlay))
+  (setf (elisp-overlay-plist overlay)
+        (plist-put (elisp-overlay-plist overlay) prop value))
+  value)
+
+(cl:defun overlay-get (overlay prop)
+  (unless (elisp-overlay-p overlay)
+    (error "ELISP:OVERLAY-GET expected overlay, got: ~S" overlay))
+  (plist-get (elisp-overlay-plist overlay) prop))
+
+(cl:defun overlay-recenter (&rest _args)
+  "Bring-up stub for ELisp `overlay-recenter'."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun make-overlay (start end &optional buffer front-advance rear-advance)
+  "Bring-up subset of ELisp `make-overlay'."
+  (let* ((buf (or buffer *current-buffer*))
+         (a (%pos start))
+         (b (%pos end))
+         (min (min a b))
+         (max (max a b))
+         (m1 (make-marker))
+         (m2 (make-marker)))
+    (unless (elisp-buffer-p buf)
+      (error "ELISP:MAKE-OVERLAY expected buffer, got: ~S" buf))
+    (set-marker m1 min buf)
+    (setf (elisp-marker-insertion-type m1) (and front-advance t))
+    (set-marker m2 max buf)
+    (setf (elisp-marker-insertion-type m2) (and rear-advance t))
+    (let ((ov (make-elisp-overlay :start-marker m1 :end-marker m2 :buffer buf :plist nil)))
+      (setf (elisp-buffer-overlays buf) (cons ov (elisp-buffer-overlays buf)))
+      ov)))
+
+(cl:defun delete-overlay (overlay)
+  "Bring-up subset of ELisp `delete-overlay'."
+  (unless (elisp-overlay-p overlay)
+    (error "ELISP:DELETE-OVERLAY expected overlay, got: ~S" overlay))
+  (let ((buf (elisp-overlay-buffer overlay)))
+    (when (elisp-buffer-p buf)
+      (setf (elisp-buffer-overlays buf) (remove overlay (elisp-buffer-overlays buf) :test #'eq))))
+  (setf (elisp-overlay-buffer overlay) nil)
+  (let ((m (elisp-overlay-start-marker overlay)))
+    (when (elisp-marker-p m) (set-marker m nil)))
+  (let ((m (elisp-overlay-end-marker overlay)))
+    (when (elisp-marker-p m) (set-marker m nil)))
+  nil)
 
 (cl:defun %pos (x)
   (etypecase x
@@ -4708,6 +4791,14 @@ for upstream ERT's `ert--make-xrefs-region'."
   "Bring-up subset of ELisp `minibufferp' (no minibuffer)."
   (declare (cl:ignore _buffer))
   nil)
+
+(cl:defun delete-minibuffer-contents ()
+  "Bring-up stub for ELisp `delete-minibuffer-contents' (no minibuffer)."
+  (error "ELISP:DELETE-MINIBUFFER-CONTENTS not in minibuffer"))
+
+(cl:defun exit-minibuffer ()
+  "Bring-up stub for ELisp `exit-minibuffer' (no minibuffer)."
+  (error "ELISP:EXIT-MINIBUFFER not in minibuffer"))
 
 (cl:defun select-window (window &optional _norecord)
   "Bring-up subset of ELisp `select-window'."
@@ -5792,12 +5883,108 @@ Supports the common pattern of a self-referential closure (used by ERT)."
      ((consp keys) (emit keys))
      (t (%key-event-description keys)))))
 
+(cl:defun %normalize-key-event (event)
+  (cond
+   ((integerp event) event)
+   ((characterp event) (char-code event))
+   (t event)))
+
+(cl:defun %keyseq->events (keys)
+  (cond
+   ((stringp keys)
+    (let ((s (if (unibyte-string-p keys)
+                 (%elisp-string->cl-string keys)
+                 keys)))
+      (loop for ch across s collect (char-code ch))))
+   ((vectorp keys)
+    (loop for i from 0 below (length keys)
+          collect (%normalize-key-event (aref keys i))))
+   ((consp keys)
+    (mapcar #'%normalize-key-event keys))
+   (t
+    (list (%normalize-key-event keys)))))
+
+(cl:defun %keymap-resolve (keymap)
+  (cond
+   ((typep keymap 'elisp-keymap) keymap)
+   ((and (symbolp keymap) (cl:boundp keymap))
+    (%keymap-resolve (symbol-value keymap)))
+   ((and (consp keymap) (eq (car keymap) 'keymap))
+    (let ((km (make-elisp-keymap)))
+      (dolist (cell (cdr keymap) km)
+        (when (consp cell)
+          (let ((k (car cell))
+                (v (cdr cell)))
+            (ignore-errors (define-key km k v)))))))
+   (t (error "ELISP: expected keymap, got: ~S" keymap))))
+
+(cl:defun %keymap-get1 (keymap event)
+  (let* ((km (%keymap-resolve keymap))
+         (ht (elisp-keymap-table km)))
+    (multiple-value-bind (v presentp) (gethash event ht)
+      (when presentp
+        (return-from %keymap-get1 (cl:values v t)))
+      ;; Legacy: older bring-up stored single-character strings.
+      (when (and (integerp event) (<= 0 event) (<= event 255))
+        (multiple-value-bind (v2 p2) (gethash (string (code-char event)) ht)
+          (when p2 (return-from %keymap-get1 (cl:values v2 t)))))
+      (when (symbolp event)
+        (multiple-value-bind (v2 p2) (gethash (symbol-name event) ht)
+          (when p2 (return-from %keymap-get1 (cl:values v2 t)))))
+      (cl:values nil nil))))
+
+(cl:defun lookup-key (keymap keys &optional accept-default)
+  "Bring-up subset of ELisp `lookup-key'."
+  (let* ((events (%keyseq->events keys))
+         (len (length events))
+         (km (%keymap-resolve keymap)))
+    (loop for ev in events
+          for idx from 1 do
+            (multiple-value-bind (binding presentp) (%keymap-get1 km ev)
+              (unless presentp
+                (when accept-default
+                  (multiple-value-bind (d dpresentp) (%keymap-get1 km t)
+                    (when dpresentp
+                      (setf binding d presentp t))))
+                (unless presentp
+                    (return-from lookup-key nil)))
+              (if (= idx len)
+                  (return-from lookup-key binding)
+                  (cond
+                   ((keymapp binding)
+                    (setf km (%keymap-resolve binding)))
+                   (t
+                    (return-from lookup-key idx))))))))
+
+(cl:defun map-keymap (function keymap)
+  "Bring-up subset of ELisp `map-keymap'."
+  (let ((km (%keymap-resolve keymap)))
+    (maphash
+     (lambda (k v)
+       (let ((event (cond
+                     ((and (stringp k) (= (length k) 1))
+                      (char-code (aref k 0)))
+                     (t k))))
+         (funcall function event v)))
+     (elisp-keymap-table km)))
+  nil)
+
 (cl:defun define-key (keymap key definition)
   "Minimal stub for ELisp `define-key' on `elisp-keymap' objects."
-  (let ((km (if (symbolp keymap) (symbol-value keymap) keymap)))
-    (unless (typep km 'elisp-keymap)
-      (error "ELISP:DEFINE-KEY expected keymap, got: ~S" keymap))
-    (setf (gethash (%key-id key) (elisp-keymap-table km)) definition)
+  (let* ((km (%keymap-resolve keymap))
+         (events (%keyseq->events key)))
+    (when (null events)
+      (error "ELISP:DEFINE-KEY empty key sequence"))
+    (loop for ev in (butlast events) do
+      (multiple-value-bind (next presentp) (%keymap-get1 km ev)
+        (cond
+         ((and presentp (keymapp next))
+          (setf km (%keymap-resolve next)))
+         (t
+          (let ((child (make-elisp-keymap)))
+            (setf (gethash ev (elisp-keymap-table km)) child)
+            (setf km child))))))
+    (setf (gethash (car (last events)) (elisp-keymap-table km)) definition)
     definition))
 
 (cl:defun define-abbrev-table (name defs &optional _docstring &rest _rest)
@@ -5960,6 +6147,38 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
 (cl:defun current-global-map ()
   "Extremely small stub for ELisp `current-global-map'."
   *global-map*)
+
+(cl:defun current-local-map ()
+  "Bring-up subset of ELisp `current-local-map'."
+  (and (boundp 'local-map) (symbol-value 'local-map)))
+
+(cl:defun use-local-map (keymap)
+  "Bring-up subset of ELisp `use-local-map'."
+  (set 'local-map keymap)
+  keymap)
+
+(defstruct elisp-timer
+  (secs 0)
+  (repeat nil)
+  (function nil)
+  (args nil)
+  (cancelled nil))
+
+(cl:defvar *elisp-timers* nil)
+
+(cl:defun run-with-idle-timer (secs repeat function &rest args)
+  "Bring-up stub for ELisp `run-with-idle-timer' (no real timers)."
+  (let ((t0 (make-elisp-timer :secs secs :repeat repeat :function function :args args)))
+    (push t0 *elisp-timers*)
+    t0))
+
+(cl:defun cancel-timer (timer)
+  "Bring-up stub for ELisp `cancel-timer'."
+  (unless (elisp-timer-p timer)
+    (error "ELISP:CANCEL-TIMER expected timer, got: ~S" timer))
+  (setf (elisp-timer-cancelled timer) t)
+  (setf *elisp-timers* (remove timer *elisp-timers* :test #'eq))
+  nil)
 
 (cl:defun make-obsolete (&rest _args)
   "Stub for ELisp `make-obsolete'."
@@ -6377,6 +6596,9 @@ Evaluate BODY, but if an error is signaled, demote it and return nil."
     (%ensure-default-value sym)
     (setf (gethash sym *buffer-local-variables*) t))
   variable)
+
+;; Emacs treats the current buffer's local keymap as buffer-local state.
+(make-variable-buffer-local 'local-map)
 
 (cl:defun make-local-variable (variable)
   "Bring-up subset of ELisp `make-local-variable'.
