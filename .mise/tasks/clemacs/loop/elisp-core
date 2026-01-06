@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Run elisp-core gate; on failure, generate first-failure startup-check debug report"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+
+set +e
+mise run clemacs:test:contract -- --level elisp-core --build-dir "${build_dir}"
+status=$?
+set -e
+
+if [[ "${status}" -eq 0 ]]; then
+  exit 0
+fi
+
+echo "[clemacs:loop:elisp-core] elisp-core failed; extracting first startup-check failure" >&2
+mise run clemacs:report:first-failure-startup-check-debug -- --build-dir "${build_dir}"
+exit "${status}"

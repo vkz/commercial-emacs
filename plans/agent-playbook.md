@@ -47,6 +47,28 @@ Repo-local skills live under `.codex/skills/` in this repo. Use them as the defa
 
 ## Decision tree (what to do next)
 
+### A0) Non-loader failure modes (no `elisp-load-error`)
+
+If `build/clemacs/reports/first-failure.md` says "No `elisp-load-error` found", treat it as a signal
+that SBCL died or a non-ELisp condition escaped the loader path.
+
+Do this first:
+
+1) Run: `mise run clemacs:report:first-failure-startup-check-debug`
+2) Open:
+   - log: `build/clemacs/tmp/first-failure.startup-check.log`
+   - report: `build/clemacs/reports/first-failure.md`
+   - debug backtrace (when present): `build/clemacs/tmp/load-debug.startup-check.out`
+
+Common patterns:
+
+- `SB-KERNEL::CONTROL-STACK-EXHAUSTED` during macroexpansion (often `macroexp--all-forms`)
+  - Treat it as "macroexpand-all got replaced by upstream and became non-stack-safe".
+  - Fix by restoring clemacs' stack-safe `macroexpand-all` shim after `lisp/emacs-lisp/macroexp.el` loads (see `clemacs/elisp.lisp` `%maybe-install-post-load-shims`).
+
+- CL type errors / wrong arity wrapped by `condition-case`
+  - Re-run with `CLEMACS_DEBUG_CONDITION_CASE=1` to print the host backtrace at the catch boundary.
+
 ### A) Loader fails while loading startup manifests
 
 1) Run: `mise run clemacs:report:first-failure -- --mode startup-check --debug`
