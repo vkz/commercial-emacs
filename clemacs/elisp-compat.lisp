@@ -58,7 +58,11 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
   ;; Some upstream ELisp (notably regexp-opt.el) uses `string-lessp'.  If we
   ;; leave this unshadowed, the ELISP package inherits CL:STRING-LESSP, which
   ;; doesn't accept our unibyte string representation.
-  (cl:shadow 'string-lessp (find-package "ELISP")))
+  (cl:shadow 'string-lessp (find-package "ELISP"))
+  ;; These exist in CL too; shadow them so we can provide ELisp semantics
+  ;; without tripping SBCL package locks.
+  (cl:shadow 'assoc (find-package "ELISP"))
+  (cl:shadow 'rassoc (find-package "ELISP")))
 
 (cl:defun string-lessp (s1 s2 &optional _start1 _end1 _start2 _end2)
   "Bring-up subset of ELisp `string-lessp'."
@@ -498,6 +502,12 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
 (cl:defun string-equal (a b)
   "ELisp-ish STRING-EQUAL (case-sensitive; alias of `string=')."
   (string= a b))
+
+(cl:defun string-empty-p (string)
+  "Bring-up subset of ELisp `string-empty-p'."
+  (unless (stringp string)
+    (error "ELISP:STRING-EMPTY-P expects a string, got: ~S" string))
+  (zerop (length string)))
 
 (cl:defun %plist-put-preserve (plist key value)
   (loop for cell on plist by #'cddr do
@@ -1320,9 +1330,17 @@ This is sufficient for `lisp/emacs-lisp/backquote.el', which uses
              (acc nil))
         (dolist (s prefix)
           (setf acc (nconc acc (seq->list s))))
-        (if (listp last)
-            (nconc acc last)
-            (nconc acc (seq->list last))))))))
+        (cond
+         ((listp last)
+          (nconc acc last))
+         ((or (vectorp last) (stringp last))
+          (nconc acc (seq->list last)))
+         (t
+          (if (null acc)
+              last
+              (progn
+                (setf (cdr (last acc)) last)
+                acc)))))))))
 
 (cl:defmacro eval-when-compile (&rest body)
   "Bring-up stub for ELisp `eval-when-compile'.
@@ -2297,6 +2315,43 @@ We currently represent charsets as symbols with properties."
   (table (cl:make-hash-table :test 'cl:equal))
   (parent nil))
 
+(cl:defun keymapp (object)
+  "Bring-up subset of ELisp `keymapp'."
+  (let ((km (if (and (symbolp object) (cl:boundp object))
+                (symbol-value object)
+                object)))
+    (or (and (typep km 'elisp-keymap) t)
+        (and (consp km) (eq (car km) 'keymap) t))))
+
+(cl:defun make-composed-keymap (maps &optional parent)
+  "Bring-up subset of ELisp `make-composed-keymap'."
+  (let* ((maps* (cond
+                 ((null maps) nil)
+                 ((and (symbolp maps) (cl:boundp maps)) (list (symbol-value maps)))
+                 ((typep maps 'elisp-keymap) (list maps))
+                 ((listp maps)
+                  (mapcar (lambda (m)
+                            (cond
+                             ((and (symbolp m) (cl:boundp m)) (symbol-value m))
+                             (t m)))
+                          maps))
+                 (t (error "ELISP:MAKE-COMPOSED-KEYMAP bad MAPS: ~S" maps))))
+         (parent* (cond
+                   ((null parent) nil)
+                   ((and (symbolp parent) (cl:boundp parent)) (symbol-value parent))
+                   (t parent)))
+         (out (make-elisp-keymap)))
+    ;; Earlier keymaps should win.
+    (dolist (m (reverse maps*))
+      (when (typep m 'elisp-keymap)
+        (maphash
+         (lambda (k v)
+           (setf (gethash k (elisp-keymap-table out)) v))
+         (elisp-keymap-table m))))
+    (when parent*
+      (set-keymap-parent out parent*))
+    out))
+
 (defparameter system-type 'darwin)
 (cl:defun system-name ()
   "Bring-up subset of ELisp `system-name'."
@@ -2383,6 +2438,7 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
              (string-downcase (machine-type))))
 
 (defvar *global-map* nil)
+(cl:defvar special-mode-map (make-elisp-keymap))
 (defparameter minibuffer-local-map (make-elisp-keymap))
 (defparameter find-function-space-re "")
 (cl:defvar find-function-regexp-alist nil)
@@ -3042,6 +3098,19 @@ Emacs clamps positions outside the buffer to the nearest valid position."
     (back-to-indentation)
     (current-column)))
 
+(cl:defun current-left-margin (&optional _pos _window)
+  "Bring-up stub for ELisp `current-left-margin'."
+  (declare (cl:ignore _pos _window))
+  0)
+
+(cl:defun move-to-left-margin (&optional n _force)
+  "Bring-up stub for ELisp `move-to-left-margin'."
+  (declare (cl:ignore _force))
+  (when (and n (/= n 1))
+    (forward-line (1- n)))
+  (back-to-indentation)
+  nil)
+
 (cl:defun delete-horizontal-space (&optional backward-only)
   "Bring-up subset of ELisp `delete-horizontal-space'."
   (let ((start (point))
@@ -3135,6 +3204,21 @@ Emacs clamps positions outside the buffer to the nearest valid position."
     (integer x)
     (real x)
     (t (error "ELISP: expected a number/marker, got: ~S" x))))
+
+(cl:defun prefix-numeric-value (raw)
+  "Bring-up subset of ELisp `prefix-numeric-value'."
+  (cond
+   ((null raw) 1)
+   ((eq raw t) 1)
+   ((integerp raw) raw)
+   ((eq raw '-) -1)
+   ((consp raw)
+    (let ((x (car raw)))
+      (cond
+       ((integerp x) x)
+       ((eq x '-) -1)
+       (t (error "ELISP:PREFIX-NUMERIC-VALUE bad raw prefix: ~S" raw)))))
+   (t (error "ELISP:PREFIX-NUMERIC-VALUE bad raw prefix: ~S" raw))))
 
 (cl:defun + (&rest args)
   "Bring-up subset of ELisp `+'."
@@ -3540,6 +3624,14 @@ Emacs clamps positions outside the buffer to the nearest valid position."
     (when (and (integerp p) (< (point-min) p) (<= p (point-max)))
       (char-code (char (elisp-buffer-text *current-buffer*) (- p 2))))))
 
+(cl:defun following-char ()
+  "Bring-up subset of ELisp `following-char'."
+  (or (char-after) 0))
+
+(cl:defun preceding-char ()
+  "Bring-up subset of ELisp `preceding-char'."
+  (or (char-before) 0))
+
 (cl:defun bolp ()
   "Bring-up subset of ELisp `bolp'."
   (or (bobp)
@@ -3551,6 +3643,13 @@ Emacs clamps positions outside the buffer to the nearest valid position."
   (or (eobp)
       (let ((c (char-after)))
         (and c (= c (char-code #\Newline))))))
+
+(cl:defun invisible-p (pos-or-prop &optional _window)
+  "Bring-up subset of ELisp `invisible-p'."
+  (declare (cl:ignore _window))
+  (when (or (integerp pos-or-prop) (elisp-marker-p pos-or-prop))
+    (let ((v (get-text-property pos-or-prop 'invisible)))
+      (and v t))))
 
 (cl:defun %char-in-skip-set-p (ch set invertp)
   (let ((in (find ch set :test #'char=)))
@@ -4955,6 +5054,21 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
             (ignore-errors (funcall fn)))))))
   nil)
 
+(cl:defun run-hook-with-args-until-success (hook &rest args)
+  "Bring-up subset of ELisp `run-hook-with-args-until-success'."
+  (unless (symbolp hook)
+    (error "ELISP:RUN-HOOK-WITH-ARGS-UNTIL-SUCCESS expected symbol, got: ~S" hook))
+  (let ((cur (if (cl:boundp hook) (symbol-value hook) nil)))
+    (when (null cur)
+      (return-from run-hook-with-args-until-success nil))
+    (unless (listp cur)
+      (setf cur (list cur)))
+    (dolist (fn cur)
+      (let ((v (apply #'funcall fn args)))
+        (when v
+          (return v))))
+    nil))
+
 (cl:defun add-to-list (list-var element &optional append _compare-fn)
   "Bring-up subset of ELisp `add-to-list'."
   (declare (cl:ignore _compare-fn))
@@ -4990,7 +5104,7 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
   "Extremely small stub for ELisp `set-keymap-parent'."
   (unless (typep keymap 'elisp-keymap)
     (error "ELISP:SET-KEYMAP-PARENT expected a keymap, got: ~S" keymap))
-  (when (and parent (not (typep parent 'elisp-keymap)))
+  (when (and parent (not (keymapp parent)))
     (error "ELISP:SET-KEYMAP-PARENT expected a keymap parent, got: ~S" parent))
   (setf (elisp-keymap-parent keymap) parent)
   keymap)
@@ -5193,6 +5307,44 @@ character codes (0..65535), a parent link, and extra slots."
     (33 14)  ; !
     (124 15) ; |
     (t nil)))
+
+(cl:defun %syntax-code-spec (code)
+  (case code
+    (0 32)   ; space
+    (1 46)   ; .
+    (2 119)  ; w
+    (3 95)   ; _
+    (4 40)   ; (
+    (5 41)   ; )
+    (6 39)   ; '
+    (7 34)   ; "
+    (8 36)   ; $
+    (9 92)   ; \
+    (10 47)  ; /
+    (11 60)  ; <
+    (12 62)  ; >
+    (13 64)  ; @
+    (14 33)  ; !
+    (15 124) ; |
+    (t 32)))
+
+(cl:defun char-syntax (ch &optional syntax-table)
+  "Bring-up subset of ELisp `char-syntax'."
+  (let* ((code (cond
+                ((integerp ch) ch)
+                ((characterp ch) (char-code ch))
+                (t (error "ELISP:CHAR-SYNTAX expects a character code, got: ~S" ch))))
+         (tab (or syntax-table (syntax-table) (standard-syntax-table))))
+    (cond
+     ((eq tab :emacs-lisp-mode-syntax-table)
+      (if (%syntax-w_-p (code-char code)) 119 32))
+     ((char-table-p tab)
+      (let* ((entry (aref tab code))
+             (raw (if entry (car entry) 0))
+             (class (logand raw 255)))
+        (%syntax-code-spec class)))
+     (t
+      (error "ELISP:CHAR-SYNTAX expects a syntax-table char-table, got: ~S" tab)))))
 
 (defconstant +syntax-flag-prefix+ (ash 1 20))
 
@@ -5447,10 +5599,22 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
     (when (and (consp cell) (eq (car cell) key))
       (return cell))))
 
+(cl:defun assoc (key alist)
+  "ELisp-ish ASSOC (equal-based)."
+  (dolist (cell alist nil)
+    (when (and (consp cell) (equal (car cell) key))
+      (return cell))))
+
 (cl:defun rassq (value alist)
   "ELisp-ish RASSQ."
   (dolist (cell alist nil)
     (when (and (consp cell) (eq (cdr cell) value))
+      (return cell))))
+
+(cl:defun rassoc (value alist)
+  "ELisp-ish RASSOC (equal-based)."
+  (dolist (cell alist nil)
+    (when (and (consp cell) (equal (cdr cell) value))
       (return cell))))
 
 (cl:defun memq (elt list)

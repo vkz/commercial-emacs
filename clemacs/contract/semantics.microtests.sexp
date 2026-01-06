@@ -74,6 +74,51 @@
   :expected "(1 2)"
   :emacs :match)
 
+ (:name "strings-string-empty-p-empty"
+  :expr "(string-empty-p \"\")"
+  :expected "t"
+  :emacs :match)
+
+ (:name "strings-string-empty-p-nonempty"
+  :expr "(string-empty-p \"a\")"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "prefix-numeric-value-nil"
+  :expr "(prefix-numeric-value nil)"
+  :expected "1"
+  :emacs :match)
+
+ (:name "prefix-numeric-value-t"
+  :expr "(prefix-numeric-value t)"
+  :expected "1"
+  :emacs :match)
+
+ (:name "prefix-numeric-value-cons"
+  :expr "(prefix-numeric-value '(16))"
+  :expected "16"
+  :emacs :match)
+
+ (:name "prefix-numeric-value-dash"
+  :expr "(prefix-numeric-value '-)"
+  :expected "-1"
+  :emacs :match)
+
+ (:name "chars-following-char-eob-is-zero"
+  :expr "(with-temp-buffer (insert \"a\") (goto-char (point-max)) (following-char))"
+  :expected "0"
+  :emacs :match)
+
+ (:name "chars-preceding-char-bob-is-zero"
+  :expr "(with-temp-buffer (insert \"a\") (goto-char (point-min)) (preceding-char))"
+  :expected "0"
+  :emacs :match)
+
+ (:name "syntax-char-syntax-respects-explicit-table"
+  :expr "(with-temp-buffer (let ((st (make-char-table 'syntax-table (cons 0 nil)))) (modify-syntax-entry ?a \"w\" st) (with-syntax-table st (char-syntax ?a))))"
+  :expected "119"
+  :emacs :match)
+
  (:name "syntax-tables-modify-syntax-entry-prefix-flag"
   :expr "(let ((st (make-char-table 'syntax-table nil))) (set-char-table-parent st (standard-syntax-table)) (modify-syntax-entry ?\\\" \".   \" st) (modify-syntax-entry ?\\' \"w p\" st) (list (logand (car (aref st ?\\\")) 255) (logand (car (aref st ?\\')) (ash 1 20))))"
   :expected "(1 1048576)"
@@ -223,6 +268,11 @@
  (:name "lists-delq-basic"
   :expr "(delq 'a '(a b a c))"
   :expected "(b c)"
+  :emacs :match)
+
+ (:name "lists-append-nonlist-tail"
+  :expr "(append (list 1) 2)"
+  :expected "(1 . 2)"
   :emacs :match)
 
  (:name "custom-autoload-basic"
