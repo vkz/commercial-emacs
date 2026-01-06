@@ -368,6 +368,11 @@
   :expected "(33 11 t)"
   :emacs :match)
 
+ (:name "buffer-locals-setq-local-makes-bare-symbol-read-local"
+  :expr "(progn (set 'clemacs--microtest-buflocal-var4 11) (with-temp-buffer (make-local-variable 'clemacs--microtest-buflocal-var4) (setq clemacs--microtest-buflocal-var4 22) clemacs--microtest-buflocal-var4))"
+  :expected "22"
+  :emacs :match)
+
  (:name "defvar-without-init-binds-nil"
   :expr "(progn (defvar clemacs--microtest-defvar-default-nil) (list (boundp 'clemacs--microtest-defvar-default-nil) clemacs--microtest-defvar-default-nil))"
   :expected "(t nil)"

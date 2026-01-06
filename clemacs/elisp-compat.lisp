@@ -5571,6 +5571,21 @@ the prefix flag (\"p\")."
 (defvar *elisp-variable-aliases* (cl:make-hash-table :test 'eq))
 
 (cl:defvar *buffer-local-variables* (cl:make-hash-table :test 'eq))
+(cl:defparameter +elisp-unbound+ (cl:gensym "ELISP-UNBOUND-"))
+(cl:defvar *elisp-default-values* (cl:make-hash-table :test 'eq))
+
+(cl:defun %ensure-default-value (symbol)
+  (multiple-value-bind (v presentp)
+      (gethash symbol *elisp-default-values*)
+    (if presentp
+        v
+        (setf (gethash symbol *elisp-default-values*)
+              (handler-case (cl:symbol-value symbol)
+                (cl:unbound-variable () +elisp-unbound+))))))
+
+(cl:defun %default-value-or-nil (symbol)
+  (let ((v (%ensure-default-value symbol)))
+    (if (eq v +elisp-unbound+) nil v)))
 
 (cl:defun %resolve-variable-alias (symbol &key (max-hops 16))
   (loop with cur = symbol
@@ -5593,7 +5608,14 @@ the prefix flag (\"p\")."
           (gethash sym (elisp-buffer-locals *current-buffer*))
         (when presentp
           (return-from symbol-value v))))
-    (cl:symbol-value sym)))
+    (multiple-value-bind (default presentp)
+        (gethash sym *elisp-default-values*)
+      (cond
+       ((and presentp (not (eq default +elisp-unbound+))) default)
+       ((and presentp (eq default +elisp-unbound+))
+        (signal 'void-variable (list sym)))
+       (t
+        (cl:symbol-value sym))))))
 
 (cl:defun set (symbol value)
   "ELisp-ish SET (respects `defvaralias')."
@@ -5604,17 +5626,31 @@ the prefix flag (\"p\")."
         ;; If SYM is buffer-local by default, ensure we write a local binding.
         (when (and (boundp '*buffer-local-variables*)
                    (gethash sym *buffer-local-variables*))
+          ;; Capture the default before we start writing buffer-local values
+          ;; through CL's symbol-value cell.
+          (%ensure-default-value sym)
           (unless (nth-value 1 (gethash sym locals))
             (setf (gethash sym locals)
-                  (handler-case (cl:symbol-value sym)
-                    (cl:unbound-variable () nil)))))
+                  (%default-value-or-nil sym))))
         (multiple-value-bind (_v presentp)
             (gethash sym locals)
           (declare (cl:ignore _v))
           (when presentp
             (setf (gethash sym locals) value)
+            ;; Most ELisp code reads variables via bare symbol evaluation, which
+            ;; in our bring-up model uses CL's symbol-value cell.  Write-through
+            ;; so buffer-local variables are visible to that path (e.g. ERT
+            ;; results buffer locals set via `setq-local').
+            (setf (cl:symbol-value sym) value)
             (return-from set value)))))
     (setf (cl:symbol-value sym) value)
+    ;; If we've captured a default value for this symbol (i.e. it has been
+    ;; involved in buffer-local machinery), update that default on global SET.
+    (multiple-value-bind (_v presentp)
+        (gethash sym *elisp-default-values*)
+      (declare (cl:ignore _v))
+      (when presentp
+        (setf (gethash sym *elisp-default-values*) value)))
     value))
 
 (cl:defun defvaralias (new-alias base-variable &optional _docstring)
@@ -5674,7 +5710,9 @@ Evaluate BODY, but if an error is signaled, demote it and return nil."
   "Bring-up subset of ELisp `make-variable-buffer-local'."
   (unless (symbolp variable)
     (error "ELISP:MAKE-VARIABLE-BUFFER-LOCAL expects a symbol, got: ~S" variable))
-  (setf (gethash (%resolve-variable-alias variable) *buffer-local-variables*) t)
+  (let ((sym (%resolve-variable-alias variable)))
+    (%ensure-default-value sym)
+    (setf (gethash sym *buffer-local-variables*) t))
   variable)
 
 (cl:defun make-local-variable (variable)
@@ -5688,17 +5726,23 @@ variable's default/global value."
     (error "ELISP:MAKE-LOCAL-VARIABLE requires a current buffer"))
   (let* ((sym (%resolve-variable-alias variable))
          (locals (elisp-buffer-locals *current-buffer*)))
+    (%ensure-default-value sym)
     (unless (nth-value 1 (gethash sym locals))
       (setf (gethash sym locals)
-            (handler-case (cl:symbol-value sym)
-              (cl:unbound-variable () nil)))))
+            (%default-value-or-nil sym))))
   variable)
 
 (cl:defun default-boundp (symbol)
   "Stub for ELisp `default-boundp'.
 
 The \"default\" value is CL's global binding model."
-  (cl:boundp (%resolve-variable-alias symbol)))
+  (let ((sym (%resolve-variable-alias symbol)))
+    (multiple-value-bind (v presentp)
+        (gethash sym *elisp-default-values*)
+      (cond
+       ((and presentp (not (eq v +elisp-unbound+))) t)
+       ((and presentp (eq v +elisp-unbound+)) nil)
+       (t (cl:boundp sym))))))
 
 (cl:defun local-variable-if-set-p (_symbol &optional _buffer)
   "Bring-up subset of ELisp `local-variable-if-set-p'."
@@ -5731,7 +5775,14 @@ The \"default\" value is CL's global binding model."
         (gethash sym (elisp-buffer-locals buf))
       (if presentp
           v
-          (cl:symbol-value sym)))))
+          (multiple-value-bind (d dpresentp)
+              (gethash sym *elisp-default-values*)
+            (cond
+             ((and dpresentp (not (eq d +elisp-unbound+))) d)
+             ((and dpresentp (eq d +elisp-unbound+))
+              (signal 'void-variable (list sym)))
+             (t
+              (cl:symbol-value sym))))))))
 
 (cl:defun kill-local-variable (variable)
   "Bring-up subset of the C primitive `kill-local-variable'."
@@ -5741,16 +5792,37 @@ The \"default\" value is CL's global binding model."
     (error "ELISP:KILL-LOCAL-VARIABLE requires a current buffer"))
   (let* ((sym (%resolve-variable-alias variable))
          (locals (elisp-buffer-locals *current-buffer*)))
-    (remhash sym locals))
+    (remhash sym locals)
+    (multiple-value-bind (d presentp)
+        (gethash sym *elisp-default-values*)
+      (cond
+       ((and presentp (not (eq d +elisp-unbound+)))
+        (setf (cl:symbol-value sym) d))
+       ((and presentp (eq d +elisp-unbound+))
+        (cl:makunbound sym))
+       (t nil))))
   variable)
 
 (cl:defun default-value (symbol)
   "Stub for ELisp `default-value'."
-  (cl:symbol-value (%resolve-variable-alias symbol)))
+  (let ((sym (%resolve-variable-alias symbol)))
+    (multiple-value-bind (v presentp)
+        (gethash sym *elisp-default-values*)
+      (cond
+       ((and presentp (not (eq v +elisp-unbound+))) v)
+       ((and presentp (eq v +elisp-unbound+))
+        (signal 'void-variable (list sym)))
+       (t (cl:symbol-value sym))))))
 
 (cl:defun set-default (symbol value)
   "Stub for ELisp `set-default'."
   (let ((sym (%resolve-variable-alias symbol)))
+    (setf (gethash sym *elisp-default-values*) value)
+    (let ((buf (and (boundp '*current-buffer*) *current-buffer*)))
+      (when (and buf (elisp-buffer-p buf))
+        (let ((locals (elisp-buffer-locals buf)))
+          (when (nth-value 1 (gethash sym locals))
+            (return-from set-default value)))))
     (setf (cl:symbol-value sym) value)
     value))
 

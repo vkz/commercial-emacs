@@ -2,6 +2,3 @@
 #
 # Format: <test-name> # <reason> (YYYY-MM-DD)
 # Keep this list as small and temporary as possible.
-
-ert-test-run-tests-interactively # ERT results buffer bring-up: nil stats during initial ewoc/header refresh (2026-01-06)
-ert--pp-with-indentation-and-newline # ERT results buffer bring-up: nil stats during initial ewoc/header refresh (2026-01-06)
