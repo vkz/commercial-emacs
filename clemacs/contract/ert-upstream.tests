@@ -65,3 +65,4 @@ ert-test-messages
 ert-test-running-tests
 ert-filter-string
 ert-propertized-string
+ert-x-tests--with-temp-file-generate-suffix
