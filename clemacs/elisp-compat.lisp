@@ -1257,6 +1257,7 @@ match to Elisp than CL:EQUAL.
         (let ((wk
                 (cond
                  ((null v) nil)
+                 ((eq v t) :key-and-value)
                  ((eq v :key) :key)
                  ((eq v :value) :value)
                  ((eq v :key-or-value) :key-or-value)

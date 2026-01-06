@@ -82,7 +82,7 @@ lisp/indent.el -
 lisp/emacs-lisp/cl-generic.el 1
 
 # pdump: simple.
-lisp/simple.el 194
+lisp/simple.el 379
 
 # pdump: nadvice.
 lisp/emacs-lisp/nadvice.el 1

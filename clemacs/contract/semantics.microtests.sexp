@@ -119,6 +119,11 @@
   :expected "0"
   :emacs :match)
 
+ (:name "hash-tables-make-hash-table-weakness-t"
+  :expr "(progn (make-hash-table :test 'eq :weakness t) t)"
+  :expected "t"
+  :emacs :match)
+
  (:name "chars-preceding-char-bob-is-zero"
   :expr "(with-temp-buffer (insert \"a\") (goto-char (point-min)) (preceding-char))"
   :expected "0"
