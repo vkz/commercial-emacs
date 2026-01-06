@@ -72,6 +72,9 @@ Then choose one:
   - Add/adjust a semantic microtest in `clemacs/contract/semantics.microtests.sexp`.
   - If intentionally diverging from Emacs, set `:emacs nil` and record a dated
     rationale in `plans/clemacs-compat.md` (“Semantic decisions (dated)”).
+  - If using `:emacs :match`, ensure a reference `emacs` is available on `PATH`
+    for the `mise` task environment (`emacs -Q --batch` is used; `gxeval` is not).
+  - For interactive probing, use the `emacs` skill via `gxeval -s wip ...`.
 
 - **Checkpoint seems unstable / flaky**
   - Bisect to a stable checkpoint (in manifest context):
