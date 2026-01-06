@@ -59,7 +59,7 @@ DONE (2026-01-05)
 - Stub char-script-table and char-table helpers to advance fill.el checkpoint (now loads past the previous char-script-table failure).
 
 DONE (2026-01-06)
-- Bind `text-property-default-nonsticky`, add minimal text property surface (text-properties-at/get/put/add), and raise fill.el checkpoint to 33.
+- Bind `text-property-default-nonsticky`, add minimal text property surface (text-properties-at/get/put/add), and uncap fill.el (loads cleanly).
 - Add common shims used by fill/comment and keymaps (string-empty-p, prefix-numeric-value, following/preceding-char, char-syntax, invisible-p, left-margin stubs, run-hook-with-args-until-success).
 - Fix ELisp append/assoc behavior needed by key parsing during `defvar-keymap` expansion; uncap tabulated-list.el and buff-menu.el in startup manifests.
 
