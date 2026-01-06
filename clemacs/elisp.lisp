@@ -733,6 +733,11 @@ keywords like `:foo' untouched."
                            (lambda (e)
                              (%maybe-log-load-error e form-index)
                              nil)))
+                      #+sbcl
+                      (cl:handler-bind
+                          ((sb-kernel:redefinition-warning #'muffle-warning))
+                        (cl:eval (%elisp-rewrite form)))
+                      #-sbcl
                       (cl:eval (%elisp-rewrite form)))
                   (cl:error (e)
                     (let ((inv (inventory-entry-for-condition
