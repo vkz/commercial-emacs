@@ -4,11 +4,13 @@
 # `ert-upstream.known-fail.tests` with a short reason + date.
 #
 # NOTE: `ert-test-abc`/`ert-test-def` are defined dynamically inside
-# `ert-test-deftest`; they aren't registered at load time, so we do not treat
-# them as standalone bring-up targets (selecting them by name would be brittle).
+# `ert-test-deftest`.  We include them here, but they are order-dependent: keep
+# them after `ert-test-deftest` in this list.
 ert-test-body-runs
 ert-test-abbreviate-string
 ert-test-deftest
+ert-test-abc
+ert-test-def
 ert-test-record-backtrace
 ert-test-nested-test-body-runs
 ert-test-pass

@@ -6,7 +6,7 @@ set -euo pipefail
 #USAGE flag "--debug-condition-case" help="Set CLEMACS_DEBUG_CONDITION_CASE=1 (prints CL backtrace at condition-case boundary)"
 #USAGE flag "--use-known-fail" help="Treat tests listed in ert-upstream.known-fail.tests as XFAIL (matches the gate behavior)"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
-#USAGE arg "[test-name]" help="ERT test name as in test/lisp/emacs-lisp/ert-tests.el"
+#USAGE arg "[tests]" var=#true hide=#true
 
 if [[ "${usage_help:-false}" == "true" ]]; then
   mise tasks info "${MISE_TASK_NAME}"
@@ -49,16 +49,25 @@ tests_eval="nil"
 f="${project_root}/clemacs/contract/ert-tests.maxforms"
 [[ -f "${f}" ]] && tests_eval="$(tr -d ' \t\r\n' < "${f}")"
 
-test_name="${usage_test_name:-}"
-test_name="${test_name%%#*}"
-test_name="$(printf "%s" "${test_name}" | sed -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//')"
-if [[ -z "${test_name}" ]]; then
+if [[ "$#" -lt 1 ]]; then
   echo "[clemacs:test:ert-upstream-one] missing <test-name>" >&2
-  echo "[clemacs:test:ert-upstream-one] usage: mise run clemacs:test:ert-upstream-one -- <test-name>" >&2
+  echo "[clemacs:test:ert-upstream-one] usage: mise run clemacs:test:ert-upstream-one -- <test-name> [more-tests...]" >&2
   exit 2
 fi
 
-names_lisp="(list \"${test_name//\"/\\\"}\")"
+names_lisp="(list"
+for raw in "$@"; do
+  if [[ "${raw}" == -* ]]; then
+    continue
+  fi
+  name="${raw%%#*}"
+  name="$(printf "%s" "${name}" | sed -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//')"
+  if [[ -n "${name}" ]]; then
+    esc="${name//\"/\\\"}"
+    names_lisp="${names_lisp} \"${esc}\""
+  fi
+done
+names_lisp="${names_lisp})"
 
 known_fail_lisp="nil"
 if [[ "${usage_use_known_fail:-false}" == "true" ]]; then
