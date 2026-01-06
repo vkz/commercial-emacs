@@ -1667,9 +1667,60 @@ formatting). We currently ignore them and delegate to CL:ASSERT on FORM."
   "Minimal subset of cl-lib's `cl-defun'."
   `(defun ,name ,lambda-list ,@body))
 
+(cl:defun %cl-destructuring-bind-check-key-list (key-list allowed-keys)
+  (let ((xs key-list))
+    (loop while (keywordp (car-safe xs)) do
+      (let ((k (car xs)))
+        (unless (consp (cdr xs))
+          (error "Value expected after keyword %S in %S" k key-list))
+        (unless (memq k allowed-keys)
+          (error "Keyword argument %S not one of %S" k allowed-keys))
+        (setf xs (cddr xs)))))
+  t)
+
 (cl:defmacro cl-destructuring-bind (lambda-list expr &body body)
   "Minimal subset of cl-lib's `cl-destructuring-bind'."
-  `(cl:destructuring-bind ,lambda-list ,expr ,@body))
+  (labels ((&-symbol-p (x)
+             (and (symbolp x)
+                  (let ((nm (symbol-name x)))
+                    (and (plusp (length nm))
+                         (= (aref nm 0) (char-code #\&))))))
+           (key-arg->keyword (spec)
+             (cond
+              ((symbolp spec) (intern (symbol-name spec) :keyword))
+              ((consp spec)
+               (let ((head (car spec)))
+                 (cond
+                  ((symbolp head) (intern (symbol-name head) :keyword))
+                  ((and (consp head) (keywordp (car head))) (car head))
+                  (t nil))))
+              (t nil)))
+           (allowed-keys-from-key-lambda-list (ll)
+             (let* ((tail (cdr (member '&key ll))))
+               (when (member '&allow-other-keys tail)
+                 (return-from allowed-keys-from-key-lambda-list nil))
+               (remove nil
+                       (loop for spec in tail
+                             while (not (&-symbol-p spec))
+                             collect (key-arg->keyword spec)))))
+           (validation-forms (ll value-form)
+             (cond
+              ((and (consp ll) (eq (car ll) '&key))
+               (let ((allowed (allowed-keys-from-key-lambda-list ll)))
+                 (when allowed
+                   `((%cl-destructuring-bind-check-key-list ,value-form ',allowed)))))
+              ((and (consp ll)
+                    (consp (car ll))
+                    (eq (caar ll) '&key))
+               (let ((allowed (allowed-keys-from-key-lambda-list (car ll))))
+                 (when allowed
+                   `((when (consp ,value-form)
+                       (%cl-destructuring-bind-check-key-list (car ,value-form) ',allowed))))))
+              (t nil))))
+    (let ((tmp (gensym "CL-DESTRUCTURING-BIND-EXPR-")))
+      `(let ((,tmp ,expr))
+         ,@(validation-forms lambda-list tmp)
+         (cl:destructuring-bind ,lambda-list ,tmp ,@body)))))
 
 (cl:defun cl-plusp (x)
   "Bring-up subset of cl-lib's `cl-plusp'."
