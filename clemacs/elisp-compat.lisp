@@ -16,6 +16,29 @@
 (cl:defvar overlay-arrow-variable-list nil)
 (cl:defvar text-property-default-nonsticky nil)
 (cl:defvar comment-start-skip nil)
+;; Common command/key processing vars referenced early by upstream lisp/.
+;; Bind to NIL for bring-up so loads don't spam UNBOUND warnings.
+(cl:defvar current-prefix-arg nil)
+(cl:defvar defining-kbd-macro nil)
+(cl:defvar last-command-event nil)
+(cl:defvar unread-command-events nil)
+(cl:defvar executing-kbd-macro nil)
+(cl:defvar keyboard-translate-table nil)
+(cl:defvar help-form nil)
+(cl:defvar line-spacing nil)
+(cl:defvar xterm-mouse-mode nil)
+(cl:defvar minibuffer-default-prompt-format nil)
+(cl:defvar history-delete-duplicates nil)
+(cl:defvar history-length nil)
+(cl:defvar syntax-propertize-function nil)
+(cl:defvar major-mode nil)
+(cl:defvar auto-mode-alist nil)
+(cl:defvar magic-fallback-mode-alist nil)
+(cl:defvar minor-mode-map-alist nil)
+(cl:defvar mode-line-mode-menu nil)
+(cl:defvar load-path nil)
+(cl:defvar load-file-rep-suffixes nil)
+(cl:defvar temporary-file-directory nil)
 
 (cl:defmacro bound-and-true-p (var)
   "Bring-up subset of ELisp `bound-and-true-p'."
@@ -27,6 +50,11 @@
 For now, clemacs runs all ELisp non-interactively, so this expands to NIL
 without evaluating the interactive spec."
   (declare (cl:ignore _spec))
+  nil)
+
+(cl:defun ding (&optional _arg)
+  "Bring-up stub for ELisp `ding'."
+  (declare (cl:ignore _arg))
   nil)
 
 (cl:defmacro defvar (var &optional (init nil init-supplied-p) doc)
@@ -504,6 +532,14 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
   "ELisp-ish STRING-EQUAL (case-sensitive; alias of `string=')."
   (string= a b))
 
+(cl:defun string-equal-ignore-case (a b)
+  "Bring-up subset of ELisp `string-equal-ignore-case'."
+  (let ((a (if (symbolp a) (symbol-name a) a))
+        (b (if (symbolp b) (symbol-name b) b)))
+    (unless (and (stringp a) (stringp b))
+      (error "ELISP:STRING-EQUAL-IGNORE-CASE expects strings or symbols, got: ~S ~S" a b))
+    (string= (downcase a) (downcase b))))
+
 (cl:defun string-empty-p (string)
   "Bring-up subset of ELisp `string-empty-p'."
   (unless (stringp string)
@@ -516,6 +552,22 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
       (setf (cadr cell) value)
       (return plist)))
   (append plist (list key value)))
+
+(cl:defun %plist-remprop-preserve (plist key)
+  (let ((head plist)
+        (prev nil)
+        (cell plist))
+    (loop while cell do
+      (if (eq (car cell) key)
+          (progn
+            (if prev
+                (setf (cddr prev) (cddr cell))
+                (setf head (cddr cell)))
+            (return head))
+          (progn
+            (setf prev cell)
+            (setf cell (cddr cell)))))
+    head))
 
 (cl:defvar *buffer-text-properties*
   (cl:make-hash-table :test 'eq))
@@ -538,8 +590,34 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
       (when (and (<= (elisp::text-prop-interval-start iv) pos)
                  (< pos (elisp::text-prop-interval-end iv)))
         (loop for (k v) on (elisp::text-prop-interval-plist iv) by #'cddr do
-          (setf out (%plist-put-preserve out k v)))))
+          (setf out (if (null v)
+                        (%plist-remprop-preserve out k)
+                        (%plist-put-preserve out k v))))))
     out))
+
+(cl:defun %intervals-remove-range (intervals start end)
+  "Return INTERVALS with any overlap with [START,END) removed.
+
+If an interval overlaps the range, keep the non-overlapping left/right
+portions (split as needed). START/END use the same coordinate system as the
+intervals (string: 0-based, buffer: 1-based)."
+  (let ((out nil))
+    (dolist (iv intervals)
+      (let* ((iv-s (elisp::text-prop-interval-start iv))
+             (iv-e (elisp::text-prop-interval-end iv))
+             (plist (elisp::text-prop-interval-plist iv)))
+        (cond
+         ;; No overlap.
+         ((or (<= iv-e start) (<= end iv-s))
+          (push iv out))
+         (t
+          ;; Left piece.
+          (when (< iv-s start)
+            (push (elisp::make-text-prop-interval :start iv-s :end start :plist plist) out))
+          ;; Right piece.
+          (when (< end iv-e)
+            (push (elisp::make-text-prop-interval :start end :end iv-e :plist plist) out))))))
+    (nreverse out)))
 
 (cl:defun text-properties-at (pos &optional object)
   "Bring-up subset of ELisp `text-properties-at'."
@@ -615,6 +693,54 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
     (error "ELISP:ADD-TEXT-PROPERTIES expects a plist, got: ~S" props))
   (loop for (k v) on props by #'cddr do
     (put-text-property start end k v object))
+  t)
+
+(cl:defun set-text-properties (start end props &optional object)
+  "Bring-up subset of ELisp `set-text-properties'."
+  (unless (or (null props) (and (listp props) (evenp (length props))))
+    (error "ELISP:SET-TEXT-PROPERTIES expects a plist or nil, got: ~S" props))
+  (let ((obj (or object (current-buffer))))
+    (cond
+     ((stringp obj)
+      (unless (and (integerp start) (integerp end) (<= 0 start) (<= start end))
+        (error "ELISP:SET-TEXT-PROPERTIES bad range: ~S..~S" start end))
+      (let ((len (length obj)))
+        (when (> end len)
+          (error "ELISP:SET-TEXT-PROPERTIES out of range: ~S..~S (len ~S)" start end len))
+        (let* ((old (or (elisp::%string-text-properties obj) nil))
+               (base (if old (%intervals-remove-range old start end) nil))
+               (intervals (if (and props (< start end))
+                              (append base
+                                      (list (elisp::make-text-prop-interval
+                                             :start start
+                                             :end end
+                                             :plist props)))
+                              base)))
+          (if intervals
+              (elisp::%set-string-text-properties obj intervals)
+              (elisp::%clear-string-text-properties obj)))))
+     ((bufferp obj)
+      (let* ((s (%pos start))
+             (e (%pos end))
+             (pmax (1+ (length (elisp-buffer-text obj)))))
+        (unless (and (integerp s) (integerp e) (plusp s) (<= s e))
+          (error "ELISP:SET-TEXT-PROPERTIES bad range: ~S..~S" start end))
+        (when (> e pmax)
+          (error "ELISP:SET-TEXT-PROPERTIES out of range: ~S..~S (max ~S)" s e pmax))
+        (let* ((old (or (%buffer-text-properties obj) nil))
+               (base (if old (%intervals-remove-range old s e) nil))
+               (intervals (if (and props (< s e))
+                              (append base
+                                      (list (elisp::make-text-prop-interval
+                                             :start s
+                                             :end e
+                                             :plist props)))
+                              base)))
+          (if intervals
+              (%set-buffer-text-properties obj intervals)
+              (%clear-buffer-text-properties obj)))))
+     (t
+      (error "ELISP:SET-TEXT-PROPERTIES unsupported OBJECT: ~S" obj))))
   t)
 
 (cl:defun substring-no-properties (string &optional (from 0) to)
@@ -3775,7 +3901,21 @@ Emacs clamps positions outside the buffer to the nearest valid position."
 
 (cl:defun buffer-string ()
   "Bring-up subset of ELisp `buffer-string'."
-  (elisp-buffer-text *current-buffer*))
+  (let* ((txt (elisp-buffer-text *current-buffer*))
+         (s (copy-seq txt))
+         (intervals (%buffer-text-properties *current-buffer*)))
+    (elisp::%clear-string-text-properties s)
+    (when intervals
+      (elisp::%set-string-text-properties
+       s
+       (loop for iv in intervals
+             for iv-s = (elisp::text-prop-interval-start iv)
+             for iv-e = (elisp::text-prop-interval-end iv)
+             collect (elisp::make-text-prop-interval
+                      :start (1- iv-s)
+                      :end (1- iv-e)
+                      :plist (elisp::text-prop-interval-plist iv)))))
+    s))
 
 (cl:defun bobp ()
   "Bring-up subset of ELisp `bobp'."
@@ -4425,6 +4565,14 @@ back to a tiny stub list."
 (cl:defun macroexp-file-name ()
   "Stub for ELisp `macroexp-file-name'."
   nil)
+
+(cl:defun macroexp-warn-and-return (_msg form &optional _category _compile-only)
+  "Bring-up subset of ELisp `macroexp-warn-and-return'.
+
+Upstream uses this to emit warnings during macroexpansion while still returning
+FORM.  For bring-up, suppress the warning and return FORM."
+  (declare (cl:ignore _msg _category _compile-only))
+  form)
 
 (cl:defun macroexp-copyable-p (exp)
   "Bring-up subset of ELisp `macroexp-copyable-p'."
@@ -5926,11 +6074,12 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
     (when (and (consp cell) (eq (car cell) key))
       (return cell))))
 
-(cl:defun assoc (key alist)
-  "ELisp-ish ASSOC (equal-based)."
-  (dolist (cell alist nil)
-    (when (and (consp cell) (equal (car cell) key))
-      (return cell))))
+(cl:defun assoc (key alist &optional testfn)
+  "ELisp-ish ASSOC."
+  (let ((test (or testfn #'equal)))
+    (dolist (cell alist nil)
+      (when (and (consp cell) (funcall test key (car cell)))
+        (return cell)))))
 
 (cl:defun rassq (value alist)
   "ELisp-ish RASSQ."
@@ -5944,10 +6093,69 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
     (when (and (consp cell) (equal (cdr cell) value))
       (return cell))))
 
+(cl:defun alist-get (key alist &optional default _remove testfn)
+  "Bring-up subset of ELisp `alist-get'."
+  (declare (cl:ignore _remove))
+  (let ((test (or testfn #'equal)))
+    (dolist (cell alist default)
+      (when (and (consp cell) (funcall test key (car cell)))
+        (return (cdr cell))))))
+
+(cl:define-setf-expander alist-get (key alist &optional default remove testfn &environment env)
+  (multiple-value-bind (alist-temps alist-vals alist-store-vars alist-store-form alist-access)
+      (cl:get-setf-expansion alist env)
+	    (let ((k (gensym "KEY"))
+	          (d (gensym "DEFAULT"))
+	          (r (gensym "REMOVE"))
+	          (tf (gensym "TESTFN"))
+	          (new (gensym "NEW"))
+	          (alist-var (gensym "ALIST"))
+	          (prev-tail (gensym "PREV-TAIL"))
+	          (found-tail (gensym "FOUND-TAIL"))
+	          (test (gensym "TEST")))
+	      (cl:values
+	       (append alist-temps (list k d r tf))
+	       (append alist-vals (list key default remove testfn))
+	       (list new)
+	       `(let* ((,alist-var ,alist-access)
+               (,test (or ,tf #'equal))
+               (,prev-tail nil)
+               (,found-tail nil))
+          (let ((tail ,alist-var)
+                (prev nil))
+            (loop while (consp tail) do
+              (let ((cell (car tail)))
+                (when (and (consp cell) (funcall ,test ,k (car cell)))
+                  (setf ,found-tail tail)
+                  (setf ,prev-tail prev)
+                  (return)))
+              (setf prev tail)
+              (setf tail (cdr tail))))
+          (cond
+           ((and ,r (equal ,new ,d))
+            (when ,found-tail
+              (if (null ,prev-tail)
+                  (setf ,alist-var (cdr ,found-tail))
+                  (setf (cdr ,prev-tail) (cdr ,found-tail)))))
+           (,found-tail
+            (setf (cdr (car ,found-tail)) ,new))
+           (t
+            (setf ,alist-var (cons (cons ,k ,new) ,alist-var))))
+          (let (,@(loop for sv in alist-store-vars collect `(,sv ,alist-var)))
+            ,alist-store-form)
+          ,new)
+       `(alist-get ,k ,alist-access ,d ,r ,tf)))))
+
 (cl:defun memq (elt list)
   "ELisp-ish MEMQ."
   (loop for tail on list
         when (eq elt (car tail)) do (return tail)
+        finally (return nil)))
+
+(cl:defun memql (elt list)
+  "Bring-up subset of ELisp `memql' (EQL-based member)."
+  (loop for tail on list
+        when (eql elt (car tail)) do (return tail)
         finally (return nil)))
 
 (cl:defun delq (elt list)
@@ -5967,6 +6175,31 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
          (t
           (setf prev cur)
           (setf cur (cdr cur)))))
+      head)))
+
+(cl:defun delete-dups (list)
+  "Bring-up subset of ELisp `delete-dups' (destructive equal-based deletion)."
+  (labels ((skip-head (xs seen)
+             (loop while (and (consp xs) (member (car xs) seen :test #'equal)) do
+               (setf xs (cdr xs)))
+             xs))
+    (let* ((seen nil)
+           (head (if (consp list)
+                     (progn (push (car list) seen) list)
+                     list)))
+      (when (not (consp head))
+        (return-from delete-dups head))
+      (let* ((prev head)
+             (cur (cdr head)))
+        (loop while (consp cur) do
+          (cond
+           ((member (car cur) seen :test #'equal)
+            (setf (cdr prev) (cdr cur))
+            (setf cur (cdr cur)))
+           (t
+            (push (car cur) seen)
+            (setf prev cur)
+            (setf cur (cdr cur))))))
       head)))
 
 (cl:defun proper-list-p (x)

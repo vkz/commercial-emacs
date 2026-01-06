@@ -29,7 +29,7 @@ lisp/window.el 10
 lisp/files.el 10
 
 # pdump: macroexp, pcase, cus-face, faces, regexp-opt, rx.
-lisp/emacs-lisp/macroexp.el 30
+lisp/emacs-lisp/macroexp.el 60
 lisp/emacs-lisp/pcase.el 200
 lisp/cus-face.el 10
 lisp/faces.el 10

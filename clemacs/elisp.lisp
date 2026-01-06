@@ -21,6 +21,14 @@
 
 (cl:defvar *elisp-readtable* nil)
 
+(cl:deftype function (&rest _args)
+  "Type alias for ELISP::FUNCTION (maps to CL:FUNCTION).
+
+Ignore argument/result type restrictions for now; these are used for bring-up
+compiler declarations and should not fail compilation."
+  (declare (cl:ignore _args))
+  'cl:function)
+
 (cl:defun native-comp-function-p (_function)
   "Return non-nil when FUNCTION has an associated native-compiled version.
 
@@ -28,20 +36,25 @@ Native compilation is intentionally disabled in this fork, so this always
 returns nil."
   nil)
 
-(cl:defun + (&rest args)
-  "Temporary numeric-only ELisp `+'.
-
-This is defined early so the bring-up code can use `+' at toplevel while
-`elisp-compat.lisp` is still later in the ASDF load order."
-  (if (null args)
-      0
-      (cl:apply #'cl:+ args)))
-
-(cl:defun - (x &rest more)
-  "Temporary numeric-only ELisp `-'."
-  (if (null more)
-      (cl:- x)
-      (reduce #'cl:- more :initial-value x)))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Define numeric-only `+' / `-' early without redefinition warnings when the
+  ;; system is loaded repeatedly (e.g. during core rebuilds).
+  (unless (cl:fboundp '+)
+    (setf (cl:symbol-function '+)
+          (lambda (&rest args)
+            (if (null args)
+                0
+                (cl:apply #'cl:+ args))))
+    (setf (cl:documentation '+ 'cl:function)
+          "Temporary numeric-only ELisp `+'."))
+  (unless (cl:fboundp '-)
+    (setf (cl:symbol-function '-)
+          (lambda (x &rest more)
+            (if (null more)
+                (cl:- x)
+                (cl:reduce #'cl:- more :initial-value x))))
+    (setf (cl:documentation '- 'cl:function)
+          "Temporary numeric-only ELisp `-'.")))
 
 (defconstant +raw-byte-base+ #x3fff00)
 (defconstant +raw-byte-max+ #x3fffff)
@@ -53,6 +66,10 @@ This is defined early so the bring-up code can use `+' at toplevel while
 
 (deftype unibyte-string ()
   '(array (unsigned-byte 8) (*)))
+
+(cl:deftype string ()
+  "Type alias for ELISP::STRING (includes unibyte + multibyte strings)."
+  '(or cl:string unibyte-string))
 
 (deftype list-of (&optional (element-type t))
   "Accept `cl-lib' style (list-of TYPE) declarations.

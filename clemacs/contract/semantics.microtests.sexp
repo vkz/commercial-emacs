@@ -285,6 +285,16 @@
   :expected "(b c)"
   :emacs :match)
 
+ (:name "lists-alist-get-setf-inserts"
+  :expr "(let ((a nil)) (setf (alist-get 'x a) 1) a)"
+  :expected "((x . 1))"
+  :emacs :match)
+
+ (:name "lists-assoc-optional-testfn"
+  :expr "(cdr (assoc \"A\" '((\"a\" . 1)) #'string-equal-ignore-case))"
+  :expected "1"
+  :emacs :match)
+
  (:name "lists-append-nonlist-tail"
   :expr "(append (list 1) 2)"
   :expected "(1 . 2)"
@@ -376,5 +386,10 @@
  (:name "defvar-without-init-leaves-unbound"
   :expr "(progn (makunbound 'clemacs--microtest-defvar-default-nil) (defvar clemacs--microtest-defvar-default-nil) (boundp 'clemacs--microtest-defvar-default-nil))"
   :expected "nil"
+  :emacs :match)
+
+ (:name "textprops-buffer-string-preserves-buffer-properties"
+  :expr "(with-temp-buffer (insert \"a\") (set-text-properties 1 2 '(foo 7)) (get-text-property 0 'foo (buffer-string)))"
+  :expected "7"
   :emacs :match)
 )
