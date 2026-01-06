@@ -64,6 +64,21 @@
   :expected "1"
   :emacs :match)
 
+ (:name "lists-member-uses-equal"
+  :expr "(let ((x (cons 'a 'b))) (member (cons 'a 'b) (list x)))"
+  :expected "((a . b))"
+  :emacs :match)
+
+ (:name "cl-progv-binds-dynamically"
+  :expr "(progn (require 'cl-lib) (cl-progv '(x) '(7) x))"
+  :expected "7"
+  :emacs :match)
+
+ (:name "strings-string-to-char-empty-is-zero"
+  :expr "(string-to-char \"\")"
+  :expected "0"
+  :emacs :match)
+
  (:name "text-props-get-text-property-string-default-nil"
   :expr "(get-text-property 0 'foo \"abc\")"
   :expected "nil"

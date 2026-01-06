@@ -286,7 +286,7 @@ like: (defalias 'string= 'string-equal)."
                           (cl:error e))))))
         (unless (and (symbolp next) (not (eq next cur)))
           (return (nreverse out)))
-        (when (member next seen :test #'eq)
+        (when (cl:member next seen :test #'eq)
           (return (nreverse out)))
         (push next seen)
         (push next out)
@@ -438,12 +438,28 @@ For strings, return a character code integer (Emacs Lisp semantics)."
   ;; Minimal type-correctness: if all emitted character codes are ASCII, return a
   ;; unibyte string; otherwise return a multibyte CL string.
   (let ((codes (make-array 0 :element-type 'integer :adjustable t :fill-pointer 0))
-        (need-multibyte nil))
+        (need-multibyte nil)
+        (out-intervals nil)
+        (out-len 0))
     (labels ((emit-code (code)
                (vector-push-extend code codes)
+               (incf out-len)
                (when (or (%raw-byte-char-code-p code) (>= code 128))
                  (setf need-multibyte t)))
+             (emit-string-intervals (s start)
+               (let ((intervals (elisp::%string-text-properties s)))
+                 (when intervals
+                   (setf out-intervals
+                         (nconc out-intervals
+                                (loop for iv in intervals
+                                      for iv-s = (elisp::text-prop-interval-start iv)
+                                      for iv-e = (elisp::text-prop-interval-end iv)
+                                      collect (elisp::make-text-prop-interval
+                                               :start (+ start iv-s)
+                                               :end (+ start iv-e)
+                                               :plist (elisp::text-prop-interval-plist iv))))))))
              (emit-string (s)
+               (emit-string-intervals s out-len)
                (cond
                 ((unibyte-string-p s)
                  (dotimes (i (length s))
@@ -466,10 +482,14 @@ For strings, return a character code integer (Emacs Lisp semantics)."
           (let ((out (%make-unibyte-string (length codes))))
             (dotimes (i (length codes))
               (setf (aref out i) (aref codes i)))
+            (when out-intervals
+              (elisp::%set-string-text-properties out out-intervals))
             out)
           (let ((out (cl:make-string (length codes))))
             (dotimes (i (length codes))
               (setf (char out i) (%elisp-code->char (aref codes i))))
+            (when out-intervals
+              (elisp::%set-string-text-properties out out-intervals))
             out)))))
 
 (cl:defun vconcat (&rest seqs)
@@ -585,6 +605,25 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
             (setf cell (cddr cell)))))
     head))
 
+(cl:defun %plist-equal-as-set (a b)
+  "Return non-nil when plists A and B have the same key/value pairs.
+
+The comparison ignores key order."
+  (cond
+   ((and (null a) (null b)) t)
+   ((or (null a) (null b)) nil)
+   ((or (not (listp a)) (not (listp b))) (equal a b))
+   (t
+    (let ((keys-a nil)
+          (keys-b nil))
+      (loop for (k _v) on a by #'cddr do (push k keys-a))
+      (loop for (k _v) on b by #'cddr do (push k keys-b))
+      (when (/= (length keys-a) (length keys-b))
+        (return-from %plist-equal-as-set nil))
+      (dolist (k keys-a t)
+        (unless (equal (plist-get a k) (plist-get b k))
+          (return-from %plist-equal-as-set nil)))))))
+
 (cl:defvar *buffer-text-properties*
   (cl:make-hash-table :test 'eq))
 
@@ -634,6 +673,82 @@ intervals (string: 0-based, buffer: 1-based)."
           (when (< end iv-e)
             (push (elisp::make-text-prop-interval :start end :end iv-e :plist plist) out))))))
     (nreverse out)))
+
+(cl:defun %buffer-intervals-insert (intervals at len)
+  "Return buffer text property INTERVALS after inserting LEN chars at AT.
+
+AT is a 1-based buffer position.  Inserted text does not inherit surrounding
+buffer properties (plain `insert' semantics)."
+  (unless (and (integerp at) (integerp len) (plusp len))
+    (error "ELISP:%BUFFER-INTERVALS-INSERT bad args: ~S ~S" at len))
+  (let ((out nil))
+    (dolist (iv intervals)
+      (let* ((iv-s (elisp::text-prop-interval-start iv))
+             (iv-e (elisp::text-prop-interval-end iv))
+             (plist (elisp::text-prop-interval-plist iv)))
+        (cond
+         ;; Entirely before insertion point.
+         ((<= iv-e at)
+          (push iv out))
+         ;; Entirely after insertion point.
+         ((>= iv-s at)
+          (push (elisp::make-text-prop-interval
+                 :start (+ iv-s len)
+                 :end (+ iv-e len)
+                 :plist plist)
+                out))
+         ;; Interval spans insertion point: split without inheriting into the
+         ;; inserted range.
+         (t
+          (push (elisp::make-text-prop-interval :start iv-s :end at :plist plist) out)
+          (push (elisp::make-text-prop-interval
+                 :start (+ at len)
+                 :end (+ iv-e len)
+                 :plist plist)
+                out)))))
+    (nreverse out)))
+
+(cl:defun %buffer-intervals-delete (intervals start end)
+  "Return buffer text property INTERVALS after deleting [START,END).
+
+START/END are 1-based buffer positions."
+  (unless (and (integerp start) (integerp end) (<= start end))
+    (error "ELISP:%BUFFER-INTERVALS-DELETE bad args: ~S ~S" start end))
+  (let ((len (- end start)))
+    (when (zerop len)
+      (return-from %buffer-intervals-delete intervals))
+    (let ((out nil))
+      (dolist (iv intervals)
+        (let* ((iv-s (elisp::text-prop-interval-start iv))
+               (iv-e (elisp::text-prop-interval-end iv))
+               (plist (elisp::text-prop-interval-plist iv)))
+          (cond
+           ;; Entirely before deleted range.
+           ((<= iv-e start)
+            (push iv out))
+           ;; Entirely after deleted range.
+           ((>= iv-s end)
+            (push (elisp::make-text-prop-interval
+                   :start (- iv-s len)
+                   :end (- iv-e len)
+                   :plist plist)
+                  out))
+           (t
+            ;; Left piece.
+            (when (< iv-s start)
+              (push (elisp::make-text-prop-interval
+                     :start iv-s
+                     :end start
+                     :plist plist)
+                    out))
+            ;; Right piece (shifted left).
+            (when (> iv-e end)
+              (push (elisp::make-text-prop-interval
+                     :start start
+                     :end (- iv-e len)
+                     :plist plist)
+                    out))))))
+      (nreverse out))))
 
 (cl:defun text-properties-at (pos &optional object)
   "Bring-up subset of ELisp `text-properties-at'."
@@ -808,7 +923,8 @@ intervals (string: 0-based, buffer: 1-based)."
       (return-from equal-including-properties nil))
     (let ((len (length a)))
       (loop for i from 0 to len do
-        (unless (equal (text-properties-at i a) (text-properties-at i b))
+        (unless (%plist-equal-as-set (text-properties-at i a)
+                                     (text-properties-at i b))
           (return-from equal-including-properties nil)))
       t))
    (t
@@ -842,7 +958,24 @@ Supports negative indices and TO = nil (meaning end of string)."
                (t (error "ELISP:SUBSTRING expects integer or nil TO, got: ~S" to)))))
     (when (or (< start 0) (> start n) (< end 0) (> end n) (< end start))
       (signal 'args-out-of-range (list s from to)))
-    (subseq s start end)))
+    (let ((out (subseq s start end)))
+      (let ((intervals (elisp::%string-text-properties s)))
+        (when intervals
+          (let ((out-intervals nil))
+            (dolist (iv intervals)
+              (let* ((iv-s (elisp::text-prop-interval-start iv))
+                     (iv-e (elisp::text-prop-interval-end iv))
+                     (s* (max start iv-s))
+                     (e* (min end iv-e)))
+                (when (< s* e*)
+                  (push (elisp::make-text-prop-interval
+                         :start (- s* start)
+                         :end (- e* start)
+                         :plist (elisp::text-prop-interval-plist iv))
+                        out-intervals))))
+            (when out-intervals
+              (elisp::%set-string-text-properties out (nreverse out-intervals))))))
+      out)))
 
 (cl:defvar emacs-version "31.0.50")
 
@@ -1154,13 +1287,18 @@ This is used for ELisp `looking-at', which must not search forward past point."
                      (args (cdr x)))
                  (cond
                   ;; Sequence.
-                  ((op= op ":")
+                  ((or (op= op ":") (op= op "SEQ"))
                    (apply #'concatenate 'cl:string (mapcar #'emit args)))
                   ;; Capturing group.
                   ((op= op "GROUP")
                    (capture (apply #'concatenate 'cl:string (mapcar #'emit args))))
+                  ;; Capturing group (explicit group number): treat like GROUP.
+                  ((op= op "GROUP-N")
+                   (when (and args (integerp (car args)))
+                     (setf args (cdr args)))
+                   (capture (apply #'concatenate 'cl:string (mapcar #'emit args))))
                   ;; Alternation.
-                  ((op= op "|")
+                  ((or (op= op "|") (op= op "OR"))
                    (group
                     (cl:with-output-to-string (out)
                       (loop for a in args
@@ -1177,18 +1315,54 @@ This is used for ELisp `looking-at', which must not search forward past point."
                     ;; Treat that as `+?' for bring-up.
                     ((and (= (length args) 2)
                           (integerp (car args)))
-                     (concatenate 'cl:string (group (emit (cadr args))) "+?"))
-                    ((/= (length args) 1)
-                     (error "ELISP:rx (+ ...) expects 1 arg, got: %S" x))
+                     (concatenate 'cl:string
+                                  (group (apply #'concatenate 'cl:string
+                                                (mapcar #'emit (cdr args))))
+                                  "+?"))
+                    ((null args)
+                     (error "ELISP:rx (+ ...) expects args, got: %S" x))
                     (t
-                     (concatenate 'cl:string (group (emit (car args))) "+"))))
+                     (concatenate 'cl:string
+                                  (group (apply #'concatenate 'cl:string
+                                                (mapcar #'emit args)))
+                                  "+"))))
                   ;; One-or-more (non-greedy).
                   ((op= op "+?")
                    (cond
-                    ((/= (length args) 1)
-                     (error "ELISP:rx (+? ...) expects 1 arg, got: %S" x))
+                    ((null args)
+                     (error "ELISP:rx (+? ...) expects args, got: %S" x))
                     (t
-                     (concatenate 'cl:string (group (emit (car args))) "+?"))))
+                     (concatenate 'cl:string
+                                  (group (apply #'concatenate 'cl:string
+                                                (mapcar #'emit args)))
+                                  "+?"))))
+                  ;; Zero-or-more.
+                  ((op= op "*")
+                   (cond
+                    ;; See `+` reader quirk note above.
+                    ((and (>= (length args) 2)
+                          (integerp (car args)))
+                     (concatenate 'cl:string
+                                  (group (apply #'concatenate 'cl:string
+                                                (mapcar #'emit (cdr args))))
+                                  "*?"))
+                    ((null args)
+                     (error "ELISP:rx (* ...) expects args, got: %S" x))
+                    (t
+                     (concatenate 'cl:string
+                                  (group (apply #'concatenate 'cl:string
+                                                (mapcar #'emit args)))
+                                  "*"))))
+                  ;; Zero-or-more (non-greedy).
+                  ((op= op "*?")
+                   (cond
+                    ((null args)
+                     (error "ELISP:rx (*? ...) expects args, got: %S" x))
+                    (t
+                     (concatenate 'cl:string
+                                  (group (apply #'concatenate 'cl:string
+                                                (mapcar #'emit args)))
+                                  "*?"))))
                   ;; Embed an already-formed regexp.
                   ((op= op "REGEXP")
                    (cond
@@ -1385,6 +1559,17 @@ This is only intended to be readable by our ELisp `read-from-string'."
             (and (boundp 'print-escape-control-characters) print-escape-control-characters)))
       (emit object))))
 
+(cl:defun princ-to-string (object)
+  "Bring-up subset of ELisp `princ-to-string'."
+  (cond
+   ((null object) "nil")
+   ((eq object t) "t")
+   ((symbolp object) (symbol-name object))
+   ((stringp object) object)
+   ((integerp object) (cl:princ-to-string object))
+   ((characterp object) (string object))
+   (t (cl:princ-to-string object))))
+
 
 (cl:defun read-from-string (string &optional start end)
   "Bring-up subset of ELisp `read-from-string'.
@@ -1421,6 +1606,14 @@ character in STRING."
   (handler-case
       (parse-integer (%elisp-string->cl-string string) :junk-allowed t)
     (cl:error () 0)))
+
+(cl:defun string-to-char (string)
+  "Bring-up subset of ELisp `string-to-char'."
+  (unless (stringp string)
+    (error "ELISP:STRING-TO-CHAR expects string, got: ~S" string))
+  (if (zerop (length string))
+      0
+      (aref string 0)))
 
 (cl:defun copy-sequence (sequence)
   "ELisp-ish COPY-SEQUENCE."
@@ -1485,7 +1678,7 @@ match to Elisp than CL:EQUAL.
 
 (cl:defun featurep (feature)
   "Stub for ELisp `featurep'."
-  (and (member feature features :test 'eq) t))
+  (and (cl:member feature features :test 'eq) t))
 
 (cl:defun provide (feature &optional _subfeatures)
   "Stub for ELisp `provide'."
@@ -1875,7 +2068,7 @@ Records enough symbol properties for upstream ERT's `should-error':
     (cl:error "ELISP:DEFINE-ERROR expected symbol PARENT or nil, got: ~S" parent))
   (let* ((parent (or parent 'error))
          (parent-conds (get parent 'error-conditions)))
-    (unless (and (listp parent-conds) (member parent parent-conds :test #'eq))
+    (unless (and (listp parent-conds) (cl:member parent parent-conds :test #'eq))
       ;; Seed `error' if it wasn't populated yet.
       (setf parent-conds (list parent))
       (setf (get parent 'error-conditions) parent-conds))
@@ -1928,6 +2121,10 @@ formatting). We currently ignore them and delegate to CL:ASSERT on FORM."
 (cl:defmacro cl-defun (name lambda-list &body body)
   "Minimal subset of cl-lib's `cl-defun'."
   `(defun ,name ,lambda-list ,@body))
+
+(cl:defmacro cl-progv (symbols values &body body)
+  "Bring-up subset of cl-lib's `cl-progv'."
+  `(cl:progv ,symbols ,values ,@body))
 
 (cl:defun %cl-destructuring-bind-check-key-list (key-list allowed-keys)
   (let ((xs key-list))
@@ -2078,7 +2275,7 @@ an augmented SBCL lexical environment."
                (loop while rest do
                  (cond
                   ((and (consp rest)
-                        (member (car rest) '(for as) :test #'eq)
+                        (cl:member (car rest) '(for as) :test #'eq)
                         (consp (cdr rest))
                         (symbolp (cadr rest))
                         (consp (cddr rest))
@@ -2829,6 +3026,76 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
 (cl:defvar minor-mode-alist nil)
 (cl:defvar help-char 8)
 (cl:defvar font-lock-mode nil)
+(cl:defvar font-lock-function nil)
+
+;; ---------------------------------------------------------------------------
+;; Help buffers (minimal stubs for upstream ERT help output)
+;; ---------------------------------------------------------------------------
+
+(cl:defun called-interactively-p (&optional _kind)
+  "Bring-up stub for ELisp `called-interactively-p'."
+  (declare (cl:ignore _kind))
+  nil)
+
+(cl:defun help-buffer ()
+  "Bring-up subset of ELisp `help-buffer'."
+  (get-buffer-create "*Help*")
+  "*Help*")
+
+(cl:defmacro with-help-window (buffer-name &body body)
+  "Bring-up subset of ELisp `with-help-window'."
+  (let ((buf (cl:gensym "HELP-BUF-")))
+    `(let ((,buf ,buffer-name))
+       (display-buffer ,buf)
+       (with-current-buffer ,buf
+         (let ((inhibit-read-only t))
+           (erase-buffer))
+         ,@body))))
+
+(cl:defun help-setup-xref (&rest _args)
+  "Bring-up stub for ELisp `help-setup-xref'."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun help-xref-button (&rest _args)
+  "Bring-up stub for ELisp `help-xref-button'."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun substitute-command-keys (string)
+  "Bring-up stub for ELisp `substitute-command-keys'."
+  string)
+
+(cl:defun fill-region-as-paragraph (&rest _args)
+  "Bring-up stub for ELisp `fill-region-as-paragraph'."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun font-lock-default-function (&optional _enabledp)
+  "Bring-up stub for ELisp `font-lock-default-function'."
+  (declare (cl:ignore _enabledp))
+  nil)
+
+(cl:defun font-lock-mode (&optional arg)
+  "Bring-up subset of ELisp `font-lock-mode'.
+
+For bring-up we implement only:
+- enabling/disabling the buffer-local `font-lock-mode' variable, and
+- calling `font-lock-function' when present (ERT uses this to redraw results)."
+  (let* ((cur (and (boundp 'font-lock-mode) (symbol-value 'font-lock-mode)))
+         (enable
+           (cond
+            ((null arg) (not cur))
+            ((eq arg t) t)
+            ((and (integerp arg) (> arg 0)) t)
+            (t nil))))
+    (make-local-variable 'font-lock-mode)
+    (set 'font-lock-mode (and enable t))
+    (when (boundp 'font-lock-function)
+      (let ((fn (ignore-errors (symbol-value 'font-lock-function))))
+        (when (or (functionp fn) (and (symbolp fn) (fboundp fn)))
+          (funcall fn enable))))
+    (symbol-value 'font-lock-mode)))
 
 (cl:defun file-name-base (filename)
   "Bring-up subset of ELisp `file-name-base'."
@@ -2844,7 +3111,16 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
     (cond
      ((and dot (plusp dot))
       (subseq name 0 dot))
-     (t name))))
+	     (t name))))
+
+(cl:defun file-name-nondirectory (filename)
+  "Bring-up subset of ELisp `file-name-nondirectory'."
+  (unless (stringp filename)
+    (error "ELISP:FILE-NAME-NONDIRECTORY expects a string, got: ~S" filename))
+  (let* ((s (%file-name->cl-string filename))
+         (slash (or (position #\/ s :from-end t)
+                    (position #\\ s :from-end t))))
+    (subseq s (if slash (1+ slash) 0))))
 
 ;; ---------------------------------------------------------------------------
 ;; Minimal filesystem surface (enough for upstream ERT-x temp file tests)
@@ -3093,6 +3369,7 @@ Returns a marker with no buffer/position."
   (elisp-marker-position (%marker-sync marker)))
 
 (defvar *buffer-table* (cl:make-hash-table :test 'cl:equal))
+(defvar *buffer-list* nil)
 
 (cl:defun %buffer-name-key (name)
   ;; Keep buffer table keys as CL strings so CL:EQUAL hashing works even when
@@ -3101,10 +3378,12 @@ Returns a marker with no buffer/position."
 
 (cl:defun %register-buffer (buf)
   (setf (gethash (%buffer-name-key (elisp-buffer-name buf)) *buffer-table*) buf)
+  (unless (cl:member buf *buffer-list* :test #'eq)
+    ;; Keep creation order stable; selection is tracked separately.
+    (setf *buffer-list* (append *buffer-list* (list buf))))
   buf)
 
-(cl:defvar *messages-buffer* (%register-buffer (make-elisp-buffer :name "*Messages*")))
-(cl:defvar *current-buffer* *messages-buffer*)
+(cl:defvar *current-buffer* (%register-buffer (make-elisp-buffer :name "*Messages*")))
 (defparameter message-log-max t)
 
 (cl:defun current-buffer ()
@@ -3115,7 +3394,24 @@ Returns a marker with no buffer/position."
   (elisp-buffer-p x))
 
 (cl:defun messages-buffer ()
-  *messages-buffer*)
+  "Bring-up subset of ELisp `messages-buffer'.
+
+Return the current *Messages* buffer (creating it if needed)."
+  (get-buffer-create "*Messages*"))
+
+(cl:defvar *killed-buffers* (cl:make-hash-table :test 'eq))
+
+(cl:defun %buffer-live-p (buf)
+  (and (elisp-buffer-p buf)
+       (not (gethash buf *killed-buffers*))))
+
+(cl:defun buffer-live-p (buffer)
+  "Bring-up subset of ELisp `buffer-live-p'."
+  (let ((buf (etypecase buffer
+               (elisp-buffer buffer)
+               ((or cl:string unibyte-string) (get-buffer buffer))
+               (null nil))))
+    (and buf (%buffer-live-p buf) t)))
 
 ;; ---------------------------------------------------------------------------
 ;; Syntax tables / indentation (minimal stubs for pp.el bring-up)
@@ -3148,6 +3444,13 @@ Returns a marker with no buffer/position."
   "Bring-up stub for ELisp `lisp-mode-variables'."
   (declare (cl:ignore _arg))
   (setf indent-line-function #'lisp-indent-line)
+  nil)
+
+(cl:defun emacs-lisp-mode ()
+  "Bring-up stub for ELisp `emacs-lisp-mode'."
+  (setf major-mode 'emacs-lisp-mode)
+  (set-syntax-table emacs-lisp-mode-syntax-table)
+  (lisp-mode-variables)
   nil)
 
 (cl:defun lisp-indent-line ()
@@ -3255,10 +3558,33 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
         (indent-to indent-col)
         nil))))
 
+(cl:defun indent-region (start end &optional _column)
+  "Bring-up subset of ELisp `indent-region'."
+  (declare (cl:ignore _column))
+  (unless (and (integerp start) (integerp end))
+    (error "ELISP:INDENT-REGION expected integer bounds, got: ~S ~S" start end))
+  (let ((fn (or indent-line-function #'lisp-indent-line))
+        (end* (min end (point-max))))
+    (let ((saved-buf (current-buffer))
+          (saved-point (point)))
+      (unwind-protect
+          (progn
+            (goto-char start)
+            (beginning-of-line)
+            (loop while (< (point) end*) do
+              (funcall fn)
+              (let ((p (point)))
+                (forward-line 1)
+                (when (<= (point) p)
+                  (return)))))
+        (set-buffer saved-buf)
+        (goto-char saved-point))))
+  nil)
+
 (cl:defun get-buffer (buffer-or-name)
   "Bring-up subset of ELisp `get-buffer'."
   (etypecase buffer-or-name
-    (elisp-buffer buffer-or-name)
+    (elisp-buffer (and (%buffer-live-p buffer-or-name) buffer-or-name))
     ((or cl:string unibyte-string)
      (gethash (%buffer-name-key buffer-or-name) *buffer-table*))
     (null nil)))
@@ -3270,6 +3596,21 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
     (error "ELISP:GET-BUFFER-CREATE expects a string name, got: ~S" name))
   (or (gethash (%buffer-name-key name) *buffer-table*)
       (%register-buffer (make-elisp-buffer :name name))))
+
+(cl:defun buffer-list (&optional _frame)
+  "Bring-up subset of ELisp `buffer-list'."
+  (declare (cl:ignore _frame))
+  ;; Ensure we don't hand out dead buffers and keep current first.
+  (let* ((live (remove-if-not #'%buffer-live-p *buffer-list*))
+         (cur (current-buffer)))
+    (if (and (%buffer-live-p cur) (cl:member cur live :test #'eq))
+        (cons cur (remove cur live :test #'eq))
+        live)))
+
+(cl:defun %buffer-bump-to-front (buf)
+  (when (and (elisp-buffer-p buf) (%buffer-live-p buf))
+    (setf *buffer-list* (cons buf (remove buf *buffer-list* :test #'eq))))
+  buf)
 
 (cl:defun generate-new-buffer-name (name &optional _ignore)
   "Bring-up subset of ELisp `generate-new-buffer-name'."
@@ -3284,15 +3625,59 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
           (when (null (gethash cand *buffer-table*))
             (return (string-to-unibyte cand)))))))
 
+(cl:defun clone-buffer (&optional newname _display-flag)
+  "Bring-up subset of ELisp `clone-buffer'."
+  (declare (cl:ignore _display-flag))
+  (let* ((src (current-buffer))
+         (name (or newname (generate-new-buffer-name (buffer-name src))))
+         (buf (get-buffer-create name)))
+    (setf (elisp-buffer-text buf) (copy-seq (elisp-buffer-text src))
+          (elisp-buffer-point buf) (elisp-buffer-point src)
+          (elisp-buffer-modified-p buf) (elisp-buffer-modified-p src))
+    (%set-buffer-text-properties buf (%buffer-text-properties src))
+    buf))
+
+(cl:defun rename-buffer (newname &optional unique)
+  "Bring-up subset of ELisp `rename-buffer'."
+  (unless (stringp newname)
+    (error "ELISP:RENAME-BUFFER expects a string, got: ~S" newname))
+  (let* ((buf (current-buffer))
+         (old (elisp-buffer-name buf))
+         (target
+           (cond
+            ((and (stringp old) (string= (%elisp-string->cl-string old)
+                                         (%elisp-string->cl-string newname)))
+             old)
+            (unique
+             (generate-new-buffer-name newname))
+            (t
+             (let* ((key (%buffer-name-key newname))
+                    (existing (gethash key *buffer-table*)))
+               (when (and existing (not (eq existing buf)))
+                 (error "ELISP:RENAME-BUFFER name already in use: ~S" newname))
+               newname)))))
+    (remhash (%buffer-name-key old) *buffer-table*)
+    (setf (elisp-buffer-name buf) target)
+    (%register-buffer buf)
+    target))
+
 (cl:defun kill-buffer (buffer-or-name)
   "Bring-up subset of ELisp `kill-buffer'."
   (let ((buf (get-buffer buffer-or-name)))
     (unless buf
       (return-from kill-buffer nil))
     (remhash (%buffer-name-key (elisp-buffer-name buf)) *buffer-table*)
+    (setf *buffer-list* (remove buf *buffer-list* :test #'eq))
+    (setf (gethash buf *killed-buffers*) t)
     (%clear-buffer-text-properties buf)
     (when (eq buf *current-buffer*)
-      (setf *current-buffer* *messages-buffer*))
+      (setf *current-buffer*
+            (or (find-if #'%buffer-live-p *buffer-list*)
+                (%register-buffer (make-elisp-buffer :name "*scratch*")))))
+    (when (and (boundp '*single-window*)
+               (elisp-window-p *single-window*)
+               (eq (elisp-window-buffer *single-window*) buf))
+      (setf (elisp-window-buffer *single-window*) *current-buffer*))
     t))
 
 (cl:defun set-buffer (buffer-or-name)
@@ -3302,6 +3687,7 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
                       (error "ELISP:SET-BUFFER no such buffer: ~S" buffer-or-name))
                  (error "ELISP:SET-BUFFER invalid buffer: ~S" buffer-or-name))))
     (setf *current-buffer* buf)
+    (%buffer-bump-to-front buf)
     buf))
 
 (cl:defmacro with-current-buffer (buffer &body body)
@@ -3989,6 +4375,12 @@ Emacs clamps positions outside the buffer to the nearest valid position."
          (txt (elisp-buffer-text *current-buffer*)))
     (when (> s e)
       (error "ELISP:DELETE-REGION start > end: ~S ~S" start end))
+    (let ((intervals (%buffer-text-properties *current-buffer*)))
+      (when intervals
+        (let ((new (%buffer-intervals-delete intervals s e)))
+          (if new
+              (%set-buffer-text-properties *current-buffer* new)
+              (%clear-buffer-text-properties *current-buffer*)))))
     (%buffer-record-delete *current-buffer* s e)
     (setf (elisp-buffer-text *current-buffer*)
           (concatenate 'cl:string (subseq txt 0 (1- s)) (subseq txt (1- e))))
@@ -4246,14 +4638,8 @@ Emacs clamps positions outside the buffer to the nearest valid position."
         nil)))))
 
 (cl:defun insert (&rest parts)
-  (let* ((s (cl:with-output-to-string (out)
-              (dolist (p parts)
-                (typecase p
-                  (null nil)
-                  (cl:string (write-string p out))
-                  (unibyte-string (write-string (%elisp-string->cl-string p) out))
-                  (character (write-char p out))
-                  (t (write-string (princ-to-string p) out))))))
+  (let* ((s0 (apply #'concat parts))
+         (s (if (unibyte-string-p s0) (%elisp-string->cl-string s0) s0))
          (txt (elisp-buffer-text *current-buffer*))
          (at (point))
          (idx (1- at)))
@@ -4292,7 +4678,31 @@ Emacs clamps positions outside the buffer to the nearest valid position."
                 #+sbcl
                 (sb-debug:print-backtrace :stream out :count 50)
                 (finish-output out)))))))
-    (%buffer-record-insert *current-buffer* at (length s))
+    (let ((len (length s)))
+      (when (plusp len)
+        (let ((intervals (%buffer-text-properties *current-buffer*)))
+          (when intervals
+            (%set-buffer-text-properties
+             *current-buffer*
+             (%buffer-intervals-insert intervals at len))))
+        (let ((s0-intervals (elisp::%string-text-properties s0)))
+          (when s0-intervals
+            (let ((buf-intervals nil))
+              (dolist (iv s0-intervals)
+                (let* ((iv-s (elisp::text-prop-interval-start iv))
+                       (iv-e (elisp::text-prop-interval-end iv)))
+                  (when (< iv-s iv-e)
+                    (push (elisp::make-text-prop-interval
+                           :start (+ at iv-s)
+                           :end (+ at iv-e)
+                           :plist (elisp::text-prop-interval-plist iv))
+                          buf-intervals))))
+              (when buf-intervals
+                (%set-buffer-text-properties
+                 *current-buffer*
+                 (append (or (%buffer-text-properties *current-buffer*) nil)
+                         (nreverse buf-intervals))))))))
+      (%buffer-record-insert *current-buffer* at len))
     (setf (elisp-buffer-text *current-buffer*)
           (concatenate 'cl:string (subseq txt 0 idx) s (subseq txt idx)))
     (goto-char (+ (point) (length s)))
@@ -4688,7 +5098,7 @@ for upstream ERT's `ert--make-xrefs-region'."
 (defstruct elisp-frame
   (selected-window nil))
 
-(cl:defvar *single-window* (make-elisp-window :buffer *messages-buffer*))
+(cl:defvar *single-window* (make-elisp-window :buffer *current-buffer*))
 (cl:defvar *selected-window* *single-window*)
 (cl:defvar *single-frame* (make-elisp-frame :selected-window *single-window*))
 (cl:defvar *selected-frame* *single-frame*)
@@ -5026,9 +5436,33 @@ working. It stores nodes out-of-band and (re)renders on `ewoc-refresh' and
 
 (cl:defun message (format-string &rest args)
   (let ((s (apply #'format format-string args)))
-    (with-current-buffer (messages-buffer)
-      (goto-char (point-max))
-      (insert s #\Newline))
+    (let ((log-max
+            (if (boundp 'message-log-max)
+                (symbol-value 'message-log-max)
+                t)))
+      ;; Emacs does not log empty messages to *Messages*, and (crucially for
+      ;; upstream ERT) they do not trigger truncation.
+      (unless (or (null log-max) (zerop (length s)))
+        (with-current-buffer (messages-buffer)
+          (goto-char (point-max))
+          (insert s #\Newline)
+          ;; Approximate Emacs's implicit truncation behavior from C core:
+          ;; when MESSAGE-LOG-MAX is a natnump, keep only the last N messages.
+          (when (natnump log-max)
+            (let* ((txt (elisp-buffer-text *current-buffer*))
+                   (lines (count #\Newline txt)))
+              (when (> lines log-max)
+                (if (zerop log-max)
+                    (erase-buffer)
+                    (let* ((excess (- lines log-max))
+                           (idx -1))
+                      (dotimes (_ excess)
+                        (let ((nl (position #\Newline txt :start (1+ idx))))
+                          (when (null nl)
+                            (return))
+                          (setf idx nl)))
+                      (when (and (integerp idx) (<= 0 idx))
+                        (delete-region (point-min) (+ idx 2)))))))))))
     s))
 
 (cl:defun error-message-string (condition)
@@ -5419,11 +5853,13 @@ This is sufficient for `letrec' in `lisp/subr.el' during ERT bring-up."
     (labels ((seen (x)
                (cond
                 ((null x) nil)
-                ((symbolp x) (and (member x syms :test #'eq) t))
+                ((symbolp x) (and (cl:member x syms :test #'eq) t))
                 ((atom x) nil)
                 ((and (consp x) (eq (car x) 'quote)) nil)
                 (t (or (seen (car x)) (seen (cdr x)))))))
       (seen sexp))))
+
+(cl:defvar *macroexpand-all-compat* nil)
 
 (cl:defun macroexpand-all (form &optional env)
   "Bring-up subset of ELisp `macroexpand-all'."
@@ -5499,6 +5935,10 @@ This is sufficient for `letrec' in `lisp/subr.el' during ERT bring-up."
                     (t (cons (rw (car x)) (rw (cdr x))))))))))
       (rw form))))
 
+(eval-when (:load-toplevel :execute)
+  (unless *macroexpand-all-compat*
+    (setf *macroexpand-all-compat* (fdefinition 'macroexpand-all))))
+
 ;; Upstream ERT exposes `skip-when' and `skip-unless' inside `ert-deftest'
 ;; bodies.  For bring-up, also provide them as global macros so test bodies
 ;; that close over them in lambdas still macroexpand under SBCL.
@@ -5525,11 +5965,11 @@ Binds VAR (when non-nil) to an ELisp-style error datum:
                 ((and (symbolp types) (eq types 'error)) t)
                 ((symbolp types)
                  `(let ((conds (get ,sym 'error-conditions)))
-                    (and (listp conds) (member ',types conds :test #'eq))))
+                    (and (listp conds) (cl:member ',types conds :test #'eq))))
                 ((consp types)
                  `(let ((conds (get ,sym 'error-conditions)))
                     (and (listp conds)
-                         (some (lambda (t0) (member t0 conds :test #'eq)) ',types))))
+                         (some (lambda (t0) (cl:member t0 conds :test #'eq)) ',types))))
                 (t nil)))
              (expand-clauses (err-sym)
                (let ((sym `(car ,err-sym)))
@@ -5629,17 +6069,15 @@ the original (SYMBOL . DATA) pair."
                (vector-push-extend code codes)
                (when (or (%raw-byte-char-code-p code) (>= code 128))
                  (setf need-multibyte t)))
-             (emit-cl-string (s)
-               (dotimes (j (length s))
-                 (emit-code (char-code (char s j)))))
-             (emit-obj-princ (o)
-               (cond
-                ((stringp o) (emit-cl-string (%elisp-string->cl-string o)))
-                (t (emit-cl-string (cl:princ-to-string o)))))
-             (emit-obj-prin1 (o)
-               (emit-cl-string (%elisp-string->cl-string (prin1-to-string o))))
-             (emit-dec (o)
-               (emit-cl-string (cl:princ-to-string o)))
+	             (emit-cl-string (s)
+	               (dotimes (j (length s))
+	                 (emit-code (char-code (char s j)))))
+	             (emit-obj-princ (o)
+	               (emit-cl-string (%elisp-string->cl-string (princ-to-string o))))
+	             (emit-obj-prin1 (o)
+	               (emit-cl-string (%elisp-string->cl-string (prin1-to-string o))))
+	             (emit-dec (o)
+	               (emit-cl-string (%elisp-string->cl-string (princ-to-string o))))
              (emit-hex (o)
                (emit-cl-string
                 (cl:string-downcase
@@ -5648,14 +6086,14 @@ the original (SYMBOL . DATA) pair."
                              ((integerp o) o)
                              ((cl:characterp o) (char-code o))
                              (t o))))))
-             (emit-c (o)
-               (cond
-                ((integerp o) (emit-code o))
-                ((cl:characterp o) (emit-code (char-code o)))
-                (t
-                 (let ((s (cl:princ-to-string o)))
-                   (when (> (length s) 0)
-                     (emit-code (char-code (char s 0))))))))
+	             (emit-c (o)
+	               (cond
+	                ((integerp o) (emit-code o))
+	                ((cl:characterp o) (emit-code (char-code o)))
+	                (t
+	                 (let ((s (%elisp-string->cl-string (princ-to-string o))))
+	                   (when (> (length s) 0)
+	                     (emit-code (char-code (char s 0))))))))
              (finish ()
                (if (not need-multibyte)
                    (let ((out (%make-unibyte-string (length codes))))
@@ -5790,7 +6228,7 @@ Supports the common pattern of a self-referential closure (used by ERT)."
         (let ((seen nil)
               (cur thing))
           (loop
-            (when (member cur seen :test #'eq)
+            (when (cl:member cur seen :test #'eq)
               (error "ELISP:INDIRECT-FUNCTION circular definition: ~S" thing))
             (push cur seen)
             (let ((special (gethash cur *special-operator-subrs*)))
@@ -6028,25 +6466,73 @@ major-mode implementation."
      (cl:defvar ,symbol ,menu)
      ',symbol))
 
-(cl:defun define-button-type (&rest _args)
-  "Bring-up stub for ELisp `define-button-type'."
-  (declare (cl:ignore _args))
-  nil)
+(cl:defun button-category-symbol (type)
+  "Bring-up subset of ELisp `button-category-symbol'."
+  (or (get type 'button-category-symbol)
+      (error "Unknown button type `%s'" type)))
 
-(cl:defun make-text-button (&rest _args)
-  "Bring-up stub for ELisp `make-text-button'."
-  (declare (cl:ignore _args))
-  nil)
+(put 'default-button 'face 'button)
+(put 'default-button 'mouse-face 'highlight)
+(put 'default-button 'help-echo "mouse-2, RET: Push this button")
+(put 'button 'button-category-symbol 'default-button)
 
-(cl:defun insert-text-button (label &rest _properties)
-  "Bring-up stub for ELisp `insert-text-button'.
+(cl:defun define-button-type (name &rest properties)
+  "Bring-up subset of ELisp `define-button-type'."
+  (unless (symbolp name)
+    (error "ELISP:DEFINE-BUTTON-TYPE expected symbol, got: ~S" name))
+  (let* ((type-entry (or (plist-member properties 'supertype)
+                         (plist-member properties :supertype)))
+         (supertype (if type-entry (cadr type-entry) 'button))
+         (super-catsym (button-category-symbol supertype))
+         (catsym (or (get name 'button-category-symbol)
+                     (cl:make-symbol
+                      (concatenate 'cl:string
+                                   (%elisp-string->cl-string (symbol-name name))
+                                   "-button")))))
+    (put name 'button-category-symbol catsym)
+    ;; Inherit defaults from the supertype's category symbol.
+    (let ((plist (symbol-plist super-catsym)))
+      (loop while plist do
+        (put catsym (pop plist) (pop plist))))
+    (put catsym 'type name)
+    ;; Apply provided properties (excluding :supertype).
+    (loop while properties do
+      (let ((prop (pop properties)))
+        (when (eq prop :supertype)
+          (setf prop 'supertype))
+        (put catsym prop (pop properties))))
+    (unless (get catsym 'supertype)
+      (put catsym 'supertype supertype))
+    name))
 
-We currently ignore PROPERTIES and just insert LABEL, returning the start
-position."
-  (declare (cl:ignore _properties))
-  (let ((begin (point)))
-    (insert label)
-    begin))
+(cl:defun make-text-button (beg end &rest properties)
+  "Bring-up subset of ELisp `make-text-button'."
+  (let ((object nil)
+        (type-entry (or (plist-member properties 'type)
+                        (plist-member properties :type))))
+    (when (plist-get properties 'category)
+      (error "Button `category' property may not be set directly"))
+    (if (null type-entry)
+        (setf properties (cons 'category (cons 'default-button properties)))
+        (progn
+          (setf (car type-entry) 'category)
+          (setf (cadr type-entry) (button-category-symbol (cadr type-entry)))))
+    (when (stringp beg)
+      (setf object (copy-seq beg)
+            beg 0
+            end (length object)))
+    (add-text-properties beg end
+                         ;; Each button should have a non-eq `button' property.
+                         (cons 'button (cons (list t) properties))
+                         object)
+    (or object beg)))
+
+(cl:defun insert-text-button (label &rest properties)
+  "Bring-up subset of ELisp `insert-text-button'."
+  (apply #'make-text-button
+         (prog1 (point) (insert label))
+         (point)
+         properties))
 
 (cl:defun add-hook (hook function &optional append _local)
   "Bring-up subset of ELisp `add-hook'.
@@ -6059,7 +6545,7 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
     (unless (listp cur)
       (set hook nil)
       (setf cur nil))
-    (unless (member function cur :test #'equal)
+    (unless (cl:member function cur :test #'equal)
       (set hook (if append (append cur (list function)) (cons function cur)))))
   t)
 
@@ -6108,7 +6594,7 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
     (unless (listp cur)
       (set list-var nil)
       (setf cur nil))
-    (unless (member element cur :test #'equal)
+    (unless (cl:member element cur :test #'equal)
       (set list-var (if append (append cur (list element)) (cons element cur)))))
   t)
 
@@ -6236,9 +6722,14 @@ trying to redefine locked symbols while loading upstream ELisp)."
       (let* ((doc (and body (stringp (car body)) (car body)))
              (doc* (and doc (if (cl:stringp doc) doc (%elisp-string->cl-string doc))))
              (rest (if doc (cdr body) body)))
-        `(cl:defun ,name ,lambda-list
-           ,@(when doc* (list doc*))
-           ,@rest))))
+        `(progn
+           ;; Populate `current-load-list' so `load-history' + `symbol-file'
+           ;; can report the defining file for TYPE = 'defun.
+           (when (and (boundp 'current-load-list) (listp current-load-list))
+             (push (cons 'defun ',name) current-load-list))
+           (cl:defun ,name ,lambda-list
+             ,@(when doc* (list doc*))
+             ,@rest)))))
 
 (cl:defmacro defsubst (name lambda-list &body body)
   "ELisp-ish DEFSUBST (currently just DEFUN)."
@@ -6573,10 +7064,19 @@ functions.  For now, delegate to `autoload` and return SYMBOL."
   (autoload symbol file)
   symbol)
 
-(cl:defun symbol-file (_symbol &optional _type)
-  "Bring-up stub for ELisp `symbol-file'."
-  (declare (cl:ignore _symbol _type))
-  nil)
+(cl:defun symbol-file (symbol &optional type)
+  "Bring-up subset of ELisp `symbol-file'.
+
+For bring-up, we only support TYPE = `ert--test', using the test object's
+recorded `file-name' slot (when available)."
+  (cond
+   ((and (symbolp symbol) (eq type 'ert--test))
+    (let ((test (get symbol 'ert--test)))
+      (cond
+       ((and test (fboundp 'ert-test-file-name))
+        (ignore-errors (ert-test-file-name test)))
+       (t nil))))
+   (t nil)))
 
 (cl:defmacro with-demoted-errors (_format &rest body)
   "Bring-up subset of ELisp `with-demoted-errors'.
@@ -6599,6 +7099,8 @@ Evaluate BODY, but if an error is signaled, demote it and return nil."
 
 ;; Emacs treats the current buffer's local keymap as buffer-local state.
 (make-variable-buffer-local 'local-map)
+(make-variable-buffer-local 'font-lock-mode)
+(make-variable-buffer-local 'font-lock-function)
 
 (cl:defun make-local-variable (variable)
   "Bring-up subset of ELisp `make-local-variable'.
@@ -6783,6 +7285,15 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
     (setf (getf p prop) value)
     p))
 
+(cl:defun plist-member (plist prop)
+  "Bring-up subset of ELisp `plist-member'."
+  (let ((p plist))
+    (loop while (consp p) do
+      (when (eq (car p) prop)
+        (return p))
+      (setf p (cddr p))
+      finally (return nil))))
+
 (cl:defun setcdr (cell newcdr)
   "ELisp-ish SETCDR."
   (unless (consp cell)
@@ -6895,6 +7406,12 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
         when (eql elt (car tail)) do (return tail)
         finally (return nil)))
 
+(cl:defun member (elt list)
+  "ELisp-ish MEMBER (equal-based)."
+  (loop for tail on list
+        when (equal elt (car tail)) do (return tail)
+        finally (return nil)))
+
 (cl:defun delq (elt list)
   "ELisp-ish DELQ (destructive eq-based deletion)."
   (labels ((skip-head (xs)
@@ -6917,7 +7434,7 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
 (cl:defun delete-dups (list)
   "Bring-up subset of ELisp `delete-dups' (destructive equal-based deletion)."
   (labels ((skip-head (xs seen)
-             (loop while (and (consp xs) (member (car xs) seen :test #'equal)) do
+             (loop while (and (consp xs) (cl:member (car xs) seen :test #'equal)) do
                (setf xs (cdr xs)))
              xs))
     (let* ((seen nil)
@@ -6930,7 +7447,7 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
              (cur (cdr head)))
         (loop while (consp cur) do
           (cond
-           ((member (car cur) seen :test #'equal)
+           ((cl:member (car cur) seen :test #'equal)
             (setf (cdr prev) (cdr cur))
             (setf cur (cdr cur)))
            (t

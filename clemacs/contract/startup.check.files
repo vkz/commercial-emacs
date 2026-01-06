@@ -129,7 +129,7 @@ lisp/textmodes/page.el 50
 lisp/register.el 50
 lisp/textmodes/paragraphs.el 50
 lisp/progmodes/prog-mode.el 50
-lisp/emacs-lisp/lisp-mode.el 11
+lisp/emacs-lisp/lisp-mode.el 200
 lisp/textmodes/text-mode.el 21
 
 # pdump: fill, newcomment.
@@ -140,3 +140,20 @@ lisp/newcomment.el -
 lisp/replace.el 19
 lisp/emacs-lisp/tabulated-list.el -
 lisp/buff-menu.el -
+
+# pdump: elisp-mode, float-sup, vc-hooks, ediff-hook, uniquify, electric, paren, shorthands.
+lisp/progmodes/elisp-mode.el 20
+lisp/emacs-lisp/float-sup.el 1
+lisp/vc/vc-hooks.el 1
+lisp/vc/ediff-hook.el 1
+lisp/uniquify.el 1
+lisp/electric.el 1
+lisp/paren.el 1
+lisp/emacs-lisp/shorthands.el 1
+
+# pdump: eldoc, cconv, cus-start, iso-transl, rmc.
+lisp/emacs-lisp/eldoc.el 1
+lisp/emacs-lisp/cconv.el 1
+lisp/cus-start.el 1
+lisp/international/iso-transl.el 1
+lisp/emacs-lisp/rmc.el 1

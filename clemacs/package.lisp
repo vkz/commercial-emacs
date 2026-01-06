@@ -52,8 +52,9 @@
            #:ignore
            #:1+ #:1-
            #:append
+           #:member
            #:mapcar
-           #:prin1 #:princ #:prin1-to-string #:read-from-string
+           #:prin1 #:princ #:prin1-to-string #:princ-to-string #:read-from-string
            #:string= #:string-equal
            #:aref
            #:stringp

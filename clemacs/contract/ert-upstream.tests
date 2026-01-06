@@ -86,3 +86,12 @@ ert-test-with-test-buffer-selected/modification-hooks
 ert-test-with-test-buffer-selected/read-only
 ert-test-with-test-buffer-selected/return-value
 ert-test-with-test-buffer-selected/buffer-name
+
+# More buffer/UI/message bring-up (ert-x/ert).
+ert-test-test-buffers
+ert-test-buffer-string-reindented
+ert-test-run-tests-interactively-2
+ert-test-describe-test
+ert-test-message-log-truncation
+ert-test-builtin-message-log-flushing
+ert-test-force-message-log-buffer-truncation

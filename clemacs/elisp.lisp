@@ -688,9 +688,10 @@ keywords like `:foo' untouched."
         (let* ((*package* package)
                (*readtable* (%ensure-elisp-readtable))
                (load-file-name (namestring path))
+               (current-load-list nil)
                (debug-file (uiop:getenv "CLEMACS_LOAD_DEBUG_FILE"))
                (debugp (or debug-file (and (uiop:getenv "CLEMACS_LOAD_DEBUG") t))))
-          (declare (special load-file-name))
+          (declare (special load-file-name current-load-list load-history))
           (flet ((%maybe-log-load-error (e form-index)
                    (when debugp
                      (let ((out (if debug-file
@@ -708,50 +709,60 @@ keywords like `:foo' untouched."
                              (finish-output out))
                          (when debug-file
                            (ignore-errors (close out))))))))
-            (loop with form-index = 0 do
-              (let ((form
-                      (handler-case
-                          (read in nil :eof)
-                        (cl:error (e)
-                          (let ((next-index (1+ form-index)))
-                            (%maybe-log-load-error e next-index)
+            (let ((ok nil))
+              (unwind-protect
+                  (progn
+                    (loop with form-index = 0 do
+                      (let ((form
+                              (handler-case
+                                  (read in nil :eof)
+                                (cl:error (e)
+                                  (let ((next-index (1+ form-index)))
+                                    (%maybe-log-load-error e next-index)
+                                    (let ((inv (inventory-entry-for-condition
+                                                e
+                                                :start-dir (uiop:pathname-directory-pathname path))))
+                                      (cl:error 'elisp-load-error
+                                                :path path
+                                                :form-index next-index
+                                                :form :read-error
+                                                :cause e
+                                                :inventory-entry inv)))))))
+                        (when (eq form :eof)
+                          (setf ok t)
+                          (return))
+                        (incf form-index)
+                        (handler-case
+                            (cl:handler-bind
+                                ((cl:error
+                                   (lambda (e)
+                                     (%maybe-log-load-error e form-index)
+                                     nil)))
+                              #+sbcl
+                              (cl:handler-bind
+                                  ((sb-kernel:redefinition-warning #'muffle-warning))
+                                (cl:eval (%elisp-rewrite form)))
+                              #-sbcl
+                              (cl:eval (%elisp-rewrite form)))
+                          (cl:error (e)
                             (let ((inv (inventory-entry-for-condition
                                         e
                                         :start-dir (uiop:pathname-directory-pathname path))))
                               (cl:error 'elisp-load-error
                                         :path path
-                                        :form-index next-index
-                                        :form :read-error
+                                        :form-index form-index
+                                        :form form
                                         :cause e
-                                        :inventory-entry inv)))))))
-                (when (eq form :eof)
-                  (return))
-                (incf form-index)
-                (handler-case
-                    (cl:handler-bind
-                        ((cl:error
-                           (lambda (e)
-                             (%maybe-log-load-error e form-index)
-                             nil)))
-                      #+sbcl
-                      (cl:handler-bind
-                          ((sb-kernel:redefinition-warning #'muffle-warning))
-                        (cl:eval (%elisp-rewrite form)))
-                      #-sbcl
-                      (cl:eval (%elisp-rewrite form)))
-                  (cl:error (e)
-                    (let ((inv (inventory-entry-for-condition
-                                e
-                                :start-dir (uiop:pathname-directory-pathname path))))
-                      (cl:error 'elisp-load-error
-                                :path path
-                                :form-index form-index
-                                :form form
-                                :cause e
-                                :inventory-entry inv))))
-                (when (and max-forms (>= form-index max-forms))
-                  (return))))
-            (%maybe-install-post-load-shims path)))))))
+                                        :inventory-entry inv))))
+                        (when (and max-forms (>= form-index max-forms))
+                          (setf ok t)
+                          (return))))
+                    (%maybe-install-post-load-shims path)
+                    (setf ok t))
+                ;; Minimal `load-history` support: capture `define-symbol-prop`
+                ;; registrations so `symbol-file` can locate tests.
+                (when ok
+                  (push (cons load-file-name current-load-list) load-history))))))))))
 
 (cl:defvar *pp-to-string-orig* nil)
 (cl:defvar *pp-to-string-shim* nil)
@@ -811,4 +822,17 @@ causes upstream ERT's `ert--pp-with-indentation-and-newline' to fail."
                (string= (string-downcase name) "pp")
                (string= (string-downcase type) "el"))
       (%install-pp-to-string-shim)))
+  (let* ((p (and path (pathname path)))
+         (name (and p (pathname-name p)))
+         (type (and p (pathname-type p))))
+    ;; Keep `macroexpand-all' stack-safe under SBCL.  `lisp/emacs-lisp/macroexp.el`
+    ;; defines a full-featured expander, but it can blow the control stack while
+    ;; bringing up larger preloads (e.g. lisp-mode's `let-when-compile`).  Use
+    ;; our iterative bring-up version instead.
+    (when (and (stringp name) (stringp type)
+               (string= (string-downcase name) "macroexp")
+               (string= (string-downcase type) "el")
+               (boundp '*macroexpand-all-compat*)
+               *macroexpand-all-compat*)
+      (setf (fdefinition 'macroexpand-all) *macroexpand-all-compat*)))
   nil)
