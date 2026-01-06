@@ -392,4 +392,34 @@
   :expr "(with-temp-buffer (insert \"a\") (set-text-properties 1 2 '(foo 7)) (get-text-property 0 'foo (buffer-string)))"
   :expected "7"
   :emacs :match)
+
+ (:name "textprops-remove-list-of-text-properties-clears"
+  :expr "(with-temp-buffer (insert \"ab\") (set-text-properties 1 3 '(foo 7)) (remove-list-of-text-properties 1 3 '(foo)) (get-text-property 0 'foo (buffer-string)))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "files-file-name-base-basic"
+  :expr "(file-name-base \"a/b/c.txt\")"
+  :expected "\"c\""
+  :emacs :match)
+
+ (:name "prints-with-output-to-string-princ"
+  :expr "(with-output-to-string (princ \"hi\"))"
+  :expected "\"hi\""
+  :emacs :match)
+
+ (:name "macros-thread-last-basic"
+  :expr "(progn (require 'subr-x) (thread-last 1 (+ 2) (* 3)))"
+  :expected "9"
+  :emacs :match)
+
+ (:name "pcase-constant-integer-pattern"
+  :expr "(pcase 0 (0 'yes) (_ 'no))"
+  :expected "yes"
+  :emacs :match)
+
+ (:name "regexp-match-data-translate-shifts"
+  :expr "(progn (string-match \"a\" \"za\") (match-data--translate -1) (match-beginning 0))"
+  :expected "0"
+  :emacs :match)
 )

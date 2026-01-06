@@ -687,8 +687,10 @@ keywords like `:foo' untouched."
       (with-input-from-string (in sanitized)
         (let* ((*package* package)
                (*readtable* (%ensure-elisp-readtable))
+               (load-file-name (namestring path))
                (debug-file (uiop:getenv "CLEMACS_LOAD_DEBUG_FILE"))
                (debugp (or debug-file (and (uiop:getenv "CLEMACS_LOAD_DEBUG") t))))
+          (declare (special load-file-name))
           (flet ((%maybe-log-load-error (e form-index)
                    (when debugp
                      (let ((out (if debug-file

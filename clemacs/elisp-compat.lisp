@@ -3,6 +3,11 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (cl:require "SB-CLTL2"))
 
+;; `with-output-to-string' is also a CL macro; shadow it so ELisp code resolves
+;; to our compatibility macro instead of tripping SBCL's package lock.
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (shadow 'with-output-to-string))
+
 ;; Upstream ELisp uses declaration specifiers that CL implementations don't know
 ;; about.  Declare them so SBCL doesn't spam style warnings during bring-up.
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -24,6 +29,9 @@
 (cl:defvar overlay-arrow-variable-list nil)
 (cl:defvar text-property-default-nonsticky nil)
 (cl:defvar comment-start-skip nil)
+;; `ert-with-temp-file' (and friends) consult these during macroexpansion.
+(cl:defvar coding-system-for-write nil)
+(cl:defvar standard-output t)
 ;; Common command/key processing vars referenced early by upstream lisp/.
 ;; Bind to NIL for bring-up so loads don't spam UNBOUND warnings.
 (cl:defvar current-prefix-arg nil)
@@ -703,6 +711,22 @@ intervals (string: 0-based, buffer: 1-based)."
     (put-text-property start end k v object))
   t)
 
+(cl:defun remove-text-properties (start end props &optional object)
+  "Bring-up subset of ELisp `remove-text-properties'."
+  (unless (and (listp props) (evenp (length props)))
+    (error "ELISP:REMOVE-TEXT-PROPERTIES expects a plist, got: ~S" props))
+  (loop for (k _v) on props by #'cddr do
+    (put-text-property start end k nil object))
+  t)
+
+(cl:defun remove-list-of-text-properties (start end props &optional object)
+  "Bring-up subset of ELisp `remove-list-of-text-properties'."
+  (unless (listp props)
+    (error "ELISP:REMOVE-LIST-OF-TEXT-PROPERTIES expects a list, got: ~S" props))
+  (dolist (k props)
+    (put-text-property start end k nil object))
+  t)
+
 (cl:defun set-text-properties (start end props &optional object)
   "Bring-up subset of ELisp `set-text-properties'."
   (unless (or (null props) (and (listp props) (evenp (length props))))
@@ -841,6 +865,19 @@ Supports negative indices and TO = nil (meaning end of string)."
   (setf *match-data* (and data (copy-list data)))
   nil)
 
+(cl:defun match-data--translate (delta)
+  "Bring-up subset of ELisp `match-data--translate'.
+
+Shift the current match data by DELTA (an integer offset)."
+  (unless (integerp delta)
+    (error "ELISP:MATCH-DATA--TRANSLATE expects integer, got: %S" delta))
+  (when *match-data*
+    (setf *match-data*
+          (mapcar (lambda (x)
+                    (if (integerp x) (+ x delta) x))
+                  *match-data*)))
+  nil)
+
 (cl:defun match-beginning (n)
   "Bring-up subset of ELisp `match-beginning'."
   (unless (and (integerp n) (<= 0 n))
@@ -889,7 +926,7 @@ So we:
 - escape otherwise-unescaped PCRE metacharacters to preserve literal meaning,
 - translate `\\` and `\\'' anchors to ^/$."
   (let ((regexp (%elisp-string->cl-string regexp)))
-    (with-output-to-string (out)
+    (cl:with-output-to-string (out)
       (labels ((emit-posix-class (name)
                  ;; cl-ppcre does not support POSIX bracket expressions like
                  ;; [[:alpha:]] directly, so approximate the commonly used
@@ -1080,7 +1117,7 @@ This is used for ELisp `looking-at', which must not search forward past point."
 (cl:defun %rx--regexp-quote (s)
   "Very small subset of Emacs's `regexp-quote'."
   (let ((s (%elisp-string->cl-string s)))
-    (with-output-to-string (out)
+    (cl:with-output-to-string (out)
       (loop for ch across s do
         (when (find ch "\\.[]*+?^$" :test #'char=)
           (write-char #\\ out))
@@ -1099,6 +1136,7 @@ This is used for ELisp `looking-at', which must not search forward past point."
   (labels ((op-name (s) (and (symbolp s) (cl:symbol-name s)))
            (op= (s name) (and (symbolp s) (string= (cl:symbol-name s) name)))
            (group (s) (concatenate 'cl:string "\\(?:" s "\\)"))
+           (capture (s) (concatenate 'cl:string "\\(" s "\\)"))
            (emit (x)
              (cond
               ((null x) "")
@@ -1107,6 +1145,8 @@ This is used for ELisp `looking-at', which must not search forward past point."
                (let ((def (%rx--lookup-definition x)))
                  (cond
                   (def (%rx--translate def))
+                  ((op= x "STRING-START") "\\`")
+                  ((op= x "STRING-END") "\\'")
                   ((memq x '(nonl not-newline any)) ".")
                   (t (error "ELISP:rx unsupported symbol: %S" x)))))
               ((consp x)
@@ -1116,10 +1156,13 @@ This is used for ELisp `looking-at', which must not search forward past point."
                   ;; Sequence.
                   ((op= op ":")
                    (apply #'concatenate 'cl:string (mapcar #'emit args)))
+                  ;; Capturing group.
+                  ((op= op "GROUP")
+                   (capture (apply #'concatenate 'cl:string (mapcar #'emit args))))
                   ;; Alternation.
                   ((op= op "|")
                    (group
-                    (with-output-to-string (out)
+                    (cl:with-output-to-string (out)
                       (loop for a in args
                             for firstp = t then nil do
                               (unless firstp (write-string "\\|" out))
@@ -1127,19 +1170,44 @@ This is used for ELisp `looking-at', which must not search forward past point."
                   ;; One-or-more.
                   ((op= op "+")
                    (cond
+                    ;; Reader quirk: inside symbols, ELisp allows `+?' (used by
+                    ;; `rx'), but our current reader treats `?' as a character
+                    ;; literal macro-char and splits `+?' into `+' and a char
+                    ;; object. In `ert-x.el` this yields forms like (+ 32 PAT).
+                    ;; Treat that as `+?' for bring-up.
+                    ((and (= (length args) 2)
+                          (integerp (car args)))
+                     (concatenate 'cl:string (group (emit (cadr args))) "+?"))
                     ((/= (length args) 1)
                      (error "ELISP:rx (+ ...) expects 1 arg, got: %S" x))
                     (t
                      (concatenate 'cl:string (group (emit (car args))) "+"))))
+                  ;; One-or-more (non-greedy).
+                  ((op= op "+?")
+                   (cond
+                    ((/= (length args) 1)
+                     (error "ELISP:rx (+? ...) expects 1 arg, got: %S" x))
+                    (t
+                     (concatenate 'cl:string (group (emit (car args))) "+?"))))
+                  ;; Embed an already-formed regexp.
+                  ((op= op "REGEXP")
+                   (cond
+                    ((/= (length args) 1)
+                     (error "ELISP:rx (regexp ...) expects 1 arg, got: %S" x))
+                    (t
+                     (let ((s (car args)))
+                       (unless (stringp s)
+                         (error "ELISP:rx (regexp ...) expects string, got: %S" s))
+                       (group (%elisp-string->cl-string s))))))
                   ;; (syntax word) / (syntax symbol): approximate for bring-up.
                   ((op= op "SYNTAX")
                    (let ((kind (car args)))
                      (cond
                       ((or (eq kind 'word) (eq kind 'symbol))
-                       ;; Keep this within the subset understood by
-                       ;; %elisp-regexp->pcre: POSIX classes only inside [...]
-                       ;; and ASCII-only approximations.
-                       "[[:alnum:]_]")
+                        ;; Keep this within the subset understood by
+                        ;; %elisp-regexp->pcre: POSIX classes only inside [...]
+                        ;; and ASCII-only approximations.
+                        "[[:alnum:]_]")
                       (t
                        (error "ELISP:rx (syntax ...) unsupported: %S" x)))))
                   (t
@@ -1192,7 +1260,7 @@ This is only intended to be readable by our ELisp `read-from-string'."
                (concatenate 'cl:string ":" (string-downcase (cl:symbol-name s))))
               (t (string-downcase (cl:symbol-name s)))))
            (emit-string (s)
-             (with-output-to-string (out)
+             (cl:with-output-to-string (out)
                (write-char #\" out)
                (flet ((emit-hex (code)
                         (cl:format out "\\\\x~2,'0x" code)))
@@ -1274,7 +1342,7 @@ This is only intended to be readable by our ELisp `read-from-string'."
               ((characterp x) (emit-string (string x)))
               ((or (unibyte-string-p x) (cl:stringp x)) (emit-string x))
               ((and (vectorp x) (not (stringp x)))
-               (with-output-to-string (out)
+               (cl:with-output-to-string (out)
                  (write-char #\[ out)
                  (dotimes (i (length x))
                    (when (> i 0) (write-char #\Space out))
@@ -1283,15 +1351,15 @@ This is only intended to be readable by our ELisp `read-from-string'."
               ((consp x)
                (cond
                 ((and (eq (car x) 'quote) (consp (cdr x)) (null (cddr x)))
-                 (with-output-to-string (out)
+                 (cl:with-output-to-string (out)
                    (write-char #\' out)
                    (write-string (emit (cadr x)) out)))
                 ((and (eq (car x) 'function) (consp (cdr x)) (null (cddr x)))
-                 (with-output-to-string (out)
+                 (cl:with-output-to-string (out)
                    (write-string "#'" out)
                    (write-string (emit (cadr x)) out)))
                 (t
-               (with-output-to-string (out)
+               (cl:with-output-to-string (out)
                  (write-char #\( out)
                  (labels ((walk (cell firstp)
                             (cond
@@ -2656,7 +2724,7 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
         (decode-universal-time ut))
       (let* ((fmt (%elisp-string->cl-string format))
              (len (length fmt)))
-        (with-output-to-string (out)
+        (cl:with-output-to-string (out)
           (loop for i from 0 below len do
             (let ((ch (char fmt i)))
               (if (char= ch #\%)
@@ -2700,6 +2768,22 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
 (cl:defvar minor-mode-alist nil)
 (cl:defvar help-char 8)
 (cl:defvar font-lock-mode nil)
+
+(cl:defun file-name-base (filename)
+  "Bring-up subset of ELisp `file-name-base'."
+  (unless (stringp filename)
+    (error "ELISP:FILE-NAME-BASE expects a string, got: ~S" filename))
+  (let* ((s (if (unibyte-string-p filename)
+                (%elisp-string->cl-string filename)
+                filename))
+         (slash (or (position #\/ s :from-end t)
+                    (position #\\ s :from-end t)))
+         (name (subseq s (if slash (1+ slash) 0)))
+         (dot (position #\. name :from-end t)))
+    (cond
+     ((and dot (plusp dot))
+      (subseq name 0 dot))
+     (t name))))
 
 ;; ---------------------------------------------------------------------------
 ;; Minimal buffer/marker surface (enough for upstream ERT bring-up)
@@ -3079,11 +3163,13 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
   "Bring-up subset of ELisp `prin1'.
 
 STREAM may be a buffer."
-  (let ((out (or stream (current-buffer))))
+  (let ((out (or stream standard-output (current-buffer))))
     (cond
      ((bufferp out)
       (with-current-buffer out
         (insert (prin1-to-string object))))
+     ((eq out t)
+      (write-string (prin1-to-string object) *standard-output*))
      ((streamp out)
       (write-string (prin1-to-string object) out))
      (t
@@ -3094,7 +3180,7 @@ STREAM may be a buffer."
   "Bring-up subset of ELisp `princ'.
 
 STREAM may be a buffer."
-  (let ((out (or stream (current-buffer))))
+  (let ((out (or stream standard-output (current-buffer))))
     (cond
      ((bufferp out)
      (with-current-buffer out
@@ -3103,6 +3189,12 @@ STREAM may be a buffer."
           (cl:string (insert object))
           (unibyte-string (insert object))
           (t (insert (prin1-to-string object))))))
+     ((eq out t)
+      (typecase object
+        (null nil)
+        (cl:string (write-string object *standard-output*))
+        (unibyte-string (write-string (%elisp-string->cl-string object) *standard-output*))
+        (t (write-string (prin1-to-string object) *standard-output*))))
      ((streamp out)
       (typecase object
         (null nil)
@@ -3112,6 +3204,13 @@ STREAM may be a buffer."
      (t
       (error "ELISP:PRINC unsupported stream: ~S" out))))
   object)
+
+(cl:defmacro with-output-to-string (&body body)
+  "Bring-up subset of ELisp `with-output-to-string'."
+  `(with-temp-buffer
+     (let ((standard-output (current-buffer)))
+       ,@body
+       (buffer-string))))
 
 (cl:defun point ()
   (elisp-buffer-point *current-buffer*))
@@ -3823,22 +3922,66 @@ Emacs clamps positions outside the buffer to the nearest valid position."
                   (goto-char pos))))))
     (point))
 
-(cl:defun replace-match (replacement &optional _fixedcase _literal _string _subexp)
-  "Bring-up subset of ELisp `replace-match' (buffer-only, literal replacement)."
-  (declare (cl:ignore _fixedcase _literal _string _subexp))
+(cl:defun replace-match (replacement &optional _fixedcase literal string subexp)
+  "Bring-up subset of ELisp `replace-match'."
+  (declare (cl:ignore _fixedcase))
   (unless (stringp replacement)
     (error "ELISP:REPLACE-MATCH expects a string, got: ~S" replacement))
-  (let ((start (match-beginning 0))
-        (end (match-end 0)))
+  (let* ((n (or subexp 0))
+         (start (match-beginning n))
+         (end (match-end n)))
     (unless (and start end)
       (error "ELISP:REPLACE-MATCH no match data"))
-    (delete-region start end)
-    (goto-char start)
-    (insert replacement)
-    nil))
+    (labels ((replacement-text ()
+               (if literal
+                   (%elisp-string->cl-string (copy-seq replacement))
+                   (let* ((rep (%elisp-string->cl-string replacement))
+                          (len (length rep)))
+                     (cl:with-output-to-string (out)
+                       (loop for i from 0 below len do
+                         (let ((ch (char rep i)))
+                           (cond
+                            ((char/= ch #\\)
+                             (write-char ch out))
+                            (t
+                             (incf i)
+                             (when (>= i len)
+                               (write-char #\\ out)
+                               (return))
+                             (let ((esc (char rep i)))
+                               (cond
+                                ((char= esc #\\) (write-char #\\ out))
+                                ((char= esc #\&) (write-string (or (match-string 0 string) "") out))
+                                ((digit-char-p esc)
+                                 (let* ((j i)
+                                        (digits (list esc)))
+                                   (loop while (and (< (1+ j) len)
+                                                    (digit-char-p (char rep (1+ j))))
+                                         do (incf j) (push (char rep j) digits))
+                                   (setf i j)
+                                   (let* ((num (parse-integer (coerce (nreverse digits) 'cl:string)))
+                                          (ms (match-string num string)))
+                                     (when ms (write-string (%elisp-string->cl-string ms) out)))))
+                                (t
+                                 ;; Unknown escape: emit literally.
+                                 (write-char #\\ out)
+                                 (write-char esc out)))))))))))))
+      (cond
+       (string
+        (unless (stringp string)
+          (error "ELISP:REPLACE-MATCH STRING arg must be string, got: ~S" string))
+        (let* ((s (%elisp-string->cl-string string))
+               (rep (replacement-text)))
+          (concatenate 'cl:string (subseq s 0 start) rep (subseq s end))))
+       (t
+        ;; Buffer replacement.
+        (delete-region start end)
+        (goto-char start)
+        (insert (replacement-text))
+        nil)))))
 
 (cl:defun insert (&rest parts)
-  (let* ((s (with-output-to-string (out)
+  (let* ((s (cl:with-output-to-string (out)
               (dolist (p parts)
                 (typecase p
                   (null nil)
@@ -4551,7 +4694,7 @@ back to a tiny stub list."
 
 (cl:defun backtrace-to-string (frames)
   "Bring-up subset of ELisp `backtrace-to-string'."
-  (with-output-to-string (out)
+  (cl:with-output-to-string (out)
     (dolist (frame frames)
       (let ((fun (backtrace-frame-fun frame))
             (args (backtrace-frame-args frame)))
@@ -4572,7 +4715,7 @@ back to a tiny stub list."
 
 (cl:defun macroexp-file-name ()
   "Stub for ELisp `macroexp-file-name'."
-  nil)
+  (or load-file-name buffer-file-name))
 
 (cl:defun macroexp-warn-and-return (_msg form &optional _category _compile-only)
   "Bring-up subset of ELisp `macroexp-warn-and-return'.
@@ -4707,6 +4850,28 @@ Return (values EXPANDED EXPANDEDP)."
        (when (and ,@vars)
          ,@(or body '(nil))))))
 
+(cl:defmacro thread-first (x &rest forms)
+  "Bring-up subset of subr-x `thread-first'."
+  (reduce
+   (lambda (acc form)
+     (cond
+      ((symbolp form) (list form acc))
+      ((consp form) (list* (car form) acc (cdr form)))
+      (t (error "ELISP:THREAD-FIRST bad form: ~S" form))))
+   forms
+   :initial-value x))
+
+(cl:defmacro thread-last (x &rest forms)
+  "Bring-up subset of subr-x `thread-last'."
+  (reduce
+   (lambda (acc form)
+     (cond
+      ((symbolp form) (list form acc))
+      ((consp form) (append form (list acc)))
+      (t (error "ELISP:THREAD-LAST bad form: ~S" form))))
+   forms
+   :initial-value x))
+
 (cl:defmacro pcase (expr &rest clauses)
   "Bring-up subset of ELisp `pcase'.
 
@@ -4750,6 +4915,8 @@ Supports a small set of patterns used by upstream ERT:
                 ((and (consp pattern) (eq (car pattern) 'quote) (= (length pattern) 2))
                  (let ((k (cadr pattern)))
                    `(elisp:equal ,value-sym ',k)))
+                ((or (integerp pattern) (cl:stringp pattern))
+                 `(elisp:equal ,value-sym ,pattern))
                 ((and (symbolp pattern)
                       (eq (symbol-package pattern) (find-package "KEYWORD")))
                  `(eql ,value-sym ,pattern))
@@ -4776,6 +4943,9 @@ Supports a small set of patterns used by upstream ERT:
                     (let ((k (cadr pattern)))
                       `(when (elisp:equal ,v ',k)
                          (return-from ,done (progn ,@body)))))
+                   ((or (integerp pattern) (cl:stringp pattern))
+                    `(when (elisp:equal ,v ,pattern)
+                       (return-from ,done (progn ,@body))))
                    ((and (symbolp pattern)
                          (eq (symbol-package pattern) (find-package "KEYWORD")))
                     `(when (eql ,v ,pattern)
@@ -5278,7 +5448,7 @@ Supports the common pattern of a self-referential closure (used by ERT)."
   "Bring-up subset of ELisp `key-description'."
   (declare (cl:ignore _noangles))
   (labels ((emit (seq)
-             (with-output-to-string (out)
+             (cl:with-output-to-string (out)
                (loop for i from 0 for ev in seq do
                  (when (> i 0) (write-char #\Space out))
                  (write-string (%key-event-description ev) out)))))
