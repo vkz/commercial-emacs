@@ -65,6 +65,11 @@ out any issues encountered and propose at least one concrete fix path:
 If a tool/task will materially shorten the current work *and* improve future
 iterations, implement it immediately (prefer a `mise` file task).
 
+Commit your work before the final report. If meaningfully useful split
+into multiple commits.
+
+Finish the final summary by proposing next high-leverage steps to tackle.
+
 Introspection rule (required)
 - If you get stuck or rediscover a technique that helps (a reliable debug flag,
   a missing helper task, a clearer failure interpretation): add exactly **one**
