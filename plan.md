@@ -22,7 +22,7 @@ Onboarding command:
 
 - `mise run clemacs:test:contract -- --level elisp-core && mise run clemacs:report:progress`
 
-## Dev setup (DONE, 2026-01-05)
+## Dev setup
 
 Dev bring-up is standardized around:
 
@@ -49,19 +49,11 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
 - `mise run test:smoke` and `mise run test:check` pass.
 - `mise run verify -- --level check` is the one-command gate.
 
-DONE (2026-01-05)
-- Fix out-of-tree dump/startup load-path to prefer build-tree `.elc` files (vs source `.el`).
-- Make `mise run build` generate shipped snapshot files (`lisp/cus-load.el`, `lisp/finder-inf.el`) when missing.
-- Fix `clemacs:report:startup-delta` to resolve pdump load paths to real `lisp/**` files.
-- Grow clemacs startup manifests (check/editor-core): add fill/comment/replace/tabulated-list/buff-menu and related TTY bits.
-- Raise several startup.check checkpoints (fill, replace, tabulated-list, buff-menu, isearch) and uncap timer/newcomment/fringe/select.
-- Add core editor ELisp shims (BOL/EOL motion, indentation, string/window width) and capture behavior in semantics microtests.
-- Stub char-script-table and char-table helpers to advance fill.el checkpoint (now loads past the previous char-script-table failure).
+## Recent progress
 
-DONE (2026-01-06)
-- Bind `text-property-default-nonsticky`, add minimal text property surface (text-properties-at/get/put/add), and uncap fill.el (loads cleanly).
-- Add common shims used by fill/comment and keymaps (string-empty-p, prefix-numeric-value, following/preceding-char, char-syntax, invisible-p, left-margin stubs, run-hook-with-args-until-success).
-- Fix ELisp append/assoc behavior needed by key parsing during `defvar-keymap` expansion; uncap tabulated-list.el and buff-menu.el in startup manifests.
+- Completed and superseded items are archived in `plans/plan-archive-2026-01-06.md`.
+- Upstream ERT bring-up is unblocked and green as of 2026-01-06 (see archive for details).
+- `startup.check.files` advanced with next TTY-relevant pdump candidates and higher caps (see archive for details).
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 
@@ -89,7 +81,9 @@ Gate
 
 Next actions
 - Grow `clemacs/contract/startup.{smoke,check,editor-core}.files` monotonically, following pdump order.
-- Prefer conservative per-file checkpoints; use `mise run clemacs:report:first-failure` + `clemacs:bisect:file` when unstable.
+- For `startup.check.files`, only add TTY-relevant candidates (ignore GUI/W32 files) and raise caps gradually.
+- After each bump: run `mise run clemacs:test:contract -- --level elisp-core`.
+- On failure: run `mise run clemacs:report:first-failure-startup-check-debug` and implement the single top offender before moving on.
 
 ### Milestone B1-9: run upstream ERT suites under clemacs
 
@@ -101,7 +95,7 @@ Gate
 - `mise run clemacs:test:contract -- --level check` fails on regressions.
 
 Next actions
-- Expand `clemacs/contract/ert-upstream.tests` monotonically.
+- Expand `clemacs/contract/ert-upstream.tests` monotonically (keep the suite green; use ERT promotions opportunistically when they unblock startup work).
 - Keep `clemacs/contract/ert-upstream.known-fail.tests` dated and explicit (XPASS is a gate failure).
 
 ### Milestone B1-12: inventory closure for `startup.check`
@@ -115,7 +109,8 @@ Gate
 - `mise run clemacs:test:contract -- --level elisp-core` stays green while raising checkpoints.
 
 Next actions
-- Treat each new failure as an inventory item: implement or stub the missing primitive and add breadcrumbs.
+- Use inventory deltas to implement primitives in clusters (next likely: help buffers, file-name helpers, process stubs).
+- Treat each new startup failure as an inventory item: implement/stub and add breadcrumbs (microtests, compat notes, contract updates) in the same patch.
 
 ### Milestone B1-14: clemacs "real editor core" boot
 
@@ -134,3 +129,4 @@ Acceptance criteria (promotion gate)
 - `plans/dev-001.md` (Step 0/1 dev-notes snapshot)
 - `plans/plan-002.md` (plan snapshot before trimming on 2026-01-05)
 - `plans/dev-002.md` (dev-setup checklist before trimming on 2026-01-05)
+- `plans/plan-archive-2026-01-06.md` (archived DONE items through 2026-01-06)
