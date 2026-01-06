@@ -49,6 +49,31 @@
   :expected "65"
   :emacs :match)
 
+ (:name "text-props-text-property-default-nonsticky-boundp"
+  :expr "(boundp 'text-property-default-nonsticky)"
+  :expected "t"
+  :emacs :match)
+
+ (:name "text-props-get-text-property-string-default-nil"
+  :expr "(get-text-property 0 'foo \"abc\")"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "text-props-get-text-property-string-propertize"
+  :expr "(let ((s (propertize \"a\" 'foo 1))) (get-text-property 0 'foo s))"
+  :expected "1"
+  :emacs :match)
+
+ (:name "text-props-put-text-property-buffer-basic"
+  :expr "(with-temp-buffer (insert \"abc\") (put-text-property 1 2 'foo 7) (get-text-property 1 'foo))"
+  :expected "7"
+  :emacs :match)
+
+ (:name "text-props-add-text-properties-buffer-basic"
+  :expr "(with-temp-buffer (insert \"abc\") (add-text-properties 2 3 '(foo 1 bar 2)) (list (get-text-property 2 'foo) (get-text-property 2 'bar)))"
+  :expected "(1 2)"
+  :emacs :match)
+
  (:name "syntax-tables-modify-syntax-entry-prefix-flag"
   :expr "(let ((st (make-char-table 'syntax-table nil))) (set-char-table-parent st (standard-syntax-table)) (modify-syntax-entry ?\\\" \".   \" st) (modify-syntax-entry ?\\' \"w p\" st) (list (logand (car (aref st ?\\\")) 255) (logand (car (aref st ?\\')) (ash 1 20))))"
   :expected "(1 1048576)"

@@ -13,6 +13,8 @@
 (cl:defvar emacs-basic-display nil)
 (cl:defvar fill-prefix nil)
 (cl:defvar last-command nil)
+(cl:defvar text-property-default-nonsticky nil)
+(cl:defvar comment-start-skip nil)
 
 (cl:defmacro bound-and-true-p (var)
   "Bring-up subset of ELisp `bound-and-true-p'."
@@ -504,27 +506,105 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
       (return plist)))
   (append plist (list key value)))
 
-(cl:defun text-properties-at (pos string &optional _object)
-  "Bring-up subset of ELisp `text-properties-at' for strings."
-  (declare (cl:ignore _object))
-  (unless (and (integerp pos) (not (minusp pos)))
-    (error "ELISP:TEXT-PROPERTIES-AT bad position: ~S" pos))
-  (unless (stringp string)
-    (error "ELISP:TEXT-PROPERTIES-AT expects a string, got: ~S" string))
-  (let ((len (length string)))
-    (when (> pos len)
-      (error "ELISP:TEXT-PROPERTIES-AT out of range: ~S (len ~S)" pos len))
-    (let ((intervals (elisp::%string-text-properties string))
-          (out nil))
-      (when (null intervals)
-        (return-from text-properties-at nil))
-      ;; Apply intervals in order, preserving key position on updates.
-      (dolist (iv intervals)
-        (when (and (<= (elisp::text-prop-interval-start iv) pos)
-                   (< pos (elisp::text-prop-interval-end iv)))
-          (loop for (k v) on (elisp::text-prop-interval-plist iv) by #'cddr do
-            (setf out (%plist-put-preserve out k v)))))
-      out)))
+(cl:defvar *buffer-text-properties*
+  (cl:make-hash-table :test 'eq))
+
+(cl:defun %buffer-text-properties (buffer)
+  (gethash buffer *buffer-text-properties*))
+
+(cl:defun %set-buffer-text-properties (buffer intervals)
+  (setf (gethash buffer *buffer-text-properties*) intervals)
+  buffer)
+
+(cl:defun %clear-buffer-text-properties (buffer)
+  (remhash buffer *buffer-text-properties*)
+  buffer)
+
+(cl:defun %intervals-properties-at (pos intervals)
+  (let ((out nil))
+    ;; Apply intervals in order, preserving key position on updates.
+    (dolist (iv intervals)
+      (when (and (<= (elisp::text-prop-interval-start iv) pos)
+                 (< pos (elisp::text-prop-interval-end iv)))
+        (loop for (k v) on (elisp::text-prop-interval-plist iv) by #'cddr do
+          (setf out (%plist-put-preserve out k v)))))
+    out))
+
+(cl:defun text-properties-at (pos &optional object)
+  "Bring-up subset of ELisp `text-properties-at'."
+  (let ((obj (or object (current-buffer))))
+    (cond
+     ((stringp obj)
+      (unless (and (integerp pos) (not (minusp pos)))
+        (error "ELISP:TEXT-PROPERTIES-AT bad position: ~S" pos))
+      (let ((len (length obj)))
+        (when (> pos len)
+          (error "ELISP:TEXT-PROPERTIES-AT out of range: ~S (len ~S)" pos len))
+        (let ((intervals (elisp::%string-text-properties obj)))
+          (when (null intervals)
+            (return-from text-properties-at nil))
+          (%intervals-properties-at pos intervals))))
+     ((bufferp obj)
+      (let* ((pos* (%pos pos))
+             (pmax (1+ (length (elisp-buffer-text obj)))))
+        (unless (and (integerp pos*) (plusp pos*))
+          (error "ELISP:TEXT-PROPERTIES-AT bad position: ~S" pos))
+        (when (> pos* pmax)
+          (error "ELISP:TEXT-PROPERTIES-AT out of range: ~S (max ~S)" pos* pmax))
+        (let ((intervals (%buffer-text-properties obj)))
+          (when (null intervals)
+            (return-from text-properties-at nil))
+          (%intervals-properties-at pos* intervals))))
+     (t
+      (error "ELISP:TEXT-PROPERTIES-AT unsupported OBJECT: ~S" obj)))))
+
+(cl:defun get-text-property (pos prop &optional object)
+  "Bring-up subset of ELisp `get-text-property'."
+  (plist-get (text-properties-at pos object) prop))
+
+(cl:defun put-text-property (start end prop value &optional object)
+  "Bring-up subset of ELisp `put-text-property'."
+  (let ((obj (or object (current-buffer))))
+    (cond
+     ((stringp obj)
+      (unless (and (integerp start) (integerp end) (<= 0 start) (<= start end))
+        (error "ELISP:PUT-TEXT-PROPERTY bad range: ~S..~S" start end))
+      (let ((len (length obj)))
+        (when (> end len)
+          (error "ELISP:PUT-TEXT-PROPERTY out of range: ~S..~S (len ~S)" start end len))
+        (when (< start end)
+          (let* ((old (or (elisp::%string-text-properties obj) nil))
+                 (iv (elisp::make-text-prop-interval
+                      :start start
+                      :end end
+                      :plist (list prop value))))
+            (elisp::%set-string-text-properties obj (append old (list iv)))))))
+     ((bufferp obj)
+      (let* ((s (%pos start))
+             (e (%pos end))
+             (pmax (1+ (length (elisp-buffer-text obj)))))
+        (unless (and (integerp s) (integerp e) (plusp s) (<= s e))
+          (error "ELISP:PUT-TEXT-PROPERTY bad range: ~S..~S" start end))
+        (when (> e pmax)
+          (error "ELISP:PUT-TEXT-PROPERTY out of range: ~S..~S (max ~S)" s e pmax))
+        (when (< s e)
+          (let* ((old (or (%buffer-text-properties obj) nil))
+                 (iv (elisp::make-text-prop-interval
+                      :start s
+                      :end e
+                      :plist (list prop value))))
+            (%set-buffer-text-properties obj (append old (list iv)))))))
+     (t
+      (error "ELISP:PUT-TEXT-PROPERTY unsupported OBJECT: ~S" obj))))
+  t)
+
+(cl:defun add-text-properties (start end props &optional object)
+  "Bring-up subset of ELisp `add-text-properties'."
+  (unless (and (listp props) (evenp (length props)))
+    (error "ELISP:ADD-TEXT-PROPERTIES expects a plist, got: ~S" props))
+  (loop for (k v) on props by #'cddr do
+    (put-text-property start end k v object))
+  t)
 
 (cl:defun substring-no-properties (string &optional (from 0) to)
   "Bring-up subset of ELisp `substring-no-properties' (for strings)."
@@ -2638,6 +2718,7 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
     (unless buf
       (return-from kill-buffer nil))
     (remhash (%buffer-name-key (elisp-buffer-name buf)) *buffer-table*)
+    (%clear-buffer-text-properties buf)
     (when (eq buf *current-buffer*)
       (setf *current-buffer* *messages-buffer*))
     t))
