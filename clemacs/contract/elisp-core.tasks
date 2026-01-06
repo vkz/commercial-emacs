@@ -3,6 +3,7 @@ clemacs:test:tty
 clemacs:test:ert
 clemacs:inventory:used-startup-check
 clemacs:test:load-bootstrap
+clemacs:test:load-lisp
 clemacs:test:startup
 clemacs:test:startup-check
 clemacs:test:load-ert

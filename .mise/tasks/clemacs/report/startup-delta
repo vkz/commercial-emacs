@@ -6,6 +6,7 @@ set -euo pipefail
 #USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
 #USAGE flag "--out-dir <dir>" help="Output directory for report artifacts" default=""
 #USAGE flag "--report <path>" help="Markdown report path" default=""
+#USAGE flag "--manifest <path>" help="Manifest file to compare against pdump load list" default="clemacs/contract/startup.smoke.files"
 
 if [[ "${usage_help:-false}" == "true" ]]; then
   mise tasks info "${MISE_TASK_NAME}"
@@ -31,6 +32,7 @@ fi
 export CLEMACS_REPORT_BUILD_DIR="${build_dir}"
 export CLEMACS_REPORT_OUT_DIR="${out_dir}"
 export CLEMACS_REPORT_PATH="${report_path}"
+export CLEMACS_REPORT_MANIFEST="${usage_manifest}"
 
 python3 - <<'PY'
 import os
@@ -41,9 +43,10 @@ project_root = Path(os.environ.get("MISE_PROJECT_ROOT") or os.getcwd())
 build_dir = Path(os.environ.get("CLEMACS_REPORT_BUILD_DIR") or "build/clemacs")
 out_dir = Path(os.environ.get("CLEMACS_REPORT_OUT_DIR") or (project_root / build_dir / "reports"))
 report_path = Path(os.environ.get("CLEMACS_REPORT_PATH") or (out_dir / "startup-delta.md"))
+manifest_rel = os.environ.get("CLEMACS_REPORT_MANIFEST") or "clemacs/contract/startup.smoke.files"
 
 pdump = project_root / "admin" / "pdump-common.el"
-startup_smoke = project_root / "clemacs" / "contract" / "startup.smoke.files"
+manifest_path = project_root / manifest_rel
 lisp_root = project_root / "lisp"
 
 def read_manifest(path: Path):
@@ -93,7 +96,7 @@ def resolve_pdump_load(name: str) -> str:
     # As a last resort, keep the previous behavior.
     return f"lisp/{base}.el"
 
-startup = read_manifest(startup_smoke)
+startup = read_manifest(manifest_path)
 startup_set = set(startup)
 
 text = pdump.read_text(encoding="utf-8")
@@ -123,7 +126,7 @@ lines = []
 lines.append("# clemacs startup delta report")
 lines.append("")
 lines.append(f"- pdump source: `{pdump}`")
-lines.append(f"- startup manifest: `{startup_smoke}`")
+lines.append(f"- startup manifest: `{manifest_path}`")
 lines.append("")
 lines.append("## Summary")
 lines.append(f"- pdump load entries: {len(pdump_paths)} (includes duplicates)")

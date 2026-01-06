@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Load the clemacs lisp manifest under SBCL (experimental)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--level <level>" help="Manifest level: smoke|check" default="smoke"
+#USAGE flag "--limit <n>" help="Load only the first N manifest entries" default="0"
+#USAGE flag "--max-forms <n>" help="Stop after N forms in each loaded file (0 = no limit)" default="0"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+level="${usage_level}"
+limit="${usage_limit}"
+max_forms="${usage_max_forms}"
+
+mise run clemacs:load:lisp -- \
+  --build-dir "${build_dir}" \
+  --level "${level}" \
+  --limit "${limit}" \
+  --max-forms "${max_forms}"

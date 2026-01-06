@@ -5,10 +5,18 @@
 #
 # 2026-01-03: same as smoke; diverges once we can load more of lisp/.
 
-lisp/subr.el
-lisp/emacs-lisp/cl-lib.el
-lisp/emacs-lisp/cl-macs.el
-lisp/emacs-lisp/macroexp.el
-lisp/emacs-lisp/pcase.el
-lisp/emacs-lisp/ert.el
-lisp/simple.el
+# 2026-01-06: Keep this manifest checkpointed like startup/ERT bring-up.
+# Treat each advancement as a compatibility milestone (raise max-forms, then
+# grow the file list).
+
+lisp/emacs-lisp/backquote.el -
+lisp/subr.el -
+lisp/keymap.el 50
+lisp/emacs-lisp/gv.el 10
+lisp/emacs-lisp/cl-lib.el 10
+lisp/emacs-lisp/cl-macs.el 10
+lisp/emacs-lisp/oclosure.el -
+lisp/emacs-lisp/macroexp.el 30
+lisp/emacs-lisp/pcase.el 200
+lisp/emacs-lisp/ert.el 182
+lisp/simple.el 379
