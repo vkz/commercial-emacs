@@ -38,7 +38,7 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
                    (if (cl:stringp doc) doc (%elisp-string->cl-string doc)))))
     (cond
      ((and (null init) (null doc*))
-      `(cl:defvar ,var))
+      `(cl:defvar ,var nil))
      ((null doc*)
       `(cl:defvar ,var ,init))
      (t
@@ -2247,6 +2247,31 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
   "ELisp-ish PUT for symbol plists."
   (setf (get symbol prop) value)
   value)
+
+(cl:defvar *elisp-function-properties* (cl:make-hash-table :test 'eq))
+
+(cl:defun function-put (function prop value)
+  "Bring-up subset of the C primitive `function-put'."
+  (unless (symbolp function)
+    (error "ELISP:FUNCTION-PUT expects a symbol, got: ~S" function))
+  (unless (symbolp prop)
+    (error "ELISP:FUNCTION-PUT expects a symbol property key, got: ~S" prop))
+  (let* ((plist (gethash function *elisp-function-properties*))
+         (plist* (%plist-put-preserve plist prop value)))
+    (setf (gethash function *elisp-function-properties*) plist*)
+    value))
+
+(cl:defun function-get (function prop &optional default)
+  "Bring-up subset of the C primitive `function-get'."
+  (unless (symbolp function)
+    (error "ELISP:FUNCTION-GET expects a symbol, got: ~S" function))
+  (unless (symbolp prop)
+    (error "ELISP:FUNCTION-GET expects a symbol property key, got: ~S" prop))
+  (let ((plist (gethash function *elisp-function-properties*)))
+    (loop for (k v) on plist by #'cddr do
+      (when (eq k prop)
+        (return v))
+      finally (return default))))
 
 (cl:defun getenv (var)
   "Bring-up subset of ELisp `getenv'."
@@ -5545,6 +5570,8 @@ the prefix flag (\"p\")."
 
 (defvar *elisp-variable-aliases* (cl:make-hash-table :test 'eq))
 
+(cl:defvar *buffer-local-variables* (cl:make-hash-table :test 'eq))
+
 (cl:defun %resolve-variable-alias (symbol &key (max-hops 16))
   (loop with cur = symbol
         for hop from 0 below max-hops do
@@ -5559,11 +5586,34 @@ the prefix flag (\"p\")."
 
 (cl:defun symbol-value (symbol)
   "ELisp-ish SYMBOL-VALUE (respects `defvaralias')."
-  (cl:symbol-value (%resolve-variable-alias symbol)))
+  (let* ((sym (%resolve-variable-alias symbol)))
+    (when (and (boundp '*current-buffer*)
+               (elisp-buffer-p *current-buffer*))
+      (multiple-value-bind (v presentp)
+          (gethash sym (elisp-buffer-locals *current-buffer*))
+        (when presentp
+          (return-from symbol-value v))))
+    (cl:symbol-value sym)))
 
 (cl:defun set (symbol value)
   "ELisp-ish SET (respects `defvaralias')."
-  (let ((sym (%resolve-variable-alias symbol)))
+  (let* ((sym (%resolve-variable-alias symbol)))
+    (when (and (boundp '*current-buffer*)
+               (elisp-buffer-p *current-buffer*))
+      (let ((locals (elisp-buffer-locals *current-buffer*)))
+        ;; If SYM is buffer-local by default, ensure we write a local binding.
+        (when (and (boundp '*buffer-local-variables*)
+                   (gethash sym *buffer-local-variables*))
+          (unless (nth-value 1 (gethash sym locals))
+            (setf (gethash sym locals)
+                  (handler-case (cl:symbol-value sym)
+                    (cl:unbound-variable () nil)))))
+        (multiple-value-bind (_v presentp)
+            (gethash sym locals)
+          (declare (cl:ignore _v))
+          (when presentp
+            (setf (gethash sym locals) value)
+            (return-from set value)))))
     (setf (cl:symbol-value sym) value)
     value))
 
@@ -5621,16 +5671,27 @@ Evaluate BODY, but if an error is signaled, demote it and return nil."
        (error nil))))
 
 (cl:defun make-variable-buffer-local (variable)
-  "Stub for ELisp `make-variable-buffer-local'."
+  "Bring-up subset of ELisp `make-variable-buffer-local'."
+  (unless (symbolp variable)
+    (error "ELISP:MAKE-VARIABLE-BUFFER-LOCAL expects a symbol, got: ~S" variable))
+  (setf (gethash (%resolve-variable-alias variable) *buffer-local-variables*) t)
   variable)
 
 (cl:defun make-local-variable (variable)
-  "Bring-up stub for ELisp `make-local-variable'.
+  "Bring-up subset of ELisp `make-local-variable'.
 
-We do not model true buffer-local variables yet; this is just enough for
-`setq-local' to run without error."
+Creates a buffer-local binding in the current buffer, initialized to the
+variable's default/global value."
   (unless (symbolp variable)
     (error "ELISP:MAKE-LOCAL-VARIABLE expects a symbol, got: ~S" variable))
+  (unless (and (boundp '*current-buffer*) (elisp-buffer-p *current-buffer*))
+    (error "ELISP:MAKE-LOCAL-VARIABLE requires a current buffer"))
+  (let* ((sym (%resolve-variable-alias variable))
+         (locals (elisp-buffer-locals *current-buffer*)))
+    (unless (nth-value 1 (gethash sym locals))
+      (setf (gethash sym locals)
+            (handler-case (cl:symbol-value sym)
+              (cl:unbound-variable () nil)))))
   variable)
 
 (cl:defun default-boundp (symbol)
@@ -5641,8 +5702,47 @@ The \"default\" value is CL's global binding model."
 
 (cl:defun local-variable-if-set-p (_symbol &optional _buffer)
   "Bring-up subset of ELisp `local-variable-if-set-p'."
-  (declare (cl:ignore _symbol _buffer))
-  nil)
+  (let* ((symbol (%resolve-variable-alias _symbol))
+         (buf (or _buffer *current-buffer*)))
+    (cond
+     ((null buf) nil)
+     ((not (elisp-buffer-p buf)) nil)
+     (t (nth-value 1 (gethash symbol (elisp-buffer-locals buf)))))))
+
+(cl:defun local-variable-p (symbol &optional buffer)
+  "Bring-up subset of the C primitive `local-variable-p'."
+  (unless (symbolp symbol)
+    (error "ELISP:LOCAL-VARIABLE-P expects a symbol, got: ~S" symbol))
+  (let* ((sym (%resolve-variable-alias symbol))
+         (buf (or buffer *current-buffer*)))
+    (unless (elisp-buffer-p buf)
+      (return-from local-variable-p nil))
+    (nth-value 1 (gethash sym (elisp-buffer-locals buf)))))
+
+(cl:defun buffer-local-value (symbol buffer)
+  "Bring-up subset of the C primitive `buffer-local-value'."
+  (unless (symbolp symbol)
+    (error "ELISP:BUFFER-LOCAL-VALUE expects symbol, got: ~S" symbol))
+  (let* ((sym (%resolve-variable-alias symbol))
+         (buf (or buffer *current-buffer*)))
+    (unless (elisp-buffer-p buf)
+      (error "ELISP:BUFFER-LOCAL-VALUE expects buffer, got: ~S" buffer))
+    (multiple-value-bind (v presentp)
+        (gethash sym (elisp-buffer-locals buf))
+      (if presentp
+          v
+          (cl:symbol-value sym)))))
+
+(cl:defun kill-local-variable (variable)
+  "Bring-up subset of the C primitive `kill-local-variable'."
+  (unless (symbolp variable)
+    (error "ELISP:KILL-LOCAL-VARIABLE expects a symbol, got: ~S" variable))
+  (unless (and (boundp '*current-buffer*) (elisp-buffer-p *current-buffer*))
+    (error "ELISP:KILL-LOCAL-VARIABLE requires a current buffer"))
+  (let* ((sym (%resolve-variable-alias variable))
+         (locals (elisp-buffer-locals *current-buffer*)))
+    (remhash sym locals))
+  variable)
 
 (cl:defun default-value (symbol)
   "Stub for ELisp `default-value'."

@@ -1,5 +1,19 @@
 (in-package #:elisp)
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Emacs Lisp uses a variety of DECLARE properties for edebug/indentation,
+  ;; docstrings, and metadata.  When we translate ELisp to CL forms, preserve
+  ;; these declarations as no-ops to keep compiler output quiet while loading
+  ;; more of lisp/.
+  (cl:declaim
+   (cl:declaration
+    advertised-calling-convention
+    debug
+    doc-string
+    indent
+    obsolete
+    side-effect-free)))
+
 (cl:defvar *elisp-readtable* nil)
 
 (cl:defun + (&rest args)

@@ -63,6 +63,13 @@
            #:symbol-function #:symbol-name #:fboundp #:values #:symbol-value
            #:signal #:handler-bind #:error
            #:< #:<= #:= #:> #:>=
+           ;; Preserve Emacs-Lisp declaration names as ELISP package symbols.
+           #:advertised-calling-convention
+           #:debug
+           #:doc-string
+           #:indent
+           #:obsolete
+           #:side-effect-free
            #:set)
   (:export
    #:equal

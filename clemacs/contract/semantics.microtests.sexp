@@ -352,4 +352,24 @@
   :expr "(progn (defun clemacs--ma-expander (&rest _args) '(quote ok)) (macroexpand-all '(ma-test 1 2) (list (cons 'ma-test 'clemacs--ma-expander))))"
   :expected "'ok"
   :emacs :match)
+
+ (:name "buffer-locals-make-local-variable-basic"
+  :expr "(progn (set 'clemacs--microtest-buflocal-var 11) (with-temp-buffer (make-local-variable 'clemacs--microtest-buflocal-var) (setq clemacs--microtest-buflocal-var 22) (list (symbol-value 'clemacs--microtest-buflocal-var) (default-value 'clemacs--microtest-buflocal-var) (local-variable-p 'clemacs--microtest-buflocal-var) (buffer-local-value 'clemacs--microtest-buflocal-var (current-buffer)))))"
+  :expected "(22 11 t 22)"
+  :emacs :match)
+
+ (:name "buffer-locals-kill-local-variable-restores-default"
+  :expr "(progn (set 'clemacs--microtest-buflocal-var2 11) (with-temp-buffer (make-local-variable 'clemacs--microtest-buflocal-var2) (setq clemacs--microtest-buflocal-var2 22) (kill-local-variable 'clemacs--microtest-buflocal-var2) (list (local-variable-p 'clemacs--microtest-buflocal-var2) (symbol-value 'clemacs--microtest-buflocal-var2))))"
+  :expected "(nil 11)"
+  :emacs :match)
+
+ (:name "buffer-locals-make-variable-buffer-local-makes-setq-local"
+  :expr "(progn (set 'clemacs--microtest-buflocal-var3 11) (make-variable-buffer-local 'clemacs--microtest-buflocal-var3) (with-temp-buffer (setq clemacs--microtest-buflocal-var3 33) (list (symbol-value 'clemacs--microtest-buflocal-var3) (default-value 'clemacs--microtest-buflocal-var3) (local-variable-p 'clemacs--microtest-buflocal-var3))))"
+  :expected "(33 11 t)"
+  :emacs :match)
+
+ (:name "defvar-without-init-binds-nil"
+  :expr "(progn (defvar clemacs--microtest-defvar-default-nil) (list (boundp 'clemacs--microtest-defvar-default-nil) clemacs--microtest-defvar-default-nil))"
+  :expected "(t nil)"
+  :emacs :match)
 )
