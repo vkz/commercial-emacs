@@ -24,6 +24,16 @@ home_dir="${project_root}/${build_dir}/home"
 mkdir -p "${home_dir}"
 export HOME="${home_dir}"
 
+if [[ -z "${CLEMACS_REFERENCE_EMACS:-}" ]]; then
+  if [[ -x "/opt/homebrew/bin/emacs" ]]; then
+    export CLEMACS_REFERENCE_EMACS="/opt/homebrew/bin/emacs"
+  elif [[ -x "/usr/local/bin/emacs" ]]; then
+    export CLEMACS_REFERENCE_EMACS="/usr/local/bin/emacs"
+  elif command -v emacs >/dev/null 2>&1; then
+    export CLEMACS_REFERENCE_EMACS="$(command -v emacs)"
+  fi
+fi
+
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/substrate/build"
 

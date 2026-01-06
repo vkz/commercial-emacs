@@ -20,6 +20,8 @@ mkdir -p "${build_dir}"
 out="${usage_out:-}"
 if [[ -z "${out}" ]]; then
   out="${project_root}/${build_dir}/reports/ert-upstream-tests.txt"
+elif [[ "${out}" != /* ]]; then
+  out="${project_root}/${out}"
 fi
 mkdir -p "$(dirname "${out}")"
 
@@ -54,6 +56,10 @@ tests_eval="nil"
 f="${project_root}/clemacs/contract/ert-tests.maxforms"
 [[ -f "${f}" ]] && tests_eval="$(tr -d ' \t\r\n' < "${f}")"
 
+ert_x_tests_eval="nil"
+f="${project_root}/clemacs/contract/ert-x-tests.maxforms"
+[[ -f "${f}" ]] && ert_x_tests_eval="$(tr -d ' \t\r\n' < "${f}")"
+
 cd "${deps_dir}"
 "${qlot_bin}" exec sbcl \
   --dynamic-space-size "${sbcl_dynamic_space}" \
@@ -68,7 +74,9 @@ cd "${deps_dir}"
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/backquote.el\")" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/subr.el\" :max-forms ${bootstrap_eval})" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert.el\" :max-forms ${ert_eval})" \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert-x.el\")" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-tests.el\" :max-forms ${tests_eval})" \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-x-tests.el\" :max-forms ${ert_x_tests_eval})" \
   --eval "(with-open-file (s #p\"${out}\" :direction :output :if-exists :supersede :if-does-not-exist :create) (clemacs:list-upstream-ert-test-names :stream s))" \
   --eval '(uiop:quit 0)'
 

@@ -49,6 +49,10 @@ tests_eval="nil"
 f="${project_root}/clemacs/contract/ert-tests.maxforms"
 [[ -f "${f}" ]] && tests_eval="$(tr -d ' \t\r\n' < "${f}")"
 
+ert_x_tests_eval="nil"
+f="${project_root}/clemacs/contract/ert-x-tests.maxforms"
+[[ -f "${f}" ]] && ert_x_tests_eval="$(tr -d ' \t\r\n' < "${f}")"
+
 if [[ "$#" -lt 1 ]]; then
   echo "[clemacs:test:ert-upstream-one] missing <test-name>" >&2
   echo "[clemacs:test:ert-upstream-one] usage: mise run clemacs:test:ert-upstream-one -- <test-name> [more-tests...]" >&2
@@ -103,5 +107,7 @@ clemacs_sbcl_eval \
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/subr.el\" :max-forms ${bootstrap_eval})" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/pp.el\")" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert.el\" :max-forms ${ert_eval})" \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert-x.el\")" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-tests.el\" :max-forms ${tests_eval})" \
+  --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-x-tests.el\" :max-forms ${ert_x_tests_eval})" \
   --eval "(uiop:quit (clemacs:run-upstream-ert-tests :names ${names_lisp} :known-fail ${known_fail_lisp}))"

@@ -63,3 +63,5 @@ ert-test-select-undefined
 ert--pp-with-indentation-and-newline
 ert-test-messages
 ert-test-running-tests
+ert-filter-string
+ert-propertized-string
