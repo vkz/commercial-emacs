@@ -123,3 +123,4 @@ failure, a useful debug flag, a missing helper task):
 
 - Add exactly **one** new bullet to this playbook **or** add exactly **one** new
   helper task/subcommand. Keep it minimal and high-signal.
+- When writing multi-line `git commit -m` messages in zsh, use `$'...'` quoting so newlines are real newlines (not literal `\\n`), otherwise the repo hooks may flag line/word-length issues.
