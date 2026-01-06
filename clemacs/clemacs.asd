@@ -16,5 +16,6 @@
    (:file "ert-upstream")
    (:file "main")
    (:file "substrate")
+   (:file "display")
    (:file "tty")
    (:file "tests")))

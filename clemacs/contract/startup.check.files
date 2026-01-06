@@ -76,7 +76,7 @@ lisp/international/eucjp-ms.el 1
 
 # pdump: composite, indent.
 lisp/composite.el 1
-lisp/indent.el 1
+lisp/indent.el 50
 
 # pdump: cl-generic.
 lisp/emacs-lisp/cl-generic.el 1

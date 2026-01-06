@@ -1342,6 +1342,42 @@ This is sufficient for `lisp/emacs-lisp/backquote.el', which uses
                 (setf (cdr (last acc)) last)
                 acc)))))))))
 
+(cl:defun mapcar (function &rest sequences)
+  "ELisp-ish MAPCAR.
+
+In Emacs, `mapcar' accepts lists and sequences (vectors and strings), and
+terminates at the shortest sequence."
+  (labels ((init (seq)
+             (cond
+              ((null seq) (list :list nil))
+              ((consp seq) (list :list seq))
+              ((vectorp seq) (list :vector seq 0 (length seq)))
+              ((unibyte-string-p seq) (list :unibyte seq 0 (length seq)))
+              ((cl:stringp seq) (list :string seq 0 (length seq)))
+              (t (error "ELISP:MAPCAR unsupported sequence: ~S" (type-of seq)))))
+           (donep (st)
+             (ecase (first st)
+               (:list (null (second st)))
+               ((:vector :unibyte :string) (>= (third st) (fourth st)))))
+           (elem (st)
+             (ecase (first st)
+               (:list (car (second st)))
+               (:vector (aref (second st) (third st)))
+               (:unibyte (aref (second st) (third st)))
+               (:string (%elisp-char-code (char (second st) (third st))))))
+           (advance (st)
+             (ecase (first st)
+               (:list (setf (second st) (cdr (second st))))
+               ((:vector :unibyte :string) (incf (third st))))
+             st))
+    (let ((states (cl:mapcar #'init sequences))
+          (out nil))
+      (loop while (and states (not (cl:some #'donep states))) do
+        (push (cl:apply function (cl:mapcar #'elem states)) out)
+        (dolist (st states)
+          (advance st)))
+      (nreverse out))))
+
 (cl:defmacro eval-when-compile (&rest body)
   "Bring-up stub for ELisp `eval-when-compile'.
 
@@ -2468,6 +2504,11 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
   (name "" :type (or cl:string unibyte-string))
   (text "" :type cl:string)
   (point 1 :type integer)
+  ;; Narrowing is represented as a half-open restriction interval in ELisp
+  ;; buffer coordinates (point-min <= point <= point-max).  When nil, the
+  ;; corresponding side is unbounded (i.e. 1 / (1+ (length text))).
+  (restriction-min nil :type (or null integer))
+  (restriction-max nil :type (or null integer))
   (syntax-table nil)
   (locals (cl:make-hash-table :test 'eq) :type hash-table)
   ;; Weak registry of markers attached to this buffer (for edit-log compaction).
@@ -2553,7 +2594,7 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
         ;; and allowing markers to drift past point-max can lead to infinite
         ;; loops in code that uses an end-marker as a moving boundary (pp.el).
         (let ((pmax (1+ (length (elisp-buffer-text buf)))))
-          (setf pos (max (point-min) (min pos pmax))))
+          (setf pos (max 1 (min pos pmax))))
         (setf (elisp-marker-position marker) pos
               (elisp-marker-edit-index marker) n))))
   marker))
@@ -2893,10 +2934,64 @@ STREAM may be a buffer."
        m))))
 
 (cl:defun point-min ()
-  1)
+  (or (elisp-buffer-restriction-min *current-buffer*) 1))
 
 (cl:defun point-max ()
-  (1+ (length (elisp-buffer-text *current-buffer*))))
+  (or (elisp-buffer-restriction-max *current-buffer*)
+      (1+ (length (elisp-buffer-text *current-buffer*)))))
+
+(cl:defun buffer-narrowed-p ()
+  "Bring-up subset of ELisp `buffer-narrowed-p'."
+  (let* ((buf *current-buffer*)
+         (abs-min 1)
+         (abs-max (1+ (length (elisp-buffer-text buf))))
+         (min (or (elisp-buffer-restriction-min buf) abs-min))
+         (max (or (elisp-buffer-restriction-max buf) abs-max)))
+    (or (/= min abs-min) (/= max abs-max) t)))
+
+(cl:defun narrow-to-region (start end)
+  "Bring-up subset of ELisp `narrow-to-region'."
+  (let* ((buf *current-buffer*)
+         (abs-min 1)
+         (abs-max (1+ (length (elisp-buffer-text buf))))
+         (a (%pos start))
+         (b (%pos end))
+         (min (min a b))
+         (max (max a b))
+         (min (max abs-min (min min abs-max)))
+         (max (max abs-min (min max abs-max))))
+    (setf (elisp-buffer-restriction-min buf) min
+          (elisp-buffer-restriction-max buf) max)
+    (setf (elisp-buffer-point buf) (max min (min (elisp-buffer-point buf) max)))
+    nil))
+
+(cl:defun widen ()
+  "Bring-up subset of ELisp `widen'."
+  (setf (elisp-buffer-restriction-min *current-buffer*) nil
+        (elisp-buffer-restriction-max *current-buffer*) nil)
+  nil)
+
+(cl:defmacro save-restriction (&body body)
+  "Bring-up subset of ELisp `save-restriction'."
+  (let ((buf (cl:gensym "BUF-"))
+        (min (cl:gensym "MIN-"))
+        (max (cl:gensym "MAX-")))
+    `(let* ((,buf *current-buffer*)
+            (,min (elisp-buffer-restriction-min ,buf))
+            (,max (elisp-buffer-restriction-max ,buf)))
+       (unwind-protect
+           (progn ,@body)
+         (when (elisp-buffer-p ,buf)
+           (let* ((abs-min 1)
+                  (abs-max (1+ (length (elisp-buffer-text ,buf))))
+                  (min* (or ,min abs-min))
+                  (max* (or ,max abs-max))
+                  (min* (max abs-min (min min* abs-max)))
+                  (max* (max abs-min (min max* abs-max)))
+                  (p (elisp-buffer-point ,buf)))
+             (setf (elisp-buffer-restriction-min ,buf) ,min
+                   (elisp-buffer-restriction-max ,buf) ,max
+                   (elisp-buffer-point ,buf) (max min* (min p max*)))))))))
 
 (cl:defvar tab-width 8)
 
@@ -3187,7 +3282,7 @@ Emacs clamps positions outside the buffer to the nearest valid position."
       (error "ELISP:SET-MARKER bad position: ~S" position))
     (let ((buf (or buffer *current-buffer*)))
       (setf (elisp-marker-buffer marker) buf
-            (elisp-marker-position marker) (max (point-min)
+            (elisp-marker-position marker) (max 1
                                                 (min position (1+ (length (elisp-buffer-text buf)))))
             (elisp-marker-edit-index marker) (%buffer-edit-index buf))
       (%buffer-register-marker buf marker))))
@@ -4634,6 +4729,13 @@ Binds VAR (when non-nil) to an ELisp-style error datum:
                      (cl:error
                        (lambda (,e)
                          (unless (typep ,e 'elisp-signal)
+                           (when (uiop:getenv "CLEMACS_DEBUG_CONDITION_CASE")
+                             (cl:format *error-output*
+                                     "~&[clemacs] condition-case caught CL error: ~A (~A)~%"
+                                     ,e (cl:type-of ,e))
+                             #+sbcl
+                             (sb-debug:print-backtrace :stream *error-output* :count 80)
+                             (finish-output *error-output*))
                            (throw ',tag
                              (list :err
                                    (cond

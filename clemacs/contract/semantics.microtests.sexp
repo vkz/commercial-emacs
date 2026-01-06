@@ -312,4 +312,24 @@
   :expr "(equal (cl--arglist-args '(&key a (b nil) &allow-other-keys)) '(a b))"
   :expected "t"
   :emacs nil)
+
+ (:name "narrowing-point-min-max"
+  :expr "(with-temp-buffer (insert \"abcdef\") (narrow-to-region 2 5) (list (point-min) (point-max)))"
+  :expected "(2 5)"
+  :emacs :match)
+
+ (:name "narrowing-goto-char-clamps-to-point-min"
+  :expr "(with-temp-buffer (insert \"abcdef\") (narrow-to-region 2 5) (goto-char 1) (point))"
+  :expected "2"
+  :emacs :match)
+
+ (:name "save-restriction-restores-narrowing"
+  :expr "(with-temp-buffer (insert \"abcdef\") (narrow-to-region 2 5) (save-restriction (widen)) (list (point-min) (point-max)))"
+  :expected "(2 5)"
+  :emacs :match)
+
+ (:name "set-marker-not-clamped-by-narrowing"
+  :expr "(with-temp-buffer (insert \"abcdef\") (narrow-to-region 3 5) (let ((m (make-marker))) (set-marker m 1) (marker-position m)))"
+  :expected "1"
+  :emacs :match)
 )

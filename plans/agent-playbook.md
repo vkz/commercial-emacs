@@ -89,6 +89,7 @@ Then choose one:
    - If the failure is temporary, move it to
      `clemacs/contract/ert-upstream.known-fail.tests` with a dated reason.
    - XPASS is a gate failure: remove from known-fail once fixed.
+   - If the failure is a wrapped SBCL condition (e.g. "invalid number of arguments"), re-run with `CLEMACS_DEBUG_CONDITION_CASE=1` to print the captured CL backtrace at the `condition-case` boundary.
 3) Fix, then re-run `check`.
 
 ## What artifacts matter (attach these)

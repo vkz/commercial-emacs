@@ -25,7 +25,8 @@ mkdir -p "${home_dir}"
 export HOME="${home_dir}"
 
 outfile="${project_root}/${build_dir}/tmp/tty-test.txt"
-rm -f "${outfile}"
+outfile="$(mktemp "${project_root}/${build_dir}/tmp/tty-test.XXXXXX")"
+trap 'rm -f "${outfile}" 2>/dev/null || true' EXIT
 
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/substrate/build"

@@ -52,6 +52,7 @@
            #:ignore
            #:1+ #:1-
            #:append
+           #:mapcar
            #:prin1 #:princ #:prin1-to-string #:read-from-string
            #:string= #:string-equal
            #:aref
