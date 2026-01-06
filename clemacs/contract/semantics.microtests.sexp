@@ -69,6 +69,11 @@
   :expected "((a . b))"
   :emacs :match)
 
+ (:name "keymaps-ctl-x-r-map-bound-and-keymapp"
+  :expr "(and (boundp 'ctl-x-r-map) (keymapp ctl-x-r-map))"
+  :expected "t"
+  :emacs :match)
+
  (:name "cl-progv-binds-dynamically"
   :expr "(progn (require 'cl-lib) (cl-progv '(x) '(7) x))"
   :expected "7"

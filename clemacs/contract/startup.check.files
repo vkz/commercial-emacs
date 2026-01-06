@@ -38,6 +38,9 @@ lisp/emacs-lisp/rx.el 10
 lisp/emacs-lisp/pp.el 50
 lisp/ldefs-boot.el 50
 
+# pdump: loaddefs.
+lisp/loaddefs.el 200
+
 # pdump: button, gv, cl-lib, cl-macs, cl-preloaded, oclosure, cl-seq, seq.
 lisp/button.el 10
 lisp/emacs-lisp/gv.el 10
@@ -79,13 +82,13 @@ lisp/composite.el 1
 lisp/indent.el -
 
 # pdump: cl-generic.
-lisp/emacs-lisp/cl-generic.el 1
+lisp/emacs-lisp/cl-generic.el 5
 
 # pdump: simple.
 lisp/simple.el 379
 
 # pdump: nadvice.
-lisp/emacs-lisp/nadvice.el 1
+lisp/emacs-lisp/nadvice.el 2
 
 # pdump: minibuffer.
 lisp/minibuffer.el 11
@@ -106,10 +109,10 @@ lisp/font-core.el 50
 lisp/emacs-lisp/syntax.el 20
 
 # pdump: font-lock.
-lisp/font-lock.el 1
+lisp/font-lock.el 3
 
 # pdump: jit-lock, mouse, timer, isearch.
-lisp/jit-lock.el 1
+lisp/jit-lock.el 2
 lisp/mouse.el 1
 lisp/fringe.el -
 lisp/scroll-bar.el 11

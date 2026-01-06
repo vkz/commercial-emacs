@@ -10,6 +10,8 @@
   (declare (cl:ignore _name))
   (make-elisp-keymap))
 
+(cl:defvar ctl-x-r-map (make-sparse-keymap))
+
 (cl:defun make-vector (length init)
   "ELisp-ish MAKE-VECTOR."
   (make-array length :initial-element init))
