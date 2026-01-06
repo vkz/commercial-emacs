@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Serve a browser viewer for CLEMACS grid patch JSONL (CLEMACS_GRID_PATCH_DUMP)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--file <path>" help="Path to CLEMACS_GRID_PATCH_DUMP JSONL" default="build/clemacs/tmp/grid-patch.jsonl"
+#USAGE flag "--host <host>" help="Bind host" default="127.0.0.1"
+#USAGE flag "--port <port>" help="Bind port" default="7777"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+exec python3 clemacs/tools/grid_web.py \
+  --file "${usage_file}" \
+  --host "${usage_host}" \
+  --port "${usage_port}"
