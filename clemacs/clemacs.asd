@@ -10,7 +10,20 @@
    (:file "buffer")
    (:file "elisp")
    (:file "elisp-inventory")
-   (:file "elisp-compat")
+   (:module "elisp-compat"
+    :serial t
+    :components
+    ((:file "00-core")
+     (:file "10-strings")
+     (:file "20-regexp-rx-print")
+     (:file "30-pcase")
+     (:file "40-cl-lib-and-charset")
+     (:file "50-keymaps-runtime-help")
+     (:file "60-files")
+     (:file "70-buffers-and-editor")
+     (:file "80-ewoc")
+     (:file "90-messages-and-macroexp")
+     (:file "99-rest")))
    (:file "elisp-load")
    (:file "elisp-ert")
    (:file "ert-upstream")
