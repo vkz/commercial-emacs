@@ -121,6 +121,9 @@
                         (multiple-value-bind (start end) (%line-range line-starts text line)
                           (subseq text start end))))))
 
+          (setf (grid-frame-scroll-from-row frame) (+ header-lines 1)
+                (grid-frame-scroll-to-row frame) (+ header-lines content-lines))
+
           (let ((blank-row (+ header-lines content-lines)))
             (when (< blank-row rows)
               (setf (aref (grid-frame-lines frame) blank-row) "")))
@@ -164,9 +167,21 @@
              (tty-write-string vis))
            (%tty-clear-eol)))
         (:scroll
-         ;; TTY scroll is intentionally not implemented yet; keep this branch so
-         ;; grid patches remain a stable cross-backend protocol.
-         nil)
+         (let ((from (getf op :from))
+               (to (getf op :to))
+               (n (getf op :n)))
+           (when (and (integerp from) (integerp to) (integerp n) (not (zerop n)))
+             ;; Set scroll region, scroll, then restore full region.
+             (tty-write-string (format nil "~C[~D;~Dr" #\Esc from to))
+             (%tty-move-cursor from 1)
+             (cond
+              ((plusp n)
+               ;; Positive = down (insert blank lines at top of region).
+               (tty-write-string (format nil "~C[~DT" #\Esc n)))
+              ((minusp n)
+               ;; Negative = up (insert blank lines at bottom of region).
+               (tty-write-string (format nil "~C[~DS" #\Esc (- n)))))
+             (tty-write-string (format nil "~C[r" #\Esc)))))
         (:set-cursor
          (let ((row (getf op :row))
                (col (getf op :col)))
@@ -262,8 +277,12 @@
     m))
 
 (defun tty-main (&key path)
-  (let* ((path* (and path (not (string= path "")) path))
+  (let* ((dump (uiop:getenv "CLEMACS_GRID_PATCH_DUMP"))
+         (path* (and path (not (string= path "")) path))
          (state (make-tty-state :buf (if path* (buffer-load-file path*) (make-buffer)))))
+    (when (and dump (not (string= dump "")))
+      (setf *grid-patch-sinks*
+            (list (make-grid-patch-jsonl-sink dump))))
     (unwind-protect
         (progn
           (tty-enter-raw)
