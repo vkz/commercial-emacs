@@ -9,20 +9,27 @@
        (uiop:pathname-parent-directory-pathname
         (asdf:system-source-directory :clemacs)))))
 
+(defun %reference-emacs ()
+  (or (uiop:getenv "CLEMACS_REFERENCE_EMACS")
+      (and (probe-file #p"/opt/homebrew/bin/emacs") "/opt/homebrew/bin/emacs")
+      (and (probe-file #p"/usr/local/bin/emacs") "/usr/local/bin/emacs")
+      "emacs"))
+
 (defun %maybe-emacs-prin1 (expr)
-  (handler-case
-      (multiple-value-bind (out err code)
+  (multiple-value-bind (out err code)
+      (handler-case
           (uiop:run-program
-           (list "emacs" "-Q" "--batch" "--eval"
+           (list (%reference-emacs) "-Q" "--batch" "--eval"
                  (format nil "(let ((print-escape-newlines t) (print-escape-control-characters t)) (prin1 ~A) (terpri))"
                          expr))
            :output :string
            :error-output :string
            :ignore-error-status t)
-        (when (not (eql code 0))
-          (error "emacs -Q --batch failed (~S): ~A" code err))
-        (string-trim '(#\Space #\Tab #\Newline #\Return) out))
-    (error () nil)))
+        (error ()
+          (return-from %maybe-emacs-prin1 nil)))
+    (when (not (eql code 0))
+      (error "reference Emacs failed (~S): ~A (expr: ~A)" code err expr))
+    (string-trim '(#\Space #\Tab #\Newline #\Return) out)))
 
 (defun %clemacs-prin1 (value)
   (labels ((p1 (v)
@@ -170,7 +177,7 @@
                 (fiveam:is (string= emacs-out clemacs-out)
                            "~A: clemacs != emacs: ~S vs ~S for expr: ~A"
                            name clemacs-out emacs-out expr)
-                (fiveam:skip "emacs not on PATH"))))))))
+                (fiveam:skip "reference Emacs not available (set CLEMACS_REFERENCE_EMACS)"))))))))
 
 (defun run-smoke (&key (stream *standard-output*))
   (let ((fiveam:*test-dribble* stream))

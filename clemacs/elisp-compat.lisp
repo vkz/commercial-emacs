@@ -29,7 +29,7 @@ without evaluating the interactive spec."
   (declare (cl:ignore _spec))
   nil)
 
-(cl:defmacro defvar (var &optional init doc)
+(cl:defmacro defvar (var &optional (init nil init-supplied-p) doc)
   "ELisp-ish DEFVAR.
 
 Accepts unibyte/multibyte docstrings and coerces them to a CL string so SBCL
@@ -37,8 +37,8 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
   (let ((doc* (and doc
                    (if (cl:stringp doc) doc (%elisp-string->cl-string doc)))))
     (cond
-     ((and (null init) (null doc*))
-      `(cl:defvar ,var nil))
+     ((and (not init-supplied-p) (null doc*))
+      `(cl:defvar ,var))
      ((null doc*)
       `(cl:defvar ,var ,init))
      (t

@@ -373,8 +373,8 @@
   :expected "22"
   :emacs :match)
 
- (:name "defvar-without-init-binds-nil"
-  :expr "(progn (defvar clemacs--microtest-defvar-default-nil) (list (boundp 'clemacs--microtest-defvar-default-nil) clemacs--microtest-defvar-default-nil))"
-  :expected "(t nil)"
+ (:name "defvar-without-init-leaves-unbound"
+  :expr "(progn (makunbound 'clemacs--microtest-defvar-default-nil) (defvar clemacs--microtest-defvar-default-nil) (boundp 'clemacs--microtest-defvar-default-nil))"
+  :expected "nil"
   :emacs :match)
 )
