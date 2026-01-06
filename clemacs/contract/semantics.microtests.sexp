@@ -427,4 +427,39 @@
   :expr "(let ((buf 123)) (save-current-buffer buf))"
   :expected "123"
   :emacs :match)
+
+ (:name "seq-mapconcat-basic-list"
+  :expr "(mapconcat #'identity '(\"a\" \"b\" \"c\") \"_\")"
+  :expected "\"a_b_c\""
+  :emacs :match)
+
+ (:name "seq-mapconcat-basic-string"
+  :expr "(mapconcat #'char-to-string \"abc\" \"-\")"
+  :expected "\"a-b-c\""
+  :emacs :match)
+
+ (:name "seq-seq-filter-basic-list"
+  :expr "(seq-filter #'numberp '(a 1 b 2))"
+  :expected "(1 2)"
+  :emacs :match)
+
+ (:name "seq-seq-filter-basic-string"
+  :expr "(seq-filter (lambda (c) (or (= c ?b) (= c ?c))) \"abcd\")"
+  :expected "(98 99)"
+  :emacs :match)
+
+ (:name "buffers-buffer-modified-p-insert"
+  :expr "(with-temp-buffer (insert \"a\") (buffer-modified-p))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "buffers-set-buffer-modified-p-clears"
+  :expr "(with-temp-buffer (insert \"a\") (set-buffer-modified-p nil) (buffer-modified-p))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "windows-single-window-basics"
+  :expr "(let ((w (selected-window))) (and (window-live-p w) (eq w (select-window w)) (eq (current-buffer) (window-buffer w)) t))"
+  :expected "t"
+  :emacs :match)
 )

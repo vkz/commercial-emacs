@@ -1582,6 +1582,66 @@ terminates at the shortest sequence."
           (advance st)))
       (nreverse out))))
 
+(cl:defun mapconcat (function sequence separator)
+  "Bring-up subset of ELisp `mapconcat'.
+
+Supports lists, vectors, and strings (including unibyte strings)."
+  (unless (stringp separator)
+    (error "ELISP:MAPCONCAT expects string SEPARATOR, got: ~S" separator))
+  (let* ((len
+           (cond
+            ((null sequence) 0)
+            ((consp sequence) (length sequence))
+            ((vectorp sequence) (length sequence))
+            ((stringp sequence) (length sequence))
+            (t (error "ELISP:MAPCONCAT unsupported sequence: ~S" (type-of sequence)))))
+         (start* 0)
+         (end* len))
+    (labels ((elt-at (i)
+               (cond
+                ((consp sequence) (nth i sequence))
+                ((null sequence) (error "ELISP:MAPCONCAT internal bug (elt-at nil)"))
+                (t (aref sequence i)))))
+      (let ((parts nil)
+            (first t))
+        (loop for i from start* below end* do
+          (let ((s (funcall function (elt-at i))))
+            (unless (stringp s)
+              (error "ELISP:MAPCONCAT function must return string, got: ~S" s))
+            (if first
+                (progn
+                  (push s parts)
+                  (setf first nil))
+                (progn
+                  (push separator parts)
+                  (push s parts)))))
+        (apply #'concat (nreverse parts))))))
+
+(cl:defun seq-filter (predicate sequence)
+  "Bring-up subset of ELisp `seq-filter'.
+
+Supports lists, vectors, and strings (including unibyte strings)."
+  (cond
+   ((null sequence) nil)
+   ((consp sequence)
+    (let ((out nil))
+      (dolist (x sequence)
+        (when (funcall predicate x)
+          (push x out)))
+      (nreverse out)))
+   ((vectorp sequence)
+    (coerce (seq-filter predicate (coerce sequence 'list)) 'vector))
+   ((stringp sequence)
+    ;; Emacs' seq.el returns a list for string inputs (not a string).
+    (let ((out nil))
+      (dotimes (i (length sequence))
+        (let ((code (aref sequence i)))
+          (when (funcall predicate code)
+            (push code out))))
+      (nreverse out)))
+   (t
+    (error "ELISP:SEQ-FILTER unsupported sequence: ~S" (type-of sequence)))))
+
 (cl:defmacro eval-when-compile (&rest body)
   "Bring-up stub for ELisp `eval-when-compile'.
 
@@ -2888,7 +2948,8 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
          (buf (get-buffer-create (string-to-unibyte path)))
          (txt (uiop:read-file-string path :external-format :utf-8)))
     (setf (elisp-buffer-text buf) txt
-          (elisp-buffer-point buf) 1)
+          (elisp-buffer-point buf) 1
+          (elisp-buffer-modified-p buf) nil)
     buf))
 
 (cl:defun find-file-literally (filename &optional _nowarn)
@@ -2911,6 +2972,7 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
   (name "" :type (or cl:string unibyte-string))
   (text "" :type cl:string)
   (point 1 :type integer)
+  (modified-p nil :type boolean)
   ;; Narrowing is represented as a half-open restriction interval in ELisp
   ;; buffer coordinates (point-min <= point <= point-max).  When nil, the
   ;; corresponding side is unbounded (i.e. 1 / (1+ (length text))).
@@ -2960,6 +3022,8 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
 
 (cl:defun %buffer-record-insert (buffer at len)
   (when (plusp len)
+    (when (elisp-buffer-p buffer)
+      (setf (elisp-buffer-modified-p buffer) t))
     (vector-push-extend (make-elisp-marker-edit :kind :insert :a at :b len)
                         (elisp-buffer-marker-edits buffer)))
   (%buffer-maybe-compact-marker-edits buffer)
@@ -2968,6 +3032,8 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
 (cl:defun %buffer-record-delete (buffer start end)
   (let ((len (- end start)))
     (when (plusp len)
+      (when (elisp-buffer-p buffer)
+        (setf (elisp-buffer-modified-p buffer) t))
       (vector-push-extend (make-elisp-marker-edit :kind :delete :a start :b end)
                           (elisp-buffer-marker-edits buffer))))
   (%buffer-maybe-compact-marker-edits buffer)
@@ -3252,7 +3318,11 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
          (set-buffer ,saved)))))
 
 (cl:defmacro save-window-excursion (&body body)
-  `(save-current-buffer ,@body))
+  (let ((cfg (cl:gensym "CFG-")))
+    `(let ((,cfg (current-window-configuration)))
+       (unwind-protect
+           (progn ,@body)
+         (set-window-configuration ,cfg)))))
 
 (cl:defmacro save-excursion (&body body)
   "Bring-up subset of ELisp `save-excursion'."
@@ -4508,14 +4578,73 @@ for upstream ERT's `ert--make-xrefs-region'."
       (elisp-buffer (elisp-buffer-name buf))
       (null nil))))
 
+(cl:defun buffer-modified-p (&optional buffer)
+  "Bring-up subset of ELisp `buffer-modified-p'."
+  (let ((buf (or buffer *current-buffer*)))
+    (unless (elisp-buffer-p buf)
+      (error "ELISP:BUFFER-MODIFIED-P expected buffer, got: ~S" buf))
+    (elisp-buffer-modified-p buf)))
+
+(cl:defun set-buffer-modified-p (flag)
+  "Bring-up subset of ELisp `set-buffer-modified-p'."
+  (setf (elisp-buffer-modified-p *current-buffer*) (and flag t))
+  flag)
+
+(cl:defun restore-buffer-modified-p (flag)
+  "Bring-up stub for ELisp `restore-buffer-modified-p'."
+  (set-buffer-modified-p flag))
+
 (cl:defvar global-mark-ring nil)
+
+(defstruct elisp-window
+  (buffer nil))
+
+(cl:defvar *single-window* (make-elisp-window :buffer *messages-buffer*))
+(cl:defvar *selected-window* *single-window*)
+
+(cl:defun selected-window ()
+  "Bring-up subset of ELisp `selected-window'."
+  *selected-window*)
+
+(cl:defun window-live-p (window)
+  "Bring-up subset of ELisp `window-live-p'."
+  (and (elisp-window-p window) (eq window *single-window*)))
+
+(cl:defun window-buffer (&optional window)
+  "Bring-up subset of ELisp `window-buffer'."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-BUFFER expected live window, got: ~S" w))
+    (elisp-window-buffer w)))
+
+(cl:defun select-window (window &optional _norecord)
+  "Bring-up subset of ELisp `select-window'."
+  (declare (cl:ignore _norecord))
+  (unless (window-live-p window)
+    (error "ELISP:SELECT-WINDOW expected live window, got: ~S" window))
+  (setf *selected-window* window)
+  (let ((buf (elisp-window-buffer window)))
+    (when buf
+      (set-buffer buf)))
+  window)
+
+(cl:defun display-buffer (buffer-or-name &optional _action _frame)
+  "Bring-up subset of ELisp `display-buffer' (single-window)."
+  (declare (cl:ignore _action _frame))
+  (let ((buf (or (get-buffer buffer-or-name)
+                 (and (stringp buffer-or-name) (get-buffer-create buffer-or-name))
+                 (error "ELISP:DISPLAY-BUFFER invalid buffer: ~S" buffer-or-name))))
+    (setf (elisp-window-buffer *single-window*) buf)
+    (when (eq (selected-window) *single-window*)
+      (set-buffer buf))
+    *single-window*))
 
 (defstruct elisp-window-configuration
   (current-buffer nil))
 
 (cl:defun current-window-configuration ()
   "Bring-up stub for ELisp `current-window-configuration'."
-  (make-elisp-window-configuration :current-buffer *current-buffer*))
+  (make-elisp-window-configuration :current-buffer (window-buffer (selected-window))))
 
 (cl:defun set-window-configuration (config)
   "Bring-up stub for ELisp `set-window-configuration'."
@@ -4523,17 +4652,16 @@ for upstream ERT's `ert--make-xrefs-region'."
     (error "ELISP:SET-WINDOW-CONFIGURATION expected window configuration, got: ~S" config))
   (let ((buf (elisp-window-configuration-current-buffer config)))
     (when buf
+      (setf (elisp-window-buffer *single-window*) buf)
       (set-buffer buf)))
   t)
 
 (cl:defun pop-to-buffer (buffer-or-name &optional _action _norecord)
   "Bring-up stub for ELisp `pop-to-buffer'."
   (declare (cl:ignore _action _norecord))
-  (let ((buf (or (get-buffer buffer-or-name)
-                 (and (stringp buffer-or-name) (get-buffer-create buffer-or-name))
-                 (error "ELISP:POP-TO-BUFFER invalid buffer: ~S" buffer-or-name))))
-    (set-buffer buf)
-    buf))
+  (let ((win (display-buffer buffer-or-name)))
+    (select-window win)
+    (window-buffer win)))
 
 (cl:defun force-mode-line-update (&optional _all)
   "Bring-up stub for ELisp `force-mode-line-update'."
