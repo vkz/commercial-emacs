@@ -130,3 +130,4 @@ failure, a useful debug flag, a missing helper task):
 - Add exactly **one** new bullet to this playbook **or** add exactly **one** new
   helper task/subcommand. Keep it minimal and high-signal.
 - When writing multi-line `git commit -m` messages in zsh, use `$'...'` quoting so newlines are real newlines (not literal `\\n`), otherwise the repo hooks may flag line/word-length issues.
+- If `with-current-buffer`/`save-current-buffer` behaves strangely, check for macro variable capture: compatibility macros must use `gensym`d locals (avoid plain names like `buf`), since dynamic binding can shadow user vars and silently break `set-buffer` targets.

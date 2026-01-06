@@ -422,4 +422,9 @@
   :expr "(progn (string-match \"a\" \"za\") (match-data--translate -1) (match-beginning 0))"
   :expected "0"
   :emacs :match)
+
+ (:name "buffers-save-current-buffer-does-not-capture-buf"
+  :expr "(let ((buf 123)) (save-current-buffer buf))"
+  :expected "123"
+  :emacs :match)
 )
