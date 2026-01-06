@@ -76,13 +76,13 @@ lisp/international/eucjp-ms.el 1
 
 # pdump: composite, indent.
 lisp/composite.el 1
-lisp/indent.el 50
+lisp/indent.el -
 
 # pdump: cl-generic.
 lisp/emacs-lisp/cl-generic.el 1
 
 # pdump: simple.
-lisp/simple.el 1
+lisp/simple.el 151
 
 # pdump: nadvice.
 lisp/emacs-lisp/nadvice.el 1

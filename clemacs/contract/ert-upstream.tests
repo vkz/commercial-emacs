@@ -5,8 +5,11 @@
 #
 # NOTE: `ert-test-abc`/`ert-test-def` are defined dynamically inside
 # `ert-test-deftest`; they aren't registered at load time, so we do not treat
-# them as standalone bring-up targets.
+# them as standalone bring-up targets (selecting them by name would be brittle).
 ert-test-body-runs
+ert-test-abbreviate-string
+ert-test-deftest
+ert-test-record-backtrace
 ert-test-nested-test-body-runs
 ert-test-pass
 ert-test-fail
@@ -14,7 +17,47 @@ ert-test-fail-debug-with-debugger-1
 ert-test-fail-debug-with-debugger-2
 ert-test-fail-debug-nested-with-debugger
 ert-test-error
+ert-test-get-explainer
+ert-test-parse-keys-and-body
+ert-test-run-tests-batch
+ert-test-run-tests-batch-expensive
+ert-test-run-tests-interactively
+ert-test-plist-difference-explanation
 ert-test-should
 ert-test-should-not
+ert-test-should-value
+ert-test-should-with-macrolet
+ert-test-should-error
+ert-test-should-error-subtypes
 ert-test-should-error-argument
 ert-test-should-error-macroexpansion
+ert-test-skip-when
+ert-test-skip-unless
+ert-test-should-failure-debugging
+ert-test-deftest-lexical-binding-t
+ert-test-special-operator-p
+ert-test-list-of-should-forms
+ert-test-list-of-should-forms-observers-should-not-stack
+ert-test-significant-plist-keys
+ert-test-stats-set-test-and-result
+ert-test-string-first-line
+ert-test-test-boundp
+ert-test-test-result-expected-p
+ert-test-with-demoted-errors
+ert-test-explain-equal
+ert-test-explain-equal-improper-list
+ert-test-explain-equal-keymaps
+ert-test-fail-inside-should
+ert-test-explain-equal-string-properties
+ert-test-explain-equal-strings
+ert-test-list-of-should-forms-no-deep-copy
+ert-test-select-and
+ert-test-select-member
+ert-test-select-regexp
+ert-test-select-symbol
+ert-test-select-tag
+ert-test-select-test
+ert-test-select-undefined
+ert--pp-with-indentation-and-newline
+ert-test-messages
+ert-test-running-tests

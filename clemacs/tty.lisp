@@ -3,7 +3,8 @@
 (defstruct tty-state
   (buf (make-buffer) :type buffer)
   (top-line 0 :type fixnum)
-  (goal-col nil))
+  (goal-col nil)
+  (frame nil))
 
 (defun %tty-read-key ()
   (let ((b (tty-read-byte)))
@@ -146,9 +147,39 @@
     (%tty-move-cursor (max 1 (min rows (grid-frame-cursor-row frame)))
                       (max 1 (min cols (grid-frame-cursor-col frame))))))
 
-(defun %tty-draw (buf top-line)
-  (multiple-value-bind (frame top) (%tty-build-grid-frame buf top-line)
-    (%tty-render-grid-frame frame)
+(defun %tty-apply-grid-patch (ops frame)
+  (let ((rows (grid-frame-rows frame))
+        (cols (grid-frame-cols frame)))
+    (dolist (op ops)
+      (case (getf op :op)
+        (:clear
+         (%tty-clear))
+        (:put-row
+         (let* ((row (getf op :row))
+                (text (getf op :text)))
+           (%tty-move-cursor (max 1 (min rows row)) 1)
+           (let ((vis (if (and (stringp text) (> (length text) cols))
+                          (subseq text 0 cols)
+                          (or text ""))))
+             (tty-write-string vis))
+           (%tty-clear-eol)))
+        (:scroll
+         ;; TTY scroll is intentionally not implemented yet; keep this branch so
+         ;; grid patches remain a stable cross-backend protocol.
+         nil)
+        (:set-cursor
+         (let ((row (getf op :row))
+               (col (getf op :col)))
+           (%tty-move-cursor (max 1 (min rows row))
+                             (max 1 (min cols col)))))
+        (otherwise
+         (error "Unknown grid patch op: ~S" (getf op :op)))))))
+
+(defun %tty-draw (state)
+  (multiple-value-bind (frame top)
+      (%tty-build-grid-frame (tty-state-buf state) (tty-state-top-line state))
+    (%tty-apply-grid-patch (grid-frame->patch frame (tty-state-frame state)) frame)
+    (setf (tty-state-frame state) frame)
     top))
 
 (defun %tty-save (buf)
@@ -240,7 +271,7 @@
                  (cmds (%make-command-table)))
             (loop
               (setf (tty-state-top-line state)
-                    (%tty-draw (tty-state-buf state) (tty-state-top-line state)))
+                    (%tty-draw state))
               (let* ((keys (%tty-read-keyseq prefixes))
                      (cmd (gethash keys cmds)))
                 (cond

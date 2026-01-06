@@ -13,8 +13,19 @@
 (cl:defvar emacs-basic-display nil)
 (cl:defvar fill-prefix nil)
 (cl:defvar last-command nil)
+(cl:defvar overlay-arrow-variable-list nil)
 (cl:defvar text-property-default-nonsticky nil)
 (cl:defvar comment-start-skip nil)
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Bring-up shim: `lisp/simple.el` installs generic methods specialized on the
+  ;; `accessor` type (defined later by `oclosure.el` upstream).  We currently
+  ;; load only a small prefix of `oclosure.el` during startup, so ensure the
+  ;; class exists early to avoid a hard load error.
+  (unless (cl:find-class 'accessor nil)
+    (cl:defclass accessor () ()))
+  (unless (cl:find-class 'cconv--interactive-helper nil)
+    (cl:defclass cconv--interactive-helper () ())))
 
 (cl:defmacro bound-and-true-p (var)
   "Bring-up subset of ELisp `bound-and-true-p'."
@@ -4606,7 +4617,7 @@ This is sufficient for `letrec' in `lisp/subr.el' during ERT bring-up."
                (or (cl:functionp x) (symbolp x)))
              (env-expander (sym)
                (when (listp env)
-                 (let ((b (assoc sym env :test #'eq)))
+                 (let ((b (cl:assoc sym env :test #'eq)))
                    (when (and b (consp b) (callable-expander-p (cdr b)))
                      (cdr b)))))
              (expand-1 (x)

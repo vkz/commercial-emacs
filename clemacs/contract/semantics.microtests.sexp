@@ -54,6 +54,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "display-overlay-arrow-variable-list-boundp"
+  :expr "(boundp 'overlay-arrow-variable-list)"
+  :expected "t"
+  :emacs :match)
+
  (:name "text-props-get-text-property-string-default-nil"
   :expr "(get-text-property 0 'foo \"abc\")"
   :expected "nil"
@@ -331,5 +336,10 @@
  (:name "set-marker-not-clamped-by-narrowing"
   :expr "(with-temp-buffer (insert \"abcdef\") (narrow-to-region 3 5) (let ((m (make-marker))) (set-marker m 1) (marker-position m)))"
   :expected "1"
+  :emacs :match)
+
+ (:name "macroexpand-all-env-expander-alist"
+  :expr "(progn (defun clemacs--ma-expander (&rest _args) '(quote ok)) (macroexpand-all '(ma-test 1 2) (list (cons 'ma-test 'clemacs--ma-expander))))"
+  :expected "'ok"
   :emacs :match)
 )
