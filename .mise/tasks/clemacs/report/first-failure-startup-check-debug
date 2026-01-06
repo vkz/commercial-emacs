@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Shortcut: clemacs:report:first-failure --mode startup-check --debug"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+exec mise run clemacs:report:first-failure -- \
+  --build-dir "${usage_build_dir}" \
+  --mode startup-check \
+  --debug
