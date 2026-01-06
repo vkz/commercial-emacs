@@ -66,3 +66,10 @@ ert-test-running-tests
 ert-filter-string
 ert-propertized-string
 ert-x-tests--with-temp-file-generate-suffix
+ert-x-tests-with-temp-file
+ert-x-tests-with-temp-file/handle-error
+ert-x-tests-with-temp-file/prefix-and-suffix-kwarg
+ert-x-tests-with-temp-file/text-kwarg
+ert-x-tests-with-temp-file/unknown-kwarg-signals-error
+ert-x-tests-with-temp-directory
+ert-x-tests-with-temp-directory/text-signals-error
