@@ -166,6 +166,12 @@
                           (or text ""))))
              (tty-write-string vis))
            (%tty-clear-eol)))
+        (:clear-eol
+         (let ((row (getf op :row))
+               (col (getf op :col)))
+           (%tty-move-cursor (max 1 (min rows row))
+                             (max 1 (min cols (or col 1))))
+           (%tty-clear-eol)))
         (:scroll
          (let ((from (getf op :from))
                (to (getf op :to))

@@ -111,6 +111,7 @@ The patch is a list of plists with an :op key:
 - (:op :clear)                     Clear the full viewport.
 - (:op :put-row :row N :text TEXT) Replace a 1-based row with TEXT.
 - (:op :scroll :from A :to B :n K) Scroll rows A..B by K (positive = down).
+- (:op :clear-eol :row R :col C)   Clear from 1-based R,C to end-of-line.
 - (:op :set-cursor :row R :col C)  Move cursor to 1-based R,C.
 
 Notes:
@@ -123,10 +124,16 @@ Notes:
                     (= (grid-frame-rows a) (grid-frame-rows b))
                     (= (grid-frame-cols a) (grid-frame-cols b))
                     (= (length (grid-frame-lines a))
-                       (length (grid-frame-lines b))))))
+                       (length (grid-frame-lines b)))))
+             (vis (s cols)
+               (let ((s (or s "")))
+                 (if (and (stringp s) (> (length s) cols))
+                     (subseq s 0 cols)
+                     s))))
       (unless (same-shape-p frame prev)
         (emit (list :op :clear)))
       (let* ((rows (grid-frame-rows frame))
+             (cols (grid-frame-cols frame))
              (from (grid-frame-scroll-from-row frame))
              (to (grid-frame-scroll-to-row frame))
              (scroll-k 0)
@@ -139,10 +146,15 @@ Notes:
                    (= to (grid-frame-scroll-to-row prev))
                    (<= 1 from to rows))
           (let* ((h (1+ (- to from)))
-                 (new (subseq (grid-frame-lines frame) (1- from) to))
-                 (old (subseq (grid-frame-lines prev) (1- from) to))
+                 (new (map 'vector
+                           (lambda (s) (vis s cols))
+                           (subseq (grid-frame-lines frame) (1- from) to)))
+                 (old (map 'vector
+                           (lambda (s) (vis s cols))
+                           (subseq (grid-frame-lines prev) (1- from) to)))
                  (best-k 0)
-                 (best-m 0))
+                 (best-m 0)
+                 (best-overlap 0))
             (when (> h 2)
               (loop for k from (- h 1) to (1- h) do
                 (unless (zerop k)
@@ -152,13 +164,25 @@ Notes:
                         (when (and (<= 0 j) (< j h)
                                    (equal (aref new i) (aref old j)))
                           (incf m))))
-                    (when (> m best-m)
-                      (setf best-m m
-                            best-k k)))))
+                    (let ((overlap (- h (abs k))))
+                      (when (or (> m best-m)
+                                (and (= m best-m)
+                                     (or (> overlap best-overlap)
+                                         (and (= overlap best-overlap)
+                                              (< (abs k) (abs best-k))))))
+                        (setf best-m m
+                              best-k k
+                              best-overlap overlap)))))))
             (let* ((max-overlap (- h (abs best-k)))
+                   (ratio (if (<= max-overlap 0) 0 (/ best-m max-overlap)))
+                   ;; Heuristic:
+                   ;; - Require >=2 lines of overlap.
+                   ;; - For small overlaps (2..4), require perfect overlap match.
+                   ;; - For larger overlaps, require a high match ratio.
                    (okp (and (not (zerop best-k))
                              (>= max-overlap 2)
-                             (>= best-m (max 3 (- max-overlap 1))))))
+                             (or (and (<= max-overlap 4) (= best-m max-overlap))
+                                 (and (>= max-overlap 5) (>= ratio 3/4))))))
               (when okp
                 (setf do-scroll t
                       scroll-k best-k)
@@ -166,11 +190,11 @@ Notes:
 
         (dotimes (i rows)
           (let* ((row (1+ i))
-                 (text (aref (grid-frame-lines frame) i))
+                 (text (vis (aref (grid-frame-lines frame) i) cols))
                  (prev-text
                    (and prev
                         (< i (length (grid-frame-lines prev)))
-                        (aref (grid-frame-lines prev) i))))
+                        (vis (aref (grid-frame-lines prev) i) cols))))
             (cond
              ((null prev)
               (emit (list :op :put-row :row row :text text)))
@@ -179,15 +203,27 @@ Notes:
                      (jj (- ii scroll-k))
                      (expected
                        (if (and (<= 0 jj) (< jj (1+ (- to from))))
-                           (aref (grid-frame-lines prev) (+ (1- from) jj))
+                           (vis (aref (grid-frame-lines prev) (+ (1- from) jj)) cols)
                            "")))
-                (when (not (equal text expected))
-                  (emit (list :op :put-row :row row :text text)))))
+                (cond
+                 ((equal text expected) nil)
+                 ((and (stringp expected) (stringp text)
+                       (< (length text) (length expected))
+                       (string= text expected :end2 (length text)))
+                  (emit (list :op :clear-eol :row row :col (1+ (length text)))))
+                 (t
+                  (emit (list :op :put-row :row row :text text))))))
              ((not (equal text prev-text))
-              (emit (list :op :put-row :row row :text text))))))))
+              (cond
+               ((and (stringp prev-text) (stringp text)
+                     (< (length text) (length prev-text))
+                     (string= text prev-text :end2 (length text)))
+                (emit (list :op :clear-eol :row row :col (1+ (length text)))))
+               (t
+                (emit (list :op :put-row :row row :text text))))))))
       (emit (list :op :set-cursor
                   :row (grid-frame-cursor-row frame)
                   :col (grid-frame-cursor-col frame))))
     (setf ops (nreverse ops))
     (maybe-emit-grid-patch ops frame prev)
-    ops))
+    ops)))
