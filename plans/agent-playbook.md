@@ -91,6 +91,7 @@ Then choose one:
      `clemacs/contract/ert-upstream.known-fail.tests` with a dated reason.
    - XPASS is a gate failure: remove from known-fail once fixed.
    - If the failure is a wrapped SBCL condition (e.g. "invalid number of arguments"), re-run with `CLEMACS_DEBUG_CONDITION_CASE=1` to print the captured CL backtrace at the `condition-case` boundary.
+   - If backtraces are shallow due to the per-test thread/timeout wrapper, set `CLEMACS_ERT_TEST_TIMEOUT_SECS=0` while debugging to run in the main thread.
    - To isolate one (or a small ordered sequence of) upstream test name(s) with the same debug knobs, use `mise run clemacs:test:ert-upstream-one -- --debug-condition-case <ert-test-name> [more-tests...]` (optionally add `CLEMACS_ERT_DEBUG=1` for richer failure payloads; dynamic tests like `ert-test-abc`/`ert-test-def` must be preceded by `ert-test-deftest`).
 3) Fix, then re-run `check`.
 
