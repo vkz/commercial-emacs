@@ -60,19 +60,24 @@
            #:vectorp
            #:characterp
            #:type-of
-           #:symbol-function #:symbol-name #:fboundp #:values #:symbol-value
-           #:signal #:handler-bind #:error
-           #:< #:<= #:= #:> #:>=
-           ;; Preserve Emacs-Lisp declaration names as ELISP package symbols.
-           #:advertised-calling-convention
-           #:debug
-           #:doc-string
-           #:indent
-           #:obsolete
-           #:side-effect-free
-           #:set)
-  (:export
-   #:equal
+	           #:symbol-function #:symbol-name #:fboundp #:values #:symbol-value
+	           #:signal #:handler-bind #:error
+	           #:< #:<= #:= #:> #:>=
+	           ;; Preserve Emacs-Lisp declaration names as ELISP package symbols.
+	           #:advertised-calling-convention
+	           #:compiler-macro
+	           #:completion
+	           #:debug
+	           #:doc-string
+	           #:indent
+	           #:important-return-value
+	           #:interactive-only
+	           #:obsolete
+	           #:pure
+	           #:side-effect-free
+	           #:set)
+	  (:export
+	   #:equal
    #:eval
    #:load-elisp-file
    #:load-elisp-manifest

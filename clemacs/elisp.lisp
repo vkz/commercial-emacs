@@ -5,16 +5,28 @@
   ;; docstrings, and metadata.  When we translate ELisp to CL forms, preserve
   ;; these declarations as no-ops to keep compiler output quiet while loading
   ;; more of lisp/.
-  (cl:declaim
-   (cl:declaration
-    advertised-calling-convention
-    debug
-    doc-string
-    indent
-    obsolete
-    side-effect-free)))
+	  (cl:declaim
+	   (cl:declaration
+	    advertised-calling-convention
+	    compiler-macro
+	    completion
+	    debug
+	    doc-string
+	    indent
+	    important-return-value
+	    interactive-only
+	    obsolete
+	    pure
+	    side-effect-free)))
 
 (cl:defvar *elisp-readtable* nil)
+
+(cl:defun native-comp-function-p (_function)
+  "Return non-nil when FUNCTION has an associated native-compiled version.
+
+Native compilation is intentionally disabled in this fork, so this always
+returns nil."
+  nil)
 
 (cl:defun + (&rest args)
   "Temporary numeric-only ELisp `+'.
