@@ -3,6 +3,14 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (cl:require "SB-CLTL2"))
 
+;; Upstream ELisp uses declaration specifiers that CL implementations don't know
+;; about.  Declare them so SBCL doesn't spam style warnings during bring-up.
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (declaim
+   (declaration pure completion important-return-value
+                side-effect-free error-free
+                advertised-calling-convention obsolete)))
+
 ;; Some upstream ELisp assumes these are always bound (typically set by the
 ;; byte-compiler or load machinery).  Bind them to NIL for bring-up so
 ;; macroexpansion helpers (macroexp.el, pcase.el, etc.) don't trip UNBOUND.
