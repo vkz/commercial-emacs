@@ -60,6 +60,7 @@ Repo-local skills live under `.codex/skills/` in this repo. Use them as the defa
      source location in `inventory/c-elisp.tsv`.
 
 - If the report says "No `elisp-load-error` found", scan the Tail for `ELisp load error in ...` anyway; if present, treat it as a bug in `clemacs:report:scan-load-log`.
+- If SBCL dies with `SB-KERNEL::CONTROL-STACK-EXHAUSTED` during macroexpansion (often `macroexp--all-forms`), prefer restoring the clemacs stack-safe `macroexpand-all` shim after `lisp/emacs-lisp/macroexp.el` loads (see `clemacs/elisp.lisp` `%maybe-install-post-load-shims`).
 
 Then choose one:
 
