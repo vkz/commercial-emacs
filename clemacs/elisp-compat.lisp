@@ -4595,16 +4595,82 @@ for upstream ERT's `ert--make-xrefs-region'."
   (set-buffer-modified-p flag))
 
 (cl:defvar global-mark-ring nil)
+(cl:defvar inhibit-modification-hooks nil)
+(cl:defvar inhibit-read-only nil)
+(cl:defvar buffer-read-only nil)
 
 (defstruct elisp-window
   (buffer nil))
 
+(defstruct elisp-frame
+  (selected-window nil))
+
 (cl:defvar *single-window* (make-elisp-window :buffer *messages-buffer*))
 (cl:defvar *selected-window* *single-window*)
+(cl:defvar *single-frame* (make-elisp-frame :selected-window *single-window*))
+(cl:defvar *selected-frame* *single-frame*)
+
+(cl:defun windowp (object)
+  "Bring-up subset of ELisp `windowp' (single-window)."
+  (and (elisp-window-p object) t))
+
+(cl:defun framep (object)
+  "Bring-up subset of ELisp `framep' (single-frame)."
+  (and (elisp-frame-p object) t))
+
+(cl:defun selected-frame ()
+  "Bring-up subset of ELisp `selected-frame' (single-frame)."
+  *selected-frame*)
+
+(cl:defun frame-live-p (frame)
+  "Bring-up subset of ELisp `frame-live-p' (single-frame)."
+  (and (elisp-frame-p frame) (eq frame *single-frame*)))
+
+(cl:defun window-frame (&optional window)
+  "Bring-up subset of ELisp `window-frame' (single-window)."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-FRAME expected live window, got: ~S" w))
+    (selected-frame)))
+
+(cl:defun frame-selected-window (&optional frame)
+  "Bring-up subset of ELisp `frame-selected-window' (single-frame)."
+  (let ((f (or frame (selected-frame))))
+    (unless (frame-live-p f)
+      (error "ELISP:FRAME-SELECTED-WINDOW expected live frame, got: ~S" f))
+    (or (elisp-frame-selected-window f) *single-window*)))
+
+(cl:defun tty-top-frame (&optional frame)
+  "Bring-up subset of ELisp `tty-top-frame' (single-frame)."
+  (declare (cl:ignore frame))
+  (selected-frame))
+
+(cl:defun select-frame (frame &optional _norecord)
+  "Bring-up subset of ELisp `select-frame' (single-frame)."
+  (declare (cl:ignore _norecord))
+  (unless (frame-live-p frame)
+    (error "ELISP:SELECT-FRAME expected live frame, got: ~S" frame))
+  (setf *selected-frame* frame)
+  (select-window (frame-selected-window frame) 'norecord)
+  frame)
 
 (cl:defun selected-window ()
   "Bring-up subset of ELisp `selected-window'."
   *selected-window*)
+
+(cl:defmacro save-selected-window (&body body)
+  "Bring-up subset of ELisp `save-selected-window'."
+  (let ((saved (cl:gensym "SAVED-WIN-")))
+    `(let ((,saved (selected-window)))
+       (unwind-protect
+           (progn ,@body)
+         (select-window ,saved)))))
+
+(cl:defmacro with-selected-window (window &body body)
+  "Bring-up subset of ELisp `with-selected-window' (single-window)."
+  `(save-selected-window
+     (select-window ,window)
+     ,@body))
 
 (cl:defun window-live-p (window)
   "Bring-up subset of ELisp `window-live-p'."
@@ -4616,6 +4682,32 @@ for upstream ERT's `ert--make-xrefs-region'."
     (unless (window-live-p w)
       (error "ELISP:WINDOW-BUFFER expected live window, got: ~S" w))
     (elisp-window-buffer w)))
+
+(cl:defun get-buffer-window (&optional buffer-or-name _frame)
+  "Bring-up subset of ELisp `get-buffer-window' (single-window)."
+  (declare (cl:ignore _frame))
+  (let* ((buf (or (and buffer-or-name (get-buffer buffer-or-name))
+                  (and buffer-or-name (error "ELISP:GET-BUFFER-WINDOW no such buffer: ~S"
+                                             buffer-or-name))
+                  (current-buffer)))
+         (win *single-window*))
+    (if (and (window-live-p win) (eq (elisp-window-buffer win) buf))
+        win
+        nil)))
+
+(cl:defun minibuffer-selected-window ()
+  "Bring-up subset of ELisp `minibuffer-selected-window' (no minibuffer)."
+  nil)
+
+(cl:defun window-minibuffer-p (&optional _window)
+  "Bring-up subset of ELisp `window-minibuffer-p' (no minibuffer)."
+  (declare (cl:ignore _window))
+  nil)
+
+(cl:defun minibufferp (&optional _buffer)
+  "Bring-up subset of ELisp `minibufferp' (no minibuffer)."
+  (declare (cl:ignore _buffer))
+  nil)
 
 (cl:defun select-window (window &optional _norecord)
   "Bring-up subset of ELisp `select-window'."
@@ -5751,6 +5843,11 @@ major-mode implementation."
 
 (cl:defun define-button-type (&rest _args)
   "Bring-up stub for ELisp `define-button-type'."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun make-text-button (&rest _args)
+  "Bring-up stub for ELisp `make-text-button'."
   (declare (cl:ignore _args))
   nil)
 

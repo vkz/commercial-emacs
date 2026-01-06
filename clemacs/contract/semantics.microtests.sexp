@@ -379,7 +379,7 @@
   :emacs :match)
 
  (:name "buffer-locals-setq-local-makes-bare-symbol-read-local"
-  :expr "(progn (set 'clemacs--microtest-buflocal-var4 11) (with-temp-buffer (make-local-variable 'clemacs--microtest-buflocal-var4) (setq clemacs--microtest-buflocal-var4 22) clemacs--microtest-buflocal-var4))"
+  :expr "(progn (defvar clemacs--microtest-buflocal-var4) (set 'clemacs--microtest-buflocal-var4 11) (with-temp-buffer (make-local-variable 'clemacs--microtest-buflocal-var4) (setq clemacs--microtest-buflocal-var4 22) clemacs--microtest-buflocal-var4))"
   :expected "22"
   :emacs :match)
 
@@ -461,5 +461,40 @@
  (:name "windows-single-window-basics"
   :expr "(let ((w (selected-window))) (and (window-live-p w) (eq w (select-window w)) (eq (current-buffer) (window-buffer w)) t))"
   :expected "t"
+  :emacs :match)
+
+ (:name "windows-windowp-selected"
+  :expr "(windowp (selected-window))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "windows-get-buffer-window-current"
+  :expr "(eq (get-buffer-window (current-buffer)) (selected-window))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "windows-save-selected-window-noop"
+  :expr "(let ((w (selected-window))) (save-selected-window (select-window w) (eq (selected-window) w)))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "windows-with-selected-window-noop"
+  :expr "(let ((w (selected-window))) (with-selected-window w (eq (selected-window) w)))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "windows-minibuffer-selected-window-nil"
+  :expr "(minibuffer-selected-window)"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "windows-window-minibuffer-p-nil"
+  :expr "(window-minibuffer-p (selected-window))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "windows-minibufferp-nil"
+  :expr "(minibufferp)"
+  :expected "nil"
   :emacs :match)
 )

@@ -73,3 +73,16 @@ ert-x-tests-with-temp-file/text-kwarg
 ert-x-tests-with-temp-file/unknown-kwarg-signals-error
 ert-x-tests-with-temp-directory
 ert-x-tests-with-temp-directory/text-signals-error
+
+# Buffer/window selection helpers (ert-x).
+ert-test-with-buffer-selected/current
+ert-test-with-buffer-selected/selected
+ert-test-with-buffer-selected/nil-buffer
+ert-test-with-buffer-selected/modification-hooks
+ert-test-with-buffer-selected/read-only
+ert-test-with-buffer-selected/return-value
+ert-test-with-test-buffer-selected/selected
+ert-test-with-test-buffer-selected/modification-hooks
+ert-test-with-test-buffer-selected/read-only
+ert-test-with-test-buffer-selected/return-value
+ert-test-with-test-buffer-selected/buffer-name
