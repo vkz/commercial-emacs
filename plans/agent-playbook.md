@@ -75,6 +75,7 @@ Then choose one:
   - If using `:emacs :match`, ensure a reference `emacs` is available on `PATH`
     for the `mise` task environment (`emacs -Q --batch` is used; `gxeval` is not).
   - For interactive probing, use the `emacs` skill via `gxeval -s wip ...`.
+  - If a `:emacs :match` microtest errors with `reference Emacs failed`, use the reported `expr:` string to locate the entry in `clemacs/contract/semantics.microtests.sexp` and decide whether to update clemacs semantics or mark the test `:emacs nil` with a dated compat note.
 
 - **Checkpoint seems unstable / flaky**
   - Bisect to a stable checkpoint (in manifest context):
