@@ -8,6 +8,34 @@
 (cl:defvar major-mode-remap-defaults nil)
 (cl:defvar file-name-handler-alist nil)
 
+(cl:defun find-file-name-handler (_filename _operation)
+  "Bring-up stub for the C primitive `find-file-name-handler'."
+  (declare (cl:ignore _filename _operation))
+  nil)
+
+(cl:defun file-name-case-insensitive-p (_filename)
+  "Bring-up stub for the C primitive `file-name-case-insensitive-p'."
+  (declare (cl:ignore _filename))
+  nil)
+
+(cl:defun %initial-exec-path ()
+  (let ((path (uiop:getenv "PATH")))
+    (cond
+     ((and (cl:stringp path) (cl:> (length path) 0))
+      (uiop:split-string path :separator ":"))
+     (t nil))))
+
+(cl:defvar exec-path (%initial-exec-path))
+(cl:defvar exec-suffixes (list ""))
+
+(cl:defun file-name-quote (name &optional _top)
+  "Bring-up stub for ELisp `file-name-quote'.
+
+For now, return NAME unchanged.  clemacs does not yet implement file name
+handlers or Tramp-style remote file parsing."
+  (declare (cl:ignore _top))
+  name)
+
 (cl:defun get-load-suffixes ()
   "Bring-up subset of ELisp `get-load-suffixes'.
 
@@ -21,13 +49,7 @@ TTY-relevant default."
       (list (string-to-unibyte ".elc")
             (string-to-unibyte ".el"))))))
 
-(cl:defun locate-file (filename path &optional suffixes predicate)
-  "Bring-up subset of ELisp `locate-file'.
-
-This is normally defined in `lisp/files.el` and used by `locate-library` in
-`lisp/subr.el`.  For bring-up, implement a minimal search over PATH and
-SUFFIXES, returning the first probeable match as an absolute file name string
-or nil."
+(cl:defun %locate-file-minimal (filename path &optional suffixes predicate)
   (let* ((name (%file-name->cl-string filename))
          (dirs (if (consp path) path (list path)))
          (suffixes* (or suffixes (list (string-to-unibyte ""))))
@@ -56,7 +78,20 @@ or nil."
           (let* ((cand (concatenate 'cl:string base suf))
                  (p (probe-file cand)))
             (when (and p (or (null pred) (funcall pred cand)))
-              (return-from locate-file (string-to-unibyte (namestring p))))))))))
+                      (return-from %locate-file-minimal (string-to-unibyte (namestring p))))))))))
+
+(cl:defun locate-file (filename path &optional suffixes predicate)
+  "Bring-up subset of ELisp `locate-file'.
+
+This is normally defined in `lisp/files.el` and used by `locate-library` in
+`lisp/subr.el`.  For bring-up, implement a minimal search over PATH and
+SUFFIXES, returning the first probeable match as an absolute file name string
+or nil."
+  (%locate-file-minimal filename path suffixes predicate))
+
+(cl:defun locate-file-internal (filename path &optional suffixes predicate)
+  "Bring-up subset of the C primitive `locate-file-internal'."
+  (%locate-file-minimal filename path suffixes predicate))
 
 (cl:defun load (file &optional noerror _nomessage nosuffix _must-suffix)
   "Bring-up subset of ELisp `load'.
@@ -93,6 +128,34 @@ plain `.el' files by searching `load-path' and evaluating the file via
    ((cl:stringp x) x)
    (t (error "ELISP: expected file name string, got: ~S" x))))
 
+(cl:defun %expand-tilde-file-name (s)
+  (cond
+   ((and (cl:> (length s) 0) (cl:char= (char s 0) #\~))
+    (let* ((slash (position #\/ s))
+           (rest (if slash (subseq s slash) "")))
+      ;; Bring-up subset: treat "~" and "~/" as current user's home; treat
+      ;; "~user" as "~" for now.
+      (namestring (merge-pathnames rest (user-homedir-pathname)))))
+   (t s)))
+
+(cl:defun expand-file-name (name &optional default-directory)
+  "Bring-up subset of the C primitive `expand-file-name'."
+  (let* ((name-str (%expand-tilde-file-name (%file-name->cl-string name)))
+         (base-str
+           (cond
+            (default-directory (%file-name->cl-string default-directory))
+            ((and (boundp 'default-directory) (stringp (symbol-value 'default-directory)))
+             (%file-name->cl-string (symbol-value 'default-directory)))
+            (t (namestring (uiop:getcwd))))))
+    (cond
+     ;; Absolute path.
+     ((and (cl:> (length name-str) 0) (cl:char= (char name-str 0) #\/))
+      name-str)
+     (t
+      (let* ((base (uiop:ensure-directory-pathname base-str))
+             (p (uiop:merge-pathnames* name-str base)))
+        (namestring p))))))
+
 (cl:defun file-name-as-directory (file)
   "Bring-up subset of ELisp `file-name-as-directory'."
   (let* ((s (%file-name->cl-string file))
@@ -107,6 +170,11 @@ plain `.el' files by searching `load-path' and evaluating the file via
 
 (cl:defun file-exists-p (filename)
   "Bring-up subset of ELisp `file-exists-p'."
+  (let ((s (%file-name->cl-string filename)))
+    (and (probe-file s) t)))
+
+(cl:defun file-readable-p (filename)
+  "Bring-up subset of the C primitive `file-readable-p'."
   (let ((s (%file-name->cl-string filename)))
     (and (probe-file s) t)))
 

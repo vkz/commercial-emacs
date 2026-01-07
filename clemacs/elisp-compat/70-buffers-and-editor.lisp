@@ -139,6 +139,15 @@ Returns a marker with no buffer/position."
 (defvar *buffer-table* (cl:make-hash-table :test 'cl:equal))
 (defvar *buffer-list* nil)
 
+(cl:defun %initial-default-directory ()
+  (let* ((cwd (uiop:getcwd))
+         (p (etypecase cwd
+              (pathname (uiop:ensure-directory-pathname cwd))
+              (cl:string (uiop:ensure-directory-pathname cwd)))))
+    (namestring p)))
+
+(cl:defvar default-directory (%initial-default-directory))
+
 (cl:defun %buffer-name-key (name)
   ;; Keep buffer table keys as CL strings so CL:EQUAL hashing works even when
   ;; ELisp passes us unibyte strings.

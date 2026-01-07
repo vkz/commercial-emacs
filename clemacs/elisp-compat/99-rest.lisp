@@ -541,6 +541,7 @@ Evaluate BODY, but if an error is signaled, demote it and return nil."
 (make-variable-buffer-local 'local-map)
 (make-variable-buffer-local 'font-lock-mode)
 (make-variable-buffer-local 'font-lock-function)
+(make-variable-buffer-local 'default-directory)
 
 (cl:defun make-local-variable (variable)
   "Bring-up subset of ELisp `make-local-variable'.

@@ -663,6 +663,8 @@ VARIABLE is a string name.  ENVIRONMENT, when non-nil, is treated like an ELisp
 
 (cl:defvar locale-coding-system nil)
 
+(cl:defvar init-file-user nil)
+
 (cl:defun decode-coding-string (string _coding-system &optional _nocopy _buffer)
   "Bring-up stub for the C primitive `decode-coding-string'.
 
