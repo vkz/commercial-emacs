@@ -86,6 +86,10 @@ Common patterns:
 
 Then choose one:
 
+- **Raising startup checkpoints (default strategy)**
+  - Prefer larger cap jumps (e.g. `loaddefs.el` +500; most other files +100–200), then run `mise run clemacs:loop:elisp-core`.
+  - If it fails, use `build/clemacs/reports/first-failure.startup-check.md` to fix only the top offender; if the failing point is unclear, run `mise run clemacs:bisect:file -- --file <lisp/.../foo.el> --manifest clemacs/contract/startup.check.files` and set the manifest checkpoint to the reported “max passing max-forms” while you fix the underlying issue.
+
 - **Missing primitive / unbound variable**
   - Implement or shim the primitive (prefer `clemacs/elisp-compat.lisp` first).
   - When writing CL-level helpers inside the `ELISP` package (e.g. setf expanders), qualify CL names like `cl:values` to avoid `ELISP::` resolution bugs.
