@@ -10,3 +10,7 @@ lisp/international/eucjp-ms.el
 
 # 2026-01-05: Depends on full `oclosure' (closure/bytecode machinery not modeled yet).
 lisp/emacs-lisp/nadvice.el
+
+# 2026-01-07: Too compile-time heavy when loaded as source (eval-when-compile),
+# and currently depends on full translation tables + Unicode charprop/translate.
+lisp/international/ucs-normalize.el
