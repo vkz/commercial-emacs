@@ -70,6 +70,9 @@ Common patterns:
   - Usually indicates an upstream ELisp symbol containing `:` (e.g. `GUI:bottom`) which the current reader treats as CL package syntax.
   - Pragmatic bring-up fix: define a stub CL package (and export the referenced symbols), or add the offending file to `clemacs/contract/lisp.allowed-skip.files` with a dated rationale.
 
+- `SB-EXT:SYMBOL-PACKAGE-LOCKED-ERROR` when adding an ELisp compat definition that collides with CL (e.g. `string-trim`)
+  - Add the symbol to `clemacs/package.lisp` `defpackage #:elisp` `:shadow`, and qualify host uses as `cl:...` (e.g. `cl:string-trim`) where needed.
+
 ### A) Loader fails while loading startup manifests
 
 1) Run: `mise run clemacs:report:first-failure -- --mode startup-check --debug`
