@@ -39,7 +39,7 @@ lisp/emacs-lisp/pp.el 50
 lisp/ldefs-boot.el 50
 
 # pdump: loaddefs.
-lisp/loaddefs.el 400
+lisp/loaddefs.el 600
 
 # pdump: button, gv, cl-lib, cl-macs, cl-preloaded, oclosure, cl-seq, seq.
 lisp/button.el 10
@@ -49,7 +49,7 @@ lisp/emacs-lisp/cl-macs.el 10
 lisp/emacs-lisp/cl-preloaded.el 60
 lisp/emacs-lisp/oclosure.el -
 lisp/emacs-lisp/cl-seq.el 10
-lisp/emacs-lisp/seq.el 140
+lisp/emacs-lisp/seq.el 220
 
 # pdump: obarray, abbrev, help, mule-util, case-table.
 lisp/obarray.el 10
@@ -162,10 +162,13 @@ lisp/international/iso-transl.el 1
 lisp/emacs-lisp/rmc.el 1
 
 # pdump: disp-table.
-lisp/disp-table.el 80
+lisp/disp-table.el 120
 
 # pdump: ls-lisp.
-lisp/ls-lisp.el 20
+lisp/ls-lisp.el 50
 
 # pdump: term/internal.
-lisp/term/internal.el 10
+lisp/term/internal.el 50
+
+# pdump: ucs-normalize.
+lisp/international/ucs-normalize.el 1

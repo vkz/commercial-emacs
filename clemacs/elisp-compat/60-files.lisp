@@ -4,6 +4,8 @@
 ;; Minimal filesystem surface (enough for upstream ERT-x temp file tests)
 ;; ---------------------------------------------------------------------------
 
+(cl:defvar interpreter-mode-alist nil)
+
 (cl:defun %file-name->cl-string (x)
   (cond
    ((unibyte-string-p x) (%elisp-string->cl-string x))

@@ -55,7 +55,7 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
 - Upstream ERT bring-up is unblocked and green as of 2026-01-06 (see archive for details).
 - `startup.check.files` advanced with next TTY-relevant pdump candidates and higher caps (see archive for details).
 - 2026-01-07: added `clemacs:loop:elisp-core` (one-command high-signal loop) and extended the playbook for non-loader failures.
-- 2026-01-07: split `clemacs/elisp-compat.lisp` into `clemacs/elisp-compat/*.lisp` modules; advanced `startup.check.files` (`lisp/loaddefs.el` to 400, `lisp/emacs-lisp/seq.el` to 140, `lisp/disp-table.el` to 80, `lisp/ls-lisp.el` to 20, `lisp/term/internal.el` to 10) with incremental fixes (`standard-display-table`, `cl-defgeneric` shim for `seq.el`).
+- 2026-01-07: split `clemacs/elisp-compat.lisp` into `clemacs/elisp-compat/*.lisp` modules; advanced `startup.check.files` (`lisp/loaddefs.el` to 600, `lisp/emacs-lisp/seq.el` to 220, `lisp/disp-table.el` to 120, `lisp/ls-lisp.el` to 50, `lisp/term/internal.el` to 50, started `lisp/international/ucs-normalize.el` at 1) with incremental fixes (`standard-display-table`, `interpreter-mode-alist`, `cl-defgeneric` shim for `seq.el`).
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 
