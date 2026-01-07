@@ -20,7 +20,7 @@ Read these in order:
 
 Onboarding command:
 
-- `mise run clemacs:test:contract -- --level elisp-core && mise run clemacs:report:progress`
+- `mise run clemacs:loop:elisp-core && mise run clemacs:report:progress`
 
 ## Dev setup
 
@@ -55,7 +55,7 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
 - Upstream ERT bring-up is unblocked and green as of 2026-01-06 (see archive for details).
 - `startup.check.files` advanced with next TTY-relevant pdump candidates and higher caps (see archive for details).
 - 2026-01-07: added `clemacs:loop:elisp-core` (one-command high-signal loop) and extended the playbook for non-loader failures.
-- 2026-01-07: split `clemacs/elisp-compat.lisp` into `clemacs/elisp-compat/*.lisp` modules; advanced `startup.check.files` (`lisp/loaddefs.el` to 600, `lisp/emacs-lisp/seq.el` to 220, `lisp/disp-table.el` to 120, `lisp/ls-lisp.el` to 50, `lisp/term/internal.el` to 50, started `lisp/international/ucs-normalize.el` at 1) with incremental fixes (`standard-display-table`, `interpreter-mode-alist`, `cl-defgeneric` shim for `seq.el`).
+- 2026-01-07: split `clemacs/elisp-compat.lisp` into `clemacs/elisp-compat/*.lisp` modules (thin REPL loader retained); updated loader/compat shims and advanced `startup.check.files` (see `plans/plan-archive-2026-01-07.md`).
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 
@@ -84,6 +84,7 @@ Gate
 Next actions
 - Grow `clemacs/contract/startup.{smoke,check,editor-core}.files` monotonically, following pdump order.
 - For `startup.check.files`, only add TTY-relevant candidates (ignore GUI/W32 files) and raise caps gradually.
+- Default cap strategy: `lisp/loaddefs.el` +500; most other files +200 (bisect when a checkpoint is unclear: `mise run clemacs:bisect:file -- --file <lisp/.../foo.el> --manifest clemacs/contract/startup.check.files`).
 - After each bump: run `mise run clemacs:test:contract -- --level elisp-core`.
 - On failure: run `mise run clemacs:report:first-failure-startup-check-debug` and implement the single top offender before moving on.
 
@@ -132,3 +133,4 @@ Acceptance criteria (promotion gate)
 - `plans/plan-002.md` (plan snapshot before trimming on 2026-01-05)
 - `plans/dev-002.md` (dev-setup checklist before trimming on 2026-01-05)
 - `plans/plan-archive-2026-01-06.md` (archived DONE items through 2026-01-06)
+- `plans/plan-archive-2026-01-07.md` (archived DONE items through 2026-01-07)

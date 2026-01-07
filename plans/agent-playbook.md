@@ -7,14 +7,11 @@ repeat. Keep this doc small and high-signal.
 ## One command onboarding (copy/paste)
 
 ```sh
-mise run clemacs:test:contract -- --level elisp-core && mise run clemacs:report:progress
+mise run clemacs:loop:elisp-core && mise run clemacs:report:progress
 ```
 
-If it fails, run:
-
-```sh
-mise run clemacs:report:first-failure -- --mode startup-check --debug
-```
+`clemacs:loop:elisp-core` runs the elisp-core gate and, on failure, generates
+the first-failure startup-check debug report automatically.
 
 ## Repo-local agent skills (use these)
 
@@ -27,11 +24,11 @@ Repo-local skills live under `.codex/skills/` in this repo. Use them as the defa
 ## Canonical port loop (tight iteration)
 
 1) Run the constant gate:
-   - `mise run clemacs:test:contract -- --level elisp-core`
+   - `mise run clemacs:loop:elisp-core`
 
 2) If it fails, extract the *first* actionable failure (do not eyeball the full log):
    - `mise run clemacs:report:first-failure -- --mode startup-check`
-   - Read: `build/clemacs/reports/first-failure.md`
+   - Read: `build/clemacs/reports/first-failure.startup-check.md`
 
 3) Apply the decision tree below (missing primitive vs checkpoint vs skip vs ported rewrite).
 
@@ -49,15 +46,15 @@ Repo-local skills live under `.codex/skills/` in this repo. Use them as the defa
 
 ### A0) Non-loader failure modes (no `elisp-load-error`)
 
-If `build/clemacs/reports/first-failure.md` says "No `elisp-load-error` found", treat it as a signal
-that SBCL died or a non-ELisp condition escaped the loader path.
+If `build/clemacs/reports/first-failure.startup-check.md` says "No `elisp-load-error` found", treat
+it as a signal that SBCL died or a non-ELisp condition escaped the loader path.
 
 Do this first:
 
 1) Run: `mise run clemacs:report:first-failure-startup-check-debug`
 2) Open:
    - log: `build/clemacs/tmp/first-failure.startup-check.log`
-   - report: `build/clemacs/reports/first-failure.md`
+   - report: `build/clemacs/reports/first-failure.startup-check.md`
    - debug backtrace (when present): `build/clemacs/tmp/load-debug.startup-check.out`
 
 Common patterns:
@@ -69,10 +66,14 @@ Common patterns:
 - CL type errors / wrong arity wrapped by `condition-case`
   - Re-run with `CLEMACS_DEBUG_CONDITION_CASE=1` to print the host backtrace at the catch boundary.
 
+- `:READ-ERROR` “Package X does not exist” / “Symbol ... not found in the X package” while loading ELisp
+  - Usually indicates an upstream ELisp symbol containing `:` (e.g. `GUI:bottom`) which the current reader treats as CL package syntax.
+  - Pragmatic bring-up fix: define a stub CL package (and export the referenced symbols), or add the offending file to `clemacs/contract/lisp.allowed-skip.files` with a dated rationale.
+
 ### A) Loader fails while loading startup manifests
 
 1) Run: `mise run clemacs:report:first-failure -- --mode startup-check --debug`
-2) Open: `build/clemacs/reports/first-failure.md`
+2) Open: `build/clemacs/reports/first-failure.startup-check.md`
 3) Use the fields:
    - **Path**: the file whose checkpoint needs adjustment (or porting).
    - **Form index**: the exact failing top-level form.
@@ -132,7 +133,7 @@ Then choose one:
 
 When reporting a failure or opening a PR, attach (or paste excerpts from):
 
-- `build/clemacs/reports/first-failure.md`
+- `build/clemacs/reports/first-failure.startup-check.md`
 - `build/clemacs/reports/progress.md`
 - Any relevant bisect report: `build/clemacs/reports/bisect-*.md`
 
