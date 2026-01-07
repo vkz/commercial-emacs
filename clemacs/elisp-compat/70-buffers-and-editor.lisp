@@ -1869,6 +1869,8 @@ for upstream ERT's `ert--make-xrefs-region'."
 (cl:defvar *single-frame* (make-elisp-frame :selected-window *single-window*))
 (cl:defvar *selected-frame* *single-frame*)
 
+(cl:defvar frame-internal-parameters nil)
+
 (cl:defun windowp (object)
   "Bring-up subset of ELisp `windowp' (single-window)."
   (and (elisp-window-p object) t))

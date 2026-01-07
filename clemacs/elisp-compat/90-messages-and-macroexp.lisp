@@ -161,6 +161,9 @@ FORM.  For bring-up, suppress the warning and return FORM."
              (symbolp (cadr exp)))))
    (t t)))
 
+(cl:defvar macro-declarations-alist nil)
+(cl:defvar defun-declarations-alist nil)
+
 (cl:defvar macroexpand-all-environment nil)
 
 (cl:defun %macroexpand-all--normalize-lambda-list (lambda-list)

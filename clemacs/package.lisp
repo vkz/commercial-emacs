@@ -48,6 +48,7 @@
            #:make-list #:format
            #:make-string
            #:string
+           #:load
            #:+ #:-
            #:ignore
            #:1+ #:1-
@@ -91,3 +92,18 @@
    #:plist-put
    #:prin1-to-string
    #:read-from-string))
+
+;; Package namespace stubs used by upstream ELisp symbol names like `GUI:bottom`.
+;; In Emacs Lisp, `:' is just a symbol constituent, but our current reader uses
+;; CL package syntax.  Defining these packages is a pragmatic bring-up hack.
+(defpackage #:gui
+  (:use)
+  (:export
+   #:bottom
+   #:font
+   #:fullscreen
+   #:height
+   #:left
+   #:right
+   #:top
+   #:width))

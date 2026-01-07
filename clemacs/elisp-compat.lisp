@@ -14,7 +14,8 @@
 (in-package #:elisp)
 
 (labels ((load-here (relative)
-           (load (merge-pathnames relative (or *load-pathname* *compile-file-pathname*)))))
+           (cl:load
+            (merge-pathnames relative (or *load-pathname* *compile-file-pathname*)))))
   (load-here "elisp-compat/00-core.lisp")
   (load-here "elisp-compat/10-strings.lisp")
   (load-here "elisp-compat/20-regexp-rx-print.lisp")

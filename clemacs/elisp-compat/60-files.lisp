@@ -6,6 +6,85 @@
 
 (cl:defvar interpreter-mode-alist nil)
 
+(cl:defun get-load-suffixes ()
+  "Bring-up subset of ELisp `get-load-suffixes'.
+
+This is a C primitive in Emacs (`Fget_load_suffixes`).  For clemacs bring-up,
+return either the user-configured `load-suffixes' (when bound) or a minimal
+TTY-relevant default."
+  (let ((v (and (boundp 'load-suffixes) (symbol-value 'load-suffixes))))
+    (cond
+     ((consp v) v)
+     (t
+      (list (string-to-unibyte ".elc")
+            (string-to-unibyte ".el"))))))
+
+(cl:defun locate-file (filename path &optional suffixes predicate)
+  "Bring-up subset of ELisp `locate-file'.
+
+This is normally defined in `lisp/files.el` and used by `locate-library` in
+`lisp/subr.el`.  For bring-up, implement a minimal search over PATH and
+SUFFIXES, returning the first probeable match as an absolute file name string
+or nil."
+  (let* ((name (%file-name->cl-string filename))
+         (dirs (if (consp path) path (list path)))
+         (suffixes* (or suffixes (list (string-to-unibyte ""))))
+         (suffixes-cl (mapcar (lambda (s)
+                                (if s (%file-name->cl-string s) ""))
+                              suffixes*))
+         (default-dir
+           (and (boundp 'default-directory)
+                (%file-name->cl-string (symbol-value 'default-directory))))
+         (pred
+           (cond
+            ((null predicate) nil)
+            ((functionp predicate) predicate)
+            (t nil))))
+    (dolist (dir dirs nil)
+      (let* ((dirstr
+               (cond
+                ((null dir) default-dir)
+                (t (%file-name->cl-string dir))))
+             (prefix
+               (cond
+                ((or (null dirstr) (= (length dirstr) 0)) "")
+                (t (file-name-as-directory dirstr))))
+             (base (concatenate 'cl:string prefix name)))
+        (dolist (suf suffixes-cl)
+          (let* ((cand (concatenate 'cl:string base suf))
+                 (p (probe-file cand)))
+            (when (and p (or (null pred) (funcall pred cand)))
+              (return-from locate-file (string-to-unibyte (namestring p))))))))))
+
+(cl:defun load (file &optional noerror _nomessage nosuffix _must-suffix)
+  "Bring-up subset of ELisp `load'.
+
+This shadows `cl:load' inside the ELISP package.  For bring-up, support loading
+plain `.el' files by searching `load-path' and evaluating the file via
+`load-elisp-file'."
+  (declare (cl:ignore _nomessage _must-suffix))
+  (let* ((filestr (%file-name->cl-string file))
+         (direct (probe-file filestr))
+         (load-path*
+           (and (boundp 'load-path) (symbol-value 'load-path)))
+         (found
+           (or direct
+               (and load-path*
+                    (let* ((suffixes
+                             (cond
+                              (nosuffix (list (string-to-unibyte "")))
+                              (t (list (string-to-unibyte ""))))))
+                      (let ((s (locate-file file load-path* suffixes)))
+                        (and s (probe-file (%file-name->cl-string s)))))))))
+    (cond
+     (found
+      (load-elisp-file found :package nil)
+      t)
+     (noerror
+      nil)
+     (t
+      (error "ELISP:LOAD could not find: ~S" file)))))
+
 (cl:defun %file-name->cl-string (x)
   (cond
    ((unibyte-string-p x) (%elisp-string->cl-string x))

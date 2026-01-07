@@ -12,6 +12,8 @@
 
 (cl:defvar ctl-x-r-map (make-sparse-keymap))
 
+(cl:defvar abbrev-map (make-sparse-keymap))
+
 (cl:defun make-vector (length init)
   "ELisp-ish MAKE-VECTOR."
   (make-array length :initial-element init))
@@ -195,6 +197,32 @@ character codes (0..65535), a parent link, and extra slots."
                           (make-array +char-table-size+ :initial-element nil)
                           (make-array 0 :adjustable t :fill-pointer 0)
                           nil))
+
+(cl:defun make-translation-table-from-alist (alist)
+  "Bring-up subset of ELisp `make-translation-table-from-alist'.
+
+ALIST is an alist of (FROM . TO) entries.  For bring-up we support the common
+case where FROM is a single character code and TO is a character code, a
+vector of character codes, or nil."
+  (let* ((table (make-char-table 'translation-table))
+         (rev-table (make-char-table 'translation-table)))
+    (dolist (elt alist)
+      (let* ((from (car elt))
+             (to (cdr elt))
+             (from*
+               (cond
+                ((null from) nil)
+                ((characterp from) (if (cl:characterp from) (char-code from) from))
+                ((and (vectorp from) (plusp (length from))) (aref from 0))
+                (t nil))))
+        (when (and from* (integerp from*) (<= 0 from*) (< from* +char-table-size+))
+          (setf (aref table from*) to))
+        (when (and to (integerp to) (<= 0 to) (< to +char-table-size+))
+          (setf (aref rev-table to) from*))))
+    (set-char-table-extra-slot table 0 rev-table)
+    (set-char-table-extra-slot table 1 1)
+    (set-char-table-extra-slot rev-table 1 1)
+    table))
 
 (cl:defvar char-script-table (make-char-table 'char-script nil))
 
@@ -468,6 +496,13 @@ functions.  For now, delegate to `autoload` and return SYMBOL."
   (declare (cl:ignore _interactive))
   (autoload symbol file)
   symbol)
+
+(cl:defun custom-add-load (_symbol _file)
+  "Bring-up stub for ELisp `custom-add-load'.
+
+Used by `loaddefs.el` to record Customize load dependencies."
+  (declare (cl:ignore _symbol _file))
+  nil)
 
 (cl:defun symbol-file (symbol &optional type)
   "Bring-up subset of ELisp `symbol-file'.
