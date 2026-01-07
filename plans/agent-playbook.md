@@ -75,6 +75,8 @@ Common patterns:
 
 - CL string ops vs ELisp strings (common pitfall)
   - `symbol-name` returns an ELisp string (often unibyte); wrap with `elisp::%elisp-string->cl-string` before calling CL functions like `string-downcase`.
+  - For ad-hoc reference checks without shell-escaping ELisp, use:
+    `mise run clemacs:ref-emacs:eval <<'EL' ... EL`
 
 ### A) Loader fails while loading startup manifests
 

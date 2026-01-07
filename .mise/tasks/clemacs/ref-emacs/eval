@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Run reference Emacs (-Q --batch) on ELisp from stdin or a file"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--file <path>" help="Load ELisp from file instead of stdin"
+#USAGE flag "--print-cmd" help="Print the resolved emacs command before running"
+#USAGE arg "[emacs_args]" var=#true hide=#true
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+raw="${CLEMACS_REFERENCE_EMACS:-}"
+resolved=""
+
+if [[ -n "${raw}" ]]; then
+  resolved="${raw}"
+elif [[ -x "/opt/homebrew/bin/emacs" ]]; then
+  resolved="/opt/homebrew/bin/emacs"
+elif [[ -x "/usr/local/bin/emacs" ]]; then
+  resolved="/usr/local/bin/emacs"
+elif command -v emacs >/dev/null 2>&1; then
+  resolved="$(command -v emacs)"
+else
+  resolved="emacs"
+fi
+
+if [[ "${resolved}" == "emacs" ]]; then
+  if ! command -v emacs >/dev/null 2>&1; then
+    echo "[clemacs:ref-emacs:eval] FAIL: emacs not found on PATH (set CLEMACS_REFERENCE_EMACS)" >&2
+    exit 2
+  fi
+else
+  if [[ ! -x "${resolved}" ]]; then
+    echo "[clemacs:ref-emacs:eval] FAIL: not executable: ${resolved}" >&2
+    exit 2
+  fi
+fi
+
+file="${usage_file:-}"
+
+emacs_args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      shift
+      ;;
+    --file)
+      shift
+      shift
+      ;;
+    --file=*)
+      shift
+      ;;
+    --print-cmd)
+      shift
+      ;;
+    *)
+      emacs_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+tmp=""
+cleanup() {
+  if [[ -n "${tmp}" && -f "${tmp}" ]]; then
+    rm -f "${tmp}"
+  fi
+}
+trap cleanup EXIT
+
+script="${file}"
+if [[ -z "${script}" ]]; then
+  if [[ -t 0 ]]; then
+    echo "[clemacs:ref-emacs:eval] FAIL: no stdin; pass --file or pipe/heredoc ELisp" >&2
+    echo "Example:" >&2
+    echo "  mise run clemacs:ref-emacs:eval <<'EL'" >&2
+    echo "  (princ (prin1-to-string (list (number-to-string 1e-6) (file-name-extension \"foo.tar.gz\"))))" >&2
+    echo "  EL" >&2
+    exit 2
+  fi
+  tmp_dir="${project_root}/build/clemacs/tmp"
+  mkdir -p "${tmp_dir}"
+  tmp="$(mktemp "${tmp_dir}/ref-emacs-eval.XXXXXX")"
+  {
+    echo ';; -*- lexical-binding: nil; -*-'
+    cat
+  } >"${tmp}"
+  script="${tmp}"
+fi
+
+cmd=("${resolved}" -Q --batch)
+if [[ "${#emacs_args[@]}" -gt 0 ]]; then
+  cmd+=("${emacs_args[@]}")
+fi
+cmd+=(-l "${script}")
+
+if [[ "${usage_print_cmd:-false}" == "true" ]]; then
+  printf '[clemacs:ref-emacs:eval] cmd:'
+  printf ' %q' "${cmd[@]}"
+  printf '\n'
+fi
+
+exec "${cmd[@]}"
