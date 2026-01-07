@@ -117,8 +117,14 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
                (error "ELISP:FORMAT-TIME-STRING unsupported time: ~S" tval))))
            (pad2 (n)
              (cl:format nil "~2,'0D" n))
+           (pad2space (n)
+             (cl:format nil "~2,' D" n))
            (pad4 (n)
              (cl:format nil "~4,'0D" n))
+           (mon-abbrev (n)
+             (svref #("Jan" "Feb" "Mar" "Apr" "May" "Jun"
+                      "Jul" "Aug" "Sep" "Oct" "Nov" "Dec")
+                    (1- n)))
            (tz-offset (zone-west)
              ;; CL zone is hours west of UTC; ISO8601 expects offset east.
              (let* ((east (- zone-west))
@@ -147,8 +153,14 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
                     (incf i)
                     (case next
                       (#\Y (write-string (pad4 yy) out))
+                      (#\y (write-string (pad2 (mod yy 100)) out))
+                      (#\b (write-string (mon-abbrev mo) out))
                       (#\m (write-string (pad2 mo) out))
                       (#\d (write-string (pad2 dd) out))
+                      (#\e (write-string (pad2space dd) out))
+                      (#\H (write-string (pad2 hh) out))
+                      (#\M (write-string (pad2 mm) out))
+                      (#\S (write-string (pad2 ss) out))
                       (#\T (write-string (cl:format nil "~2,'0D:~2,'0D:~2,'0D" hh mm ss) out))
                       (#\z (write-string (tz-offset zone) out))
                       (t

@@ -190,6 +190,95 @@ plain `.el' files by searching `load-path' and evaluating the file via
        (not (file-directory-p filename))
        t))
 
+(cl:defun file-size-human-readable (file-size &optional flavor space unit)
+  "Bring-up subset of ELisp `file-size-human-readable'."
+  (unless (numberp file-size)
+    (error "ELISP:FILE-SIZE-HUMAN-READABLE expects a number, got: ~S" file-size))
+  (when (and flavor (not (symbolp flavor)))
+    (error "ELISP:FILE-SIZE-HUMAN-READABLE bad FLAVOR: ~S" flavor))
+  (when (and space (not (stringp space)))
+    (error "ELISP:FILE-SIZE-HUMAN-READABLE bad SPACE: ~S" space))
+  (when (and unit (not (stringp unit)))
+    (error "ELISP:FILE-SIZE-HUMAN-READABLE bad UNIT: ~S" unit))
+  (let* ((power (if (or (null flavor) (eq flavor 'iec)) 1024.0d0 1000.0d0))
+         (prefixes '("" "k" "M" "G" "T" "P" "E" "Z" "Y" "R" "Q"))
+         (size (cl:coerce file-size 'double-float)))
+    (loop while (and (>= size power) (consp (cdr prefixes))) do
+      (setf size (/ size power)
+            prefixes (cdr prefixes)))
+    (let* ((prefix (car prefixes))
+           (unit* (or unit (and (eq flavor 'iec) "B") ""))
+           (prefixed-unit
+             (if (eq flavor 'iec)
+                 (concatenate 'cl:string
+                              (if (string= prefix "k") "K" prefix)
+                              (if (string= prefix "") "" "i")
+                              unit*)
+                 (concatenate 'cl:string prefix unit*)))
+           (need-unit (not (string= prefixed-unit "")))
+           (sep (if need-unit (or space "") ""))
+           (one-decimal
+             (and (< size 10.0d0)
+                  (>= (mod size 1.0d0) 0.05d0)
+                  (< (mod size 1.0d0) 0.95d0)))
+           (num
+             (if one-decimal
+                 (cl:format nil "~,1F" size)
+                 (let* ((s (cl:format nil "~,0F" size))
+                        (n (length s)))
+                   ;; `~F' prints a trailing '.' even with 0 decimals; strip it.
+                   (if (and (> n 0) (char= (char s (1- n)) #\.))
+                       (subseq s 0 (1- n))
+                       s)))))
+      (concatenate 'cl:string num sep prefixed-unit))))
+
+(cl:defun ls-lisp-time-index (switches)
+  "Bring-up stub for ELisp `ls-lisp-time-index'."
+  (cond
+   ((memq ?c switches) 6)
+   ((memq ?t switches) 5)
+   ((memq ?u switches) 4)))
+
+(cl:defun ls-lisp-extension (filename)
+  "Bring-up stub for ELisp `ls-lisp-extension'."
+  (let* ((s (%elisp-string->cl-string filename))
+         (nul (string (code-char 0)))
+         (len (length s)))
+    (when (zerop len)
+      (return-from ls-lisp-extension (concatenate 'cl:string nul nul nul)))
+    (labels ((no-ext () (concatenate 'cl:string nul nul))
+             (null-ext () nul))
+      (let ((i (1- len)))
+        (if (char= (char s i) #\.)
+            ;; Null extension.
+            (concatenate 'cl:string (null-ext) nul s)
+            (progn
+              ;; Find final '.'.
+              (loop while (and (>= i 0) (not (char= (char s i) #\.))) do
+                (decf i))
+              (let ((ext
+                      (cond
+                       ((minusp i) (no-ext))
+                       ;; Regular extension.
+                       ((not (char= (char s (1+ i)) #\~))
+                        (subseq s (1+ i)))
+                       ;; Version extension: ignore trailing "~" part.
+                       (t
+                        (let ((end i))
+                          (decf i)
+                          (loop while (and (>= i 0) (not (char= (char s i) #\.))) do
+                            (decf i))
+                          (if (minusp i)
+                              (no-ext)
+                              (subseq s (1+ i) end)))))))
+                (concatenate 'cl:string ext nul s))))))))
+
+(cl:defun ls-lisp-format-file-size (file-size human-readable)
+  "Bring-up stub for ELisp `ls-lisp-format-file-size'."
+  (if (not human-readable)
+      (cl:format nil " ~A" file-size)
+      (cl:format nil " ~7A" (file-size-human-readable file-size))))
+
 (cl:defun %file-attrs--seconds->time (sec)
   (let ((hi (floor sec 65536))
         (lo (mod sec 65536)))

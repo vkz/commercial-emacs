@@ -209,6 +209,16 @@
   :expected "(t t -1 -4 4)"
   :emacs :match)
 
+ (:name "strings-file-size-human-readable-basic"
+  :expr "(list (file-size-human-readable 999) (file-size-human-readable 1024) (file-size-human-readable 1536) (file-size-human-readable 1048576))"
+  :expected "(\"999\" \"1k\" \"1.5k\" \"1M\")"
+  :emacs :match)
+
+ (:name "coding-unencodable-char-position-us-ascii"
+  :expr "(let ((s \"aΩb\")) (list (unencodable-char-position 0 (length s) 'us-ascii nil s) (unencodable-char-position 0 (length s) 'us-ascii 11 s)))"
+  :expected "(1 (1))"
+  :emacs :match)
+
  (:name "keymaps-copy-keymap-parent-basic"
   :expr "(let* ((p (make-sparse-keymap)) (m (make-sparse-keymap)) (_ (set-keymap-parent m p)) (c (copy-keymap m))) (list (keymapp c) (eq (keymap-parent c) p) (eq c m)))"
   :expected "(t t nil)"

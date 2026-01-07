@@ -2098,3 +2098,95 @@ for upstream ERT's `ert--make-xrefs-region'."
 (cl:defun time-less-p (time-a time-b)
   "Bring-up subset of ELisp `time-less-p'."
   (< (float-time time-a) (float-time time-b)))
+
+(cl:defun %unencodable-char-position--ascii-p (coding-system)
+  (and (symbolp coding-system)
+       (let ((n (string-downcase (%elisp-string->cl-string (symbol-name coding-system)))))
+         (or (string= n "us-ascii")
+             (string= n "ascii")))))
+
+(cl:defun %unencodable-char-position--scan (s start end coding-system count)
+  (labels ((unencodable-p (ch)
+             (cond
+              ((%unencodable-char-position--ascii-p coding-system)
+               (> (char-code ch) 127))
+              (t
+               ;; Bring-up default: treat everything as encodable.
+               nil))))
+    (cond
+     ((null count)
+      (loop for i from start below end do
+        (when (unencodable-p (char s i))
+          (return i))
+        finally (return nil)))
+     ((and (integerp count) (plusp count))
+      (let ((out nil)
+            (remaining count))
+        (loop for i from start below end do
+          (when (unencodable-p (char s i))
+            (push i out)
+            (decf remaining)
+            (when (zerop remaining)
+              (return))))
+        (nreverse out)))
+     (t
+      (error "ELISP:UNENCODABLE-CHAR-POSITION bad COUNT: ~S" count)))))
+
+(cl:defun unencodable-char-position (start end coding-system &optional count object)
+  "Bring-up subset of the C primitive `unencodable-char-position'."
+  (let ((obj (or object (current-buffer))))
+    (cond
+     ((stringp obj)
+      (let* ((s (%elisp-string->cl-string obj))
+             (len (length s))
+             (s0 (or start 0))
+             (e0 (or end len)))
+        (unless (and (integerp s0) (integerp e0) (<= 0 s0) (<= s0 e0) (<= e0 len))
+          (error "ELISP:UNENCODABLE-CHAR-POSITION bad range: ~S..~S (len ~S)" start end len))
+        (%unencodable-char-position--scan s s0 e0 coding-system count)))
+     ((bufferp obj)
+      (let* ((s (elisp-buffer-text obj))
+             (len (length s))
+             (spos (%pos start))
+             (epos (%pos end))
+             (pmax (1+ len)))
+        (unless (and (integerp spos) (integerp epos) (plusp spos) (<= spos epos) (<= epos pmax))
+          (error "ELISP:UNENCODABLE-CHAR-POSITION bad range: ~S..~S" start end))
+        (let ((v (%unencodable-char-position--scan s (1- spos) (1- epos) coding-system count)))
+          (cond
+           ((null count) (and v (1+ v)))
+           (t (mapcar #'1+ v))))))
+     (t
+      (error "ELISP:UNENCODABLE-CHAR-POSITION unsupported OBJECT: ~S" obj)))))
+
+(cl:defvar ls-lisp--time-locale nil)
+
+(cl:defun ls-lisp-format-time (file-attr time-index)
+  "Bring-up stub for ELisp `ls-lisp-format-time'."
+  (let* ((idx (or time-index 5))
+         (time (nth idx file-attr))
+         (diff (time-subtract time nil))
+         (past-cutoff -15778476)
+         (format-time-list
+           (or (and (boundp 'ls-lisp-format-time-list) (symbol-value 'ls-lisp-format-time-list))
+               '("%b %e %H:%M" "%b %e  %Y")))
+         (use-localized
+           (and (boundp 'ls-lisp-use-localized-time-format)
+                (symbol-value 'ls-lisp-use-localized-time-format))))
+    (cl:handler-case
+        (let ((locale (or (and (boundp 'system-time-locale) system-time-locale)
+                          ls-lisp--time-locale)))
+          (when (not locale)
+            (let ((vars '("LC_ALL" "LC_TIME" "LANG")))
+              (loop while (and vars (not (setf locale (getenv (car vars))))) do
+                (setf vars (cdr vars))))
+            (setf ls-lisp--time-locale (or locale "C")))
+          (when (member locale '("C" "POSIX"))
+            (setf locale nil))
+          (format-time-string
+           (if (and (not (time-less-p diff past-cutoff))
+                    (not (time-less-p 0 diff)))
+               (if (and locale (not use-localized)) "%m-%d %H:%M" (car format-time-list))
+               (if (and locale (not use-localized)) "%Y-%m-%d " (cadr format-time-list)))
+           time))
+      (cl:error () "Unk  0  0000"))))
