@@ -164,6 +164,11 @@
   :expected "(1 nil 1)"
   :emacs :match)
 
+ (:name "files-file-attributes-size-make-temp-file"
+  :expr "(let ((f (make-temp-file \"clemacs-microtest-\" nil nil \"abc\"))) (nth 7 (file-attributes f 'integer)))"
+  :expected "3"
+  :emacs :match)
+
  (:name "strings-string-empty-p-empty"
   :expr "(string-empty-p \"\")"
   :expected "t"

@@ -190,6 +190,131 @@ plain `.el' files by searching `load-path' and evaluating the file via
        (not (file-directory-p filename))
        t))
 
+(cl:defun %file-attrs--seconds->time (sec)
+  (let ((hi (floor sec 65536))
+        (lo (mod sec 65536)))
+    (list hi lo 0 0)))
+
+(cl:defun %file-attrs--mode-type (mode)
+  (let ((type (logand mode #o170000)))
+    (cond
+     ((= type #o040000) :directory)
+     ((= type #o120000) :symlink)
+     ((= type #o0100000) :regular)
+     (t :other))))
+
+(cl:defun %file-attrs--modes-string (mode)
+  (labels ((mode-bit (mask ch)
+             (if (not (zerop (logand mode mask))) ch #\-)))
+    (let ((type-ch
+            (case (%file-attrs--mode-type mode)
+              (:directory #\d)
+              (:symlink #\l)
+              (:regular #\-)
+              (t #\?))))
+      (coerce
+       (list type-ch
+             (mode-bit #o400 #\r) (mode-bit #o200 #\w) (mode-bit #o100 #\x)
+             (mode-bit #o040 #\r) (mode-bit #o020 #\w) (mode-bit #o010 #\x)
+             (mode-bit #o004 #\r) (mode-bit #o002 #\w) (mode-bit #o001 #\x))
+       'cl:string))))
+
+(cl:defun file-attributes (filename &optional id-format)
+  "Bring-up subset of the C primitive `file-attributes'."
+  (declare (cl:ignore id-format))
+  (let* ((path (%file-name->cl-string filename))
+         (path* (%expand-tilde-file-name path)))
+    (multiple-value-bind (ok _errno ino mode nlink uid gid rdev size atime mtime ctime _blksize _blocks)
+        (sb-unix:unix-lstat path*)
+      (declare (cl:ignore _errno rdev _blksize _blocks))
+      (unless ok
+        (return-from file-attributes nil))
+      (let* ((type (%file-attrs--mode-type mode))
+             (link-target
+               (when (eq type :symlink)
+                 (multiple-value-bind (target _errno2) (sb-unix:unix-readlink path*)
+                   (declare (cl:ignore _errno2))
+                   target)))
+             (type-field
+               (cond
+                ((eq type :directory) t)
+                ((eq type :symlink) (and link-target (string-to-unibyte link-target)))
+                (t nil))))
+        (list type-field
+              nlink
+              uid
+              gid
+              (%file-attrs--seconds->time atime)
+              (%file-attrs--seconds->time mtime)
+              (%file-attrs--seconds->time ctime)
+              size
+              (string-to-unibyte (%file-attrs--modes-string mode))
+              nil
+              ino
+              0)))))
+
+(cl:defun %directory-files--basename (pathname)
+  (let* ((p (uiop:ensure-pathname pathname :want-pathname t :want-absolute t))
+         (name (pathname-name p))
+         (type (pathname-type p))
+         (dir (pathname-directory p)))
+    (cond
+     (name
+      (if type
+          (concatenate 'cl:string name "." type)
+          name))
+     ((and (consp dir) (stringp (car (last dir))))
+      (car (last dir)))
+     (t
+      ""))))
+
+(cl:defun %directory-files--namestring (pathname)
+  (let* ((s (namestring pathname))
+         (len (length s)))
+    (cond
+     ((and (> len 1) (char= (char s (1- len)) #\/))
+      (subseq s 0 (1- len)))
+     (t s))))
+
+(cl:defun directory-files (directory &optional full match nosort count)
+  "Bring-up subset of the C primitive `directory-files'."
+  (let* ((dir (%file-name->cl-string directory))
+         (dir* (uiop:ensure-directory-pathname (%expand-tilde-file-name dir)))
+         (pattern (merge-pathnames "*" dir*))
+         (paths (ignore-errors (directory pattern)))
+         (names (append (list "." "..")
+                        (loop for p in paths
+                              for base = (%directory-files--basename p)
+                              unless (or (string= base ".") (string= base ".."))
+                                collect base))))
+    (when match
+      (setf names
+            (loop for n in names
+                  when (string-match-p match (string-to-unibyte n))
+                    collect n)))
+    (unless nosort
+      (setf names (sort names #'string<)))
+    (when (and (integerp count) (plusp count) (> (length names) count))
+      (setf names (subseq names 0 count)))
+    (let ((dir-prefix (file-name-as-directory (namestring dir*))))
+      (loop for n in names collect
+        (string-to-unibyte
+         (cond
+          (full (concatenate 'cl:string dir-prefix n))
+          (t n)))))))
+
+(cl:defun directory-files-and-attributes (directory &optional full match nosort id-format count)
+  "Bring-up subset of ELisp `directory-files-and-attributes'."
+  (let* ((names (directory-files directory full match nosort count))
+         (dir-prefix (file-name-as-directory (%file-name->cl-string directory))))
+    (loop for n in names collect
+      (let* ((nstr (%file-name->cl-string n))
+             (path
+               (cond
+                (full nstr)
+                (t (concatenate 'cl:string dir-prefix nstr)))))
+        (cons n (file-attributes (string-to-unibyte path) id-format))))))
+
 (cl:defun delete-directory (dir &optional recursive _trash)
   "Bring-up subset of ELisp `delete-directory'."
   (declare (cl:ignore _trash))
