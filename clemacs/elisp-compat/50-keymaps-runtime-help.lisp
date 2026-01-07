@@ -12,6 +12,45 @@
     (or (and (typep km 'elisp-keymap) t)
         (and (consp km) (eq (car km) 'keymap) t))))
 
+(cl:defun keymap-parent (keymap)
+  "Bring-up subset of ELisp `keymap-parent'."
+  (let ((km (if (and (symbolp keymap) (cl:boundp keymap))
+                (symbol-value keymap)
+                keymap)))
+    (unless (typep km 'elisp-keymap)
+      (error "ELISP:KEYMAP-PARENT expected a keymap, got: ~S" keymap))
+    (elisp-keymap-parent km)))
+
+(cl:defun set-keymap-parent (keymap parent)
+  "Extremely small stub for ELisp `set-keymap-parent'."
+  (let ((km (if (and (symbolp keymap) (cl:boundp keymap))
+                (symbol-value keymap)
+                keymap))
+        (parent* (if (and (symbolp parent) (cl:boundp parent))
+                     (symbol-value parent)
+                     parent)))
+    (unless (typep km 'elisp-keymap)
+      (error "ELISP:SET-KEYMAP-PARENT expected a keymap, got: ~S" keymap))
+    (when (and parent* (not (keymapp parent*)))
+      (error "ELISP:SET-KEYMAP-PARENT expected a keymap parent, got: ~S" parent))
+    (setf (elisp-keymap-parent km) parent*)
+    km))
+
+(cl:defun copy-keymap (keymap)
+  "Bring-up subset of ELisp `copy-keymap'."
+  (let ((km (if (and (symbolp keymap) (cl:boundp keymap))
+                (symbol-value keymap)
+                keymap)))
+    (unless (typep km 'elisp-keymap)
+      (error "ELISP:COPY-KEYMAP expected a keymap, got: ~S" keymap))
+    (let ((out (make-elisp-keymap)))
+      (setf (elisp-keymap-parent out) (elisp-keymap-parent km))
+      (maphash
+       (lambda (k v)
+         (setf (gethash k (elisp-keymap-table out)) v))
+       (elisp-keymap-table km))
+      out)))
+
 (cl:defun make-composed-keymap (maps &optional parent)
   "Bring-up subset of ELisp `make-composed-keymap'."
   (let* ((maps* (cond

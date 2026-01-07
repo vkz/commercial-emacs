@@ -19,7 +19,7 @@
     (with-open-file (in path :external-format :utf-8)
       (loop for line = (read-line in nil nil)
             while line do
-              (let ((line (string-trim '(#\Space #\Tab #\Return #\Newline) line)))
+              (let ((line (cl:string-trim '(#\Space #\Tab #\Return #\Newline) line)))
                 (when (and (> (length line) 0)
                            (not (char= (char line 0) #\#)))
                   (push line out)))))

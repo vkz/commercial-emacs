@@ -23,15 +23,6 @@
   (setf (aref array idx) value)
   value)
 
-(cl:defun set-keymap-parent (keymap parent)
-  "Extremely small stub for ELisp `set-keymap-parent'."
-  (unless (typep keymap 'elisp-keymap)
-    (error "ELISP:SET-KEYMAP-PARENT expected a keymap, got: ~S" keymap))
-  (when (and parent (not (keymapp parent)))
-    (error "ELISP:SET-KEYMAP-PARENT expected a keymap parent, got: ~S" parent))
-  (setf (elisp-keymap-parent keymap) parent)
-  keymap)
-
 (cl:defun use-global-map (keymap)
   "Extremely small stub for ELisp `use-global-map'."
   (setf *global-map* keymap)

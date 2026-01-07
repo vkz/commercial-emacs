@@ -156,6 +156,35 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
     (error "ELISP:STRING-EMPTY-P expects a string, got: ~S" string))
   (zerop (length string)))
 
+(cl:defun string-trim-left (string &optional regexp)
+  "Bring-up subset of ELisp `string-trim-left'."
+  (unless (stringp string)
+    (error "ELISP:STRING-TRIM-LEFT expects a string, got: ~S" string))
+  (when (and regexp (not (stringp regexp)))
+    (error "ELISP:STRING-TRIM-LEFT expects a string regexp, got: ~S" regexp))
+  (if (string-match (if regexp
+                        (concat "\\`\\(?:" regexp "\\)")
+                        "\\`[ \t\n\r]+")
+                    string)
+      (substring string (match-end 0))
+      string))
+
+(cl:defun string-trim-right (string &optional regexp)
+  "Bring-up subset of ELisp `string-trim-right'."
+  (unless (stringp string)
+    (error "ELISP:STRING-TRIM-RIGHT expects a string, got: ~S" string))
+  (when (and regexp (not (stringp regexp)))
+    (error "ELISP:STRING-TRIM-RIGHT expects a string regexp, got: ~S" regexp))
+  (let ((i (string-match-p (if regexp
+                               (concat "\\(?:" regexp "\\)\\'")
+                               "[ \t\n\r]+\\'")
+                           string)))
+    (if i (substring string 0 i) string)))
+
+(cl:defun string-trim (string &optional trim-left trim-right)
+  "Bring-up subset of ELisp `string-trim'."
+  (string-trim-left (string-trim-right string trim-right) trim-left))
+
 (cl:defun %plist-put-preserve (plist key value)
   (loop for cell on plist by #'cddr do
     (when (eq (car cell) key)

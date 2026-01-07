@@ -194,6 +194,16 @@
   :expected "nil"
   :emacs :match)
 
+ (:name "strings-string-trim-family-basic"
+  :expr "(list (string-trim \" foo \") (string-trim-left \"oofoo\" \"o+\") (string-trim-right \"barkss\" \"s+\"))"
+  :expected "(\"foo\" \"foo\" \"bark\")"
+  :emacs :match)
+
+ (:name "keymaps-copy-keymap-parent-basic"
+  :expr "(let* ((p (make-sparse-keymap)) (m (make-sparse-keymap)) (_ (set-keymap-parent m p)) (c (copy-keymap m))) (list (keymapp c) (eq (keymap-parent c) p) (eq c m)))"
+  :expected "(t t nil)"
+  :emacs :match)
+
  (:name "prefix-numeric-value-nil"
   :expr "(prefix-numeric-value nil)"
   :expected "1"

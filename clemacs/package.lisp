@@ -48,6 +48,7 @@
            #:make-list #:format
            #:make-string
            #:string
+           #:string-trim
            #:load
            #:+ #:-
            #:ignore
