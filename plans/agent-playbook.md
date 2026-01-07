@@ -106,6 +106,7 @@ Then choose one:
     back to `emacs` on `PATH`.
   - For interactive probing, use the `emacs` skill via `gxeval -s wip ...`.
   - If a `:emacs :match` microtest errors with `reference Emacs failed`, use the reported `expr:` string to locate the entry in `clemacs/contract/semantics.microtests.sexp` and decide whether to update clemacs semantics or mark the test `:emacs nil` with a dated compat note.
+  - If `ELISP-SEMANTICS-MICROTESTS` fails with an unexpected error, re-run `mise run clemacs:test:smoke` and use the reported microtest name + `expr:` to iterate.
 
 - **Checkpoint seems unstable / flaky**
   - Bisect to a stable checkpoint (in manifest context):
