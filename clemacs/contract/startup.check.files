@@ -162,10 +162,10 @@ lisp/international/iso-transl.el 1
 lisp/emacs-lisp/rmc.el 1
 
 # pdump: disp-table.
-lisp/disp-table.el 450
+lisp/disp-table.el 800
 
 # pdump: ls-lisp.
-lisp/ls-lisp.el 250
+lisp/ls-lisp.el 600
 
 # pdump: term/internal.
 lisp/term/internal.el 50
