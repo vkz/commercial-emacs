@@ -188,6 +188,10 @@ an augmented SBCL lexical environment."
           `(cl:let ,bindings
              (cl:loop ,@(walk clauses*)))))))
 
+(cl:defmacro cl-do (bindings endtest &body body)
+  "Minimal subset of cl-lib's `cl-do'."
+  `(cl:do ,bindings ,endtest ,@body))
+
 (cl:defmacro cl-etypecase (keyform &rest clauses)
   "Bring-up subset of cl-lib's `cl-etypecase'."
   `(cl:etypecase ,keyform ,@clauses))
@@ -678,22 +682,35 @@ LENGTH is the string length. INIT is an ELisp character code or a CL character."
 
 (cl:defvar char-code-property-alist nil)
 
-(cl:defun define-char-code-property (name file docstring)
+(cl:defun get-char-code-property (char propname)
+  "Bring-up stub for ELisp `get-char-code-property'.
+
+This will eventually consult the Unicode property tables (as in Emacs'
+`charprop.el').  For bring-up, return nil for unknown properties so callers
+can load without requiring the full Unicode database."
+  (unless (integerp char)
+    (error "ELISP:GET-CHAR-CODE-PROPERTY expects integer char code, got: ~S" char))
+  (unless (symbolp propname)
+    (error "ELISP:GET-CHAR-CODE-PROPERTY expects symbol property, got: ~S" propname))
+  nil)
+
+(cl:defun define-char-code-property (name file &optional docstring)
   "Bring-up stub for ELisp `define-char-code-property'.
 
 Record NAME as a known char-code property, and remember its data FILE and
-DOCSTRING.  The actual property tables are loaded lazily by upstream code; for
-bring-up we only need registration to succeed so `international/charprop.el'
-can be loaded."
+DOCSTRING (optional).  The actual property tables are loaded lazily by upstream
+code; for bring-up we only need registration to succeed so
+`international/charprop.el' and `international/ucs-normalize.el' can be loaded."
   (unless (symbolp name)
     (error "ELISP:DEFINE-CHAR-CODE-PROPERTY expects a symbol, got: ~S" name))
   (unless (stringp file)
     (error "ELISP:DEFINE-CHAR-CODE-PROPERTY expects a string file, got: ~S" file))
-  (unless (stringp docstring)
-    (error "ELISP:DEFINE-CHAR-CODE-PROPERTY expects a docstring, got: ~S" docstring))
+  (unless (or (null docstring) (stringp docstring))
+    (error "ELISP:DEFINE-CHAR-CODE-PROPERTY expects a docstring or nil, got: ~S" docstring))
   (put name 'char-code-property t)
   (put name 'char-code-property-file file)
-  (put name 'char-code-property-doc docstring)
+  (when docstring
+    (put name 'char-code-property-doc docstring))
   (unless (assq name char-code-property-alist)
     (push (cons name nil) char-code-property-alist))
   name)

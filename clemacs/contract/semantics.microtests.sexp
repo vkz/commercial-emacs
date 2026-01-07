@@ -69,6 +69,21 @@
   :expected "t"
   :emacs :match)
 
+ (:name "charset-define-char-code-property-accepts-two-args"
+  :expr "(progn (define-char-code-property 'clemacs--tmp-char-code-prop \"x.el\") t)"
+  :expected "t"
+  :emacs nil)
+
+ (:name "macros-eval-when-compile-evaluates-body"
+  :expr "(progn (setq clemacs--tmp-ewc 0) (eval-when-compile (setq clemacs--tmp-ewc 1)) clemacs--tmp-ewc)"
+  :expected "1"
+  :emacs :match)
+
+ (:name "macros-let-when-compile-binds-for-eval-when-compile"
+  :expr "(progn (setq clemacs--tmp-lwc 0) (let-when-compile ((x 7)) (eval-when-compile (setq clemacs--tmp-lwc x))) clemacs--tmp-lwc)"
+  :expected "7"
+  :emacs :match)
+
  (:name "rewrite-let-binding-if-variable"
   :expr "(let ((if 1)) (if (numberp if) if 0))"
   :expected "1"

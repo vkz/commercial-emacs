@@ -861,13 +861,33 @@ Supports lists, vectors, and strings (including unibyte strings)."
 (cl:defmacro eval-when-compile (&rest body)
   "Bring-up stub for ELisp `eval-when-compile'.
 
-We evaluate BODY at macro-expansion time and return a quoted constant,
-matching the non-byte-compiler definition in `lisp/emacs-lisp/byte-run.el'."
-  (list 'quote (cl:eval (cons 'progn body))))
+Like Emacs' definition in `lisp/emacs-lisp/byte-run.el', this evaluates BODY
+at macroexpansion time and returns the result as a quoted constant."
+  (list 'quote (eval (cons 'progn body) lexical-binding)))
 
 (cl:defmacro eval-and-compile (&rest body)
   "Bring-up stub for ELisp `eval-and-compile'.
 
-We evaluate BODY at macro-expansion time and return a quoted constant,
-matching the non-byte-compiler definition in `lisp/emacs-lisp/byte-run.el'."
-  (list 'quote (cl:eval (cons 'progn body))))
+Like Emacs' definition in `lisp/emacs-lisp/byte-run.el', this evaluates BODY
+at macroexpansion time and returns the result as a quoted constant."
+  (list 'quote (eval (cons 'progn body) lexical-binding)))
+
+(cl:defmacro let-when-compile (bindings &rest body)
+  "Bring-up stub for ELisp `let-when-compile'.
+
+Like `let*', but allow for macroexpansion-time optimization.
+
+Each BINDINGS value form is evaluated at macroexpansion time (like `let*').
+BODY is then macroexpanded (via `macroexpand-all') in an environment where
+the bound variables are dynamically visible, so `eval-when-compile' forms can
+turn them into quoted constants."
+  (labels ((lwc-step (bs)
+             (if (null bs)
+                 (macroexpand-all (macroexp-progn body)
+                                  macroexpand-all-environment)
+               (let* ((binding (car bs))
+                      (var (car binding))
+                      (expr (cadr binding)))
+                 (cl:progv (list var) (list (eval expr lexical-binding))
+                   (lwc-step (cdr bs)))))))
+    (lwc-step bindings)))
