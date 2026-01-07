@@ -164,6 +164,21 @@
   :expected "(1 nil 1)"
   :emacs :match)
 
+ (:name "text-props-next-prev-single-property-change-string-limits"
+  :expr "(let ((s (propertize \"ab\" 'foo 1))) (put-text-property 1 2 'foo 2 s) (list (next-single-property-change 2 'foo s 1) (next-single-property-change 1 'foo s 0) (previous-single-property-change 0 'foo s 1) (previous-single-property-change 1 'foo s 2)))"
+  :expected "(1 0 1 2)"
+  :emacs :match)
+
+ (:name "text-props-next-prev-property-change-string"
+  :expr "(let ((s (propertize \"ab\" 'foo 1))) (put-text-property 1 2 'foo 2 s) (list (next-property-change 0 s) (next-property-change 1 s) (next-property-change 1 s 2) (next-property-change 2 s 1) (previous-property-change 2 s) (previous-property-change 1 s 0) (previous-property-change 0 s 1)))"
+  :expected "(1 nil 2 1 1 0 1)"
+  :emacs :match)
+
+ (:name "text-props-next-prev-property-change-buffer"
+  :expr "(with-temp-buffer (insert \"ab\") (put-text-property 1 2 'foo 1) (put-text-property 2 3 'foo 2) (list (next-property-change 1 nil) (next-property-change 2 nil) (next-property-change 2 nil 3) (next-property-change 3 nil 1) (previous-property-change 3 nil) (previous-property-change 2 nil) (previous-property-change 2 nil 1) (previous-property-change 1 nil 3)))"
+  :expected "(2 nil 3 1 2 nil 1 3)"
+  :emacs :match)
+
  (:name "files-file-attributes-size-make-temp-file"
   :expr "(let ((f (make-temp-file \"clemacs-microtest-\" nil nil \"abc\"))) (nth 7 (file-attributes f 'integer)))"
   :expected "3"
