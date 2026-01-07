@@ -69,6 +69,21 @@
   :expected "t"
   :emacs :match)
 
+ (:name "rx-bos-any-unibyte"
+  :expr "(rx bos (any \"/:\"))"
+  :expected "\"\\\\`[/:]\""
+  :emacs :match)
+
+ (:name "rx-not-any-unibyte"
+  :expr "(rx (not (any \"/:\")))"
+  :expected "\"[^/:]\""
+  :emacs :match)
+
+ (:name "rx-ge-not-any"
+  :expr "(rx (>= 2 (not (any \"/:|\"))))"
+  :expected "\"[^/:|]\\\\{2,\\\\}\""
+  :emacs :match)
+
  (:name "charset-define-char-code-property-accepts-two-args"
   :expr "(progn (define-char-code-property 'clemacs--tmp-char-code-prop \"x.el\") t)"
   :expected "t"

@@ -166,7 +166,11 @@
            (emacs (getf test :emacs)))
       (unless (and (stringp name) (stringp expr) (stringp expected))
         (error "Bad semantics microtest entry: ~S" test))
-      (let* ((value (%elisp-eval-1 expr))
+      (let* ((value
+               (handler-case
+                   (%elisp-eval-1 expr)
+                 (error (e)
+                   (error "~A: unexpected error ~A for expr: ~A" name e expr))))
              (clemacs-out (%clemacs-prin1 value)))
         (fiveam:is (string= clemacs-out expected)
                    "~A: expected ~S, got ~S for expr: ~A"

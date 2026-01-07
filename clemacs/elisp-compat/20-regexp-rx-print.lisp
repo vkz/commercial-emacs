@@ -293,6 +293,14 @@ This is used for ELisp `looking-at', which must not search forward past point."
            (op= (s name) (and (symbolp s) (string= (cl:symbol-name s) name)))
            (group (s) (concatenate 'cl:string "\\(?:" s "\\)"))
            (capture (s) (concatenate 'cl:string "\\(" s "\\)"))
+           (emit-char-class (s)
+             ;; Return the inside of a [...] class from an ELisp string.
+             (let ((cl (%elisp-string->cl-string s)))
+               (cl:with-output-to-string (out)
+                 (loop for ch across cl do
+                   (case ch
+                     ((#\\ #\] #\^ #\-) (write-char #\\ out) (write-char ch out))
+                     (t (write-char ch out)))))))
            (emit (x)
              (cond
               ((null x) "")
@@ -302,8 +310,19 @@ This is used for ELisp `looking-at', which must not search forward past point."
                  (cond
                   (def (%rx--translate def))
                   ((op= x "STRING-START") "\\`")
+                  ((op= x "BOS") "\\`")
                   ((op= x "STRING-END") "\\'")
+                  ((op= x "EOS") "\\'")
                   ((memq x '(nonl not-newline any)) ".")
+                  ;; Treat a 1-character symbol as a literal character.
+                  ;; This comes up in generated `rx' forms (e.g. `|\||` for "|").
+                  ((let ((name (cl:symbol-name x)))
+                     (and (= (length name) 1)
+                          (not (member name '("+" "*") :test #'string=))))
+                   (let ((ch (char (cl:symbol-name x) 0)))
+                     (if (find ch "\\.[]*+?^$" :test #'char=)
+                         (concatenate 'cl:string "\\" (string ch))
+                       (string ch))))
                   (t (error "ELISP:rx unsupported symbol: %S" x)))))
               ((consp x)
                (let ((op (car x))
@@ -386,6 +405,28 @@ This is used for ELisp `looking-at', which must not search forward past point."
                                   (group (apply #'concatenate 'cl:string
                                                 (mapcar #'emit args)))
                                   "*?"))))
+                  ;; At least N repetitions: (>= N PAT...)
+                  ((op= op ">=")
+                   (cond
+                    ((or (null args) (not (integerp (car args))) (null (cdr args)))
+                     (error "ELISP:rx (>= N PAT...) expects integer + pattern, got: %S" x))
+                    (t
+                     (let* ((n (car args))
+                            (pat (apply #'concatenate 'cl:string (mapcar #'emit (cdr args)))))
+                       (labels ((atom-regexp-p (s)
+                                  (let ((len (length s)))
+                                    (or (<= len 1)
+                                        ;; Escaped single character, e.g. "\\.".
+                                        (and (= len 2) (char= (char s 0) #\\))
+                                        ;; Character class: "[...]" / "[^...]".
+                                        (and (>= len 2)
+                                             (char= (char s 0) #\[)
+                                             (char= (char s (1- len)) #\]))))))
+                         (concatenate 'cl:string
+                                      (if (atom-regexp-p pat) pat (group pat))
+                                      "\\{"
+                                      (cl:format nil "~D" n)
+                                      ",\\}"))))))
                   ;; Embed an already-formed regexp.
                   ((op= op "REGEXP")
                    (cond
@@ -396,6 +437,27 @@ This is used for ELisp `looking-at', which must not search forward past point."
                        (unless (stringp s)
                          (error "ELISP:rx (regexp ...) expects string, got: %S" s))
                        (group (%elisp-string->cl-string s))))))
+                  ;; Character set: (any "abc") / (any #(97 98 99)).
+                  ((op= op "ANY")
+                   (cond
+                    ((/= (length args) 1)
+                     (error "ELISP:rx (any ...) expects 1 arg, got: %S" x))
+                    ((not (stringp (car args)))
+                     (error "ELISP:rx (any ...) expects string, got: %S" (car args)))
+                    (t
+                     (concatenate 'cl:string "[" (emit-char-class (car args)) "]"))))
+                  ;; Negated character set: (not (any ...)).
+                  ((op= op "NOT")
+                   (cond
+                    ((/= (length args) 1)
+                     (error "ELISP:rx (not ...) expects 1 arg, got: %S" x))
+                    ((and (consp (car args)) (op= (caar args) "ANY"))
+                     (let ((chars (cadar args)))
+                       (unless (stringp chars)
+                         (error "ELISP:rx (not (any ...)) expects string, got: %S" chars))
+                       (concatenate 'cl:string "[^" (emit-char-class chars) "]")))
+                    (t
+                     (error "ELISP:rx (not ...) unsupported: %S" x))))
                   ;; (syntax word) / (syntax symbol): approximate for bring-up.
                   ((op= op "SYNTAX")
                    (let ((kind (car args)))
