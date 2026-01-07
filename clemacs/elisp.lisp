@@ -611,25 +611,40 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
 (cl:defun %sanitize-elisp-source/colon-tokens (s)
   "Return a sanitized CL string and a list of inserted positions.
 
-This is a narrow compatibility hack for upstream ELisp that uses a bare `:'
-symbol (notably rx's (: ...)). In CL reader syntax, a lone colon is invalid and
-signals a reader error (it expects a symbol name after the package marker).
+This is a compatibility hack for reading upstream ELisp with CL's reader.
 
-We rewrite standalone `:' tokens as \\: so CL's reader yields a symbol whose
-name is \":\" in the current package. We leave package syntax like `cl:foo' and
-keywords like `:foo' untouched."
+In Emacs Lisp, `:' is just a symbol constituent.  In CL reader syntax, `:'
+introduces either a keyword (e.g. `:foo') or package syntax (e.g. `foo:bar').
+That makes upstream ELisp forms like `(: ...)' (rx) and symbols like
+`http://example.com' signal reader/package errors.
+
+We rewrite colons that would be interpreted as CL package syntax into literal
+colons by escaping them (\\:).
+
+We currently preserve:
+- leading keyword syntax (`:foo')
+- dispatch syntax (`#:' for uninterned symbols)
+- a small allowlist of CL package prefixes that appear in `clemacs/ported/`
+  (e.g. `cl:foo`, `sb-mop:bar`)."
   (unless (cl:stringp s)
     (cl:error "ELISP: expected CL string, got: ~S" (cl:type-of s)))
   (let ((insertions nil))
     (labels ((delim-p (ch)
                (or (null ch)
-                   (member ch '(#\Space #\Tab #\Newline #\Return
-                                #\( #\) #\[ #\] #\" #\' #\` #\, #\;)))))
+                   (cl:member ch '(#\Space #\Tab #\Newline #\Return
+                                   #\( #\) #\[ #\] #\" #\' #\` #\, #\;))))
+             (%allowed-package-prefix-p (token-start colon-index)
+               (and token-start
+                    (cl:< token-start colon-index)
+                    (cl:member (string-upcase (subseq s token-start colon-index))
+                               '("CL" "SB-MOP")
+                               :test #'cl:string=))))
       (let ((len (length s))
             (out-pos 0)
             (in-string nil)
             (escape nil)
-            (in-comment nil))
+            (in-comment nil)
+            (token-start nil))
         (cl:values
          (with-output-to-string (out)
            (cl:loop for i from 0 below len do
@@ -640,6 +655,7 @@ keywords like `:foo' untouched."
                  (cl:incf out-pos)
                  (when (char= ch #\Newline)
                    (setf in-comment nil)))
+
                 (in-string
                  (write-char ch out)
                  (cl:incf out-pos)
@@ -647,7 +663,12 @@ keywords like `:foo' untouched."
                   (escape (setf escape nil))
                   ((char= ch #\\) (setf escape t))
                   ((char= ch #\") (setf in-string nil))))
+
                 (t
+                 (let ((delimp (delim-p ch)))
+                   (cond
+                    (delimp (setf token-start nil))
+                    ((null token-start) (setf token-start i))))
                  (cond
                   ((char= ch #\;)
                    (setf in-comment t)
@@ -657,13 +678,34 @@ keywords like `:foo' untouched."
                    (setf in-string t)
                    (write-char ch out)
                    (cl:incf out-pos))
-                  ((and (char= ch #\:)
-                        (or (cl:= i 0) (delim-p (char s (cl:1- i))))
-                        (or (cl:= i (cl:1- len)) (delim-p (char s (cl:1+ i)))))
-                   (cl:push out-pos insertions)
-                   (write-char #\\ out)
-                   (write-char #\: out)
-                   (cl:incf out-pos 2))
+                  ((char= ch #\:)
+                   (let* ((prev (and (cl:> i 0) (char s (cl:1- i))))
+                          (next (and (cl:< i (cl:1- len)) (char s (cl:1+ i))))
+                          ;; Preserve CL keyword syntax like `:foo' for now.
+                          (keywordp (and (eql token-start i)
+                                         next
+                                         (not (delim-p next))))
+                          ;; Preserve `#:' dispatch syntax (uninterned symbol).
+                          (dispatch-uninternedp
+                            (and token-start
+                                 (cl:= i (cl:1+ token-start))
+                                 (char= (char s token-start) #\#)))
+                          ;; Preserve CL package syntax in our `clemacs/ported/`
+                          ;; sources (e.g. `cl:defclass`, `sb-mop:...`).
+                          (allowed-package-colonp
+                            (and next
+                                 (not (delim-p next))
+                                 (%allowed-package-prefix-p token-start i)))
+                          (already-escapedp (and prev (char= prev #\\))))
+                     (if (or already-escapedp keywordp dispatch-uninternedp allowed-package-colonp)
+                         (progn
+                           (write-char ch out)
+                           (cl:incf out-pos))
+                       (progn
+                         (cl:push out-pos insertions)
+                         (write-char #\\ out)
+                         (write-char #\: out)
+                         (cl:incf out-pos 2)))))
                   (t
                    (write-char ch out)
                    (cl:incf out-pos))))))))
