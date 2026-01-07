@@ -154,6 +154,16 @@
   :expected "(1 2)"
   :emacs :match)
 
+ (:name "text-props-text-property-any-string-basic"
+  :expr "(let ((s (propertize \"ab\" 'foo 1))) (text-property-any 0 2 'foo 1 s))"
+  :expected "0"
+  :emacs :match)
+
+ (:name "text-props-next-prev-single-property-change-string-basic"
+  :expr "(let ((s (propertize \"ab\" 'foo 1))) (put-text-property 1 2 'foo 2 s) (list (next-single-property-change 0 'foo s) (next-single-property-change 1 'foo s) (previous-single-property-change 2 'foo s)))"
+  :expected "(1 nil 1)"
+  :emacs :match)
+
  (:name "strings-string-empty-p-empty"
   :expr "(string-empty-p \"\")"
   :expected "t"

@@ -356,6 +356,96 @@ START/END are 1-based buffer positions."
   "Bring-up subset of ELisp `get-text-property'."
   (plist-get (text-properties-at pos object) prop))
 
+(cl:defun %text-props--normalize-pos (pos object caller)
+  (cond
+   ((stringp object)
+    (unless (and (integerp pos) (<= 0 pos) (<= pos (length object)))
+      (error "ELISP:~A bad position: ~S" caller pos))
+    pos)
+   ((bufferp object)
+    (let* ((pos* (%pos pos))
+           (pmax (1+ (length (elisp-buffer-text object)))))
+      (unless (and (integerp pos*) (plusp pos*) (<= pos* pmax))
+        (error "ELISP:~A bad position: ~S" caller pos))
+      pos*))
+   (t
+    (error "ELISP:~A unsupported OBJECT: ~S" caller object))))
+
+(cl:defun %text-props--max-pos (object)
+  (cond
+   ((stringp object) (length object))
+   ((bufferp object) (1+ (length (elisp-buffer-text object))))
+   (t (error "ELISP:TEXT-PROPS internal: unsupported OBJECT: ~S" object))))
+
+(cl:defun %text-props--min-pos (object)
+  (cond
+   ((stringp object) 0)
+   ((bufferp object) 1)
+   (t (error "ELISP:TEXT-PROPS internal: unsupported OBJECT: ~S" object))))
+
+(cl:defun text-property-any (start end prop value &optional object)
+  "Bring-up subset of ELisp `text-property-any'."
+  (let* ((obj (or object (current-buffer)))
+         (s (%text-props--normalize-pos start obj "TEXT-PROPERTY-ANY"))
+         (e (%text-props--normalize-pos end obj "TEXT-PROPERTY-ANY")))
+    (when (> s e)
+      (error "ELISP:TEXT-PROPERTY-ANY bad range: ~S..~S" start end))
+    (when (= s e)
+      (return-from text-property-any nil))
+    (loop for i from s below e do
+      (when (eq (get-text-property i prop obj) value)
+        (return-from text-property-any i)))
+    nil))
+
+(cl:defun text-property-not-all (start end prop value &optional object)
+  "Bring-up subset of ELisp `text-property-not-all'."
+  (let* ((obj (or object (current-buffer)))
+         (s (%text-props--normalize-pos start obj "TEXT-PROPERTY-NOT-ALL"))
+         (e (%text-props--normalize-pos end obj "TEXT-PROPERTY-NOT-ALL")))
+    (when (> s e)
+      (error "ELISP:TEXT-PROPERTY-NOT-ALL bad range: ~S..~S" start end))
+    (when (= s e)
+      (return-from text-property-not-all nil))
+    (loop for i from s below e do
+      (unless (eq (get-text-property i prop obj) value)
+        (return-from text-property-not-all i)))
+    nil))
+
+(cl:defun next-single-property-change (pos prop &optional object limit)
+  "Bring-up subset of ELisp `next-single-property-change'."
+  (let* ((obj (or object (current-buffer)))
+         (p (%text-props--normalize-pos pos obj "NEXT-SINGLE-PROPERTY-CHANGE"))
+         (lim (and limit (%text-props--normalize-pos limit obj "NEXT-SINGLE-PROPERTY-CHANGE")))
+         (max (%text-props--max-pos obj))
+         (scan-end (or lim max)))
+    (when (and lim (= p lim))
+      (return-from next-single-property-change p))
+    (when (>= p scan-end)
+      (return-from next-single-property-change nil))
+    (let ((initial (get-text-property p prop obj)))
+      (loop for i from (1+ p) below scan-end do
+        (unless (eq (get-text-property i prop obj) initial)
+          (return-from next-single-property-change i)))
+      (if lim lim nil))))
+
+(cl:defun previous-single-property-change (pos prop &optional object limit)
+  "Bring-up subset of ELisp `previous-single-property-change'."
+  (let* ((obj (or object (current-buffer)))
+         (p (%text-props--normalize-pos pos obj "PREVIOUS-SINGLE-PROPERTY-CHANGE"))
+         (lim (and limit (%text-props--normalize-pos limit obj "PREVIOUS-SINGLE-PROPERTY-CHANGE")))
+         (min (%text-props--min-pos obj)))
+    (when (and lim (= p lim))
+      (return-from previous-single-property-change p))
+    (when (<= p min)
+      (return-from previous-single-property-change (and lim lim)))
+    (let* ((ref (1- p))
+           (scan-start (or lim min))
+           (initial (get-text-property ref prop obj)))
+      (loop for i from (1- ref) downto scan-start do
+        (unless (eq (get-text-property i prop obj) initial)
+          (return-from previous-single-property-change (1+ i))))
+      (if lim lim nil))))
+
 (cl:defun put-text-property (start end prop value &optional object)
   "Bring-up subset of ELisp `put-text-property'."
   (let ((obj (or object (current-buffer))))
