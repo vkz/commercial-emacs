@@ -56,6 +56,7 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
 - `startup.check.files` advanced with next TTY-relevant pdump candidates and higher caps (see archive for details).
 - 2026-01-07: added `clemacs:loop:elisp-core` (one-command high-signal loop) and extended the playbook for non-loader failures.
 - 2026-01-07: split `clemacs/elisp-compat.lisp` into `clemacs/elisp-compat/*.lisp` modules (thin REPL loader retained); updated loader/compat shims and advanced `startup.check.files` (see `plans/plan-archive-2026-01-07.md`).
+- 2026-01-07: raised `startup.check.files` caps for deeper TTY startup loads (`lisp/files.el` 250, `lisp/ls-lisp.el` 600, `lisp/disp-table.el` 800) and unblocked file/path helpers needed by early `lisp/files.el` + `lisp/loaddefs.el`.
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 
