@@ -237,7 +237,10 @@ Doc editing policy (when we touch texinfo)
 
 When you need to verify behavior against a known-good Emacs (not this fork):
 
-- Use system Emacs in batch mode: `emacs -Q --batch --eval '(progn ...)'`.
+- Prefer the heredoc-friendly task (avoids shell escaping):
+  - `mise run clemacs:ref-emacs:eval <<'EL'`
+    `(princ (prin1-to-string (progn ...)))`
+    `EL`
 - An Emacs 31.0.50 server is available as `wip` for interactive/probing evals:
   - `gxeval -s wip -e '(setq gx-elisp-result ...)'` (prefer `--json` + `jq`).
 

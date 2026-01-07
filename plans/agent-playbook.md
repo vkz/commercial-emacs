@@ -111,9 +111,10 @@ Then choose one:
   - Add/adjust a semantic microtest in `clemacs/contract/semantics.microtests.sexp`.
   - If intentionally diverging from Emacs, set `:emacs nil` and record a dated
     rationale in `plans/clemacs-compat.md` (“Semantic decisions (dated)”).
-  - If using `:emacs :match`, tests run a reference Emacs via `emacs -Q --batch`
+  - If using `:emacs :match`, tests run a reference Emacs in `-Q --batch` mode
     (not `gxeval`); the binary is taken from `CLEMACS_REFERENCE_EMACS` or falls
-    back to `emacs` on `PATH`.
+    back to `emacs` on `PATH`. For ad-hoc probing without shell-escaping, use
+    `mise run clemacs:ref-emacs:eval <<'EL' ... EL`.
   - For interactive probing, use the `emacs` skill via `gxeval -s wip ...`.
   - If a `:emacs :match` microtest errors with `reference Emacs failed`, use the reported `expr:` string to locate the entry in `clemacs/contract/semantics.microtests.sexp` and decide whether to update clemacs semantics or mark the test `:emacs nil` with a dated compat note.
   - If `ELISP-SEMANTICS-MICROTESTS` fails with an unexpected error, re-run `mise run clemacs:test:smoke` and use the reported microtest name + `expr:` to iterate.
