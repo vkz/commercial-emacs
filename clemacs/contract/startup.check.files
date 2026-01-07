@@ -49,7 +49,7 @@ lisp/emacs-lisp/cl-macs.el 10
 lisp/emacs-lisp/cl-preloaded.el 60
 lisp/emacs-lisp/oclosure.el -
 lisp/emacs-lisp/cl-seq.el 10
-lisp/emacs-lisp/seq.el 120
+lisp/emacs-lisp/seq.el 140
 
 # pdump: obarray, abbrev, help, mule-util, case-table.
 lisp/obarray.el 10
@@ -165,7 +165,7 @@ lisp/emacs-lisp/rmc.el 1
 lisp/disp-table.el 80
 
 # pdump: ls-lisp.
-lisp/ls-lisp.el 10
+lisp/ls-lisp.el 20
 
 # pdump: term/internal.
-lisp/term/internal.el 1
+lisp/term/internal.el 10
