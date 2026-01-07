@@ -286,7 +286,8 @@ stubs that fail loudly if something tries to use native compilation.
 ## Commit discipline
 
 - Keep commit messages ASCII-only, subject line imperative, no trailing period.
-- Wrap body at ~72 columns; avoid very long unbroken strings (repo hooks check).
+- Wrap body at ~72 columns.
+- Lines must be shorter than 78 chars. Words shorter than 140 chars.
 
 ## Change hygiene (how to trim safely)
 
