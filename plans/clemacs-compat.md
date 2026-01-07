@@ -98,6 +98,15 @@ Runtime
     - Port: `clemacs/ported/lisp/emacs-lisp/oclosure.el`
     - Startup checkpoints: `clemacs/contract/startup.*.files` (`oclosure.el`)
 
+- 2026-01-07: `cl-defgeneric` overwrites bring-up placeholder functions
+  - Decision: when `cl-defgeneric` defines a generic function and the symbol
+    already has a non-generic function definition, clemacs drops the existing
+    fdefinition so the generic can take over.
+  - Rationale: during bring-up we sometimes provide small, eager stubs (e.g.
+    `seq-filter`) to keep smoke/microtests working before the full upstream
+    file is loaded; SBCL rejects `defgeneric` when a non-generic fdefinition
+    already exists.
+
 ## Compiler/codegen notes (for later)
 
 These are constraints the eventual ELisp→CL compiler must preserve; if a new

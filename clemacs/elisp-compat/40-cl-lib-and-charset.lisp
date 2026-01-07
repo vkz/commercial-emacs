@@ -508,14 +508,33 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
   (let* ((doc (and rest (stringp (car rest)) (pop rest)))
          (body rest)
          (method-args
-           (loop for a in args
-                 while (and (symbolp a)
-                            (not (keywordp a))
-                            (let ((nm (symbol-name a)))
-                              (or (zerop (length nm))
-                                  (/= (aref nm 0) (char-code #\&)))))
-                 collect `(,a t))))
+           (let ((out nil)
+                 (in-keyword-section nil))
+             (dolist (a args (nreverse out))
+               (cond
+                ((and (symbolp a)
+                      (let ((nm (symbol-name a)))
+                        (and (plusp (length nm))
+                             (= (aref nm 0) (char-code #\&)))))
+                 (setf in-keyword-section t)
+                 (push a out))
+                (in-keyword-section
+                 (push a out))
+                ((symbolp a)
+                 ;; Only required args participate in CLOS dispatch.  Keep the
+                 ;; rest of the lambda list (e.g. &optional) aligned with the
+                 ;; generic so SBCL doesn't reject the default method.
+                 (push `(,a t) out))
+                (t
+                 (push a out)))))))
     `(progn
+       ;; Bring-up: clemacs sometimes defines small stubs for functions that
+       ;; later become cl-generic generics (e.g. from `seq.el`).  SBCL rejects
+       ;; DEFGENERIC when NAME already has a non-generic function definition,
+       ;; so drop that placeholder to let the generic take over.
+       (cl:when (and (cl:fboundp ',name)
+                     (cl:not (cl:typep (cl:fdefinition ',name) 'cl:generic-function)))
+         (cl:fmakunbound ',name))
        (cl:defgeneric ,name ,args
          ,@(when doc `((:documentation ,doc))))
        ,@(when body

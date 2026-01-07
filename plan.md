@@ -54,6 +54,8 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
 - Completed and superseded items are archived in `plans/plan-archive-2026-01-06.md`.
 - Upstream ERT bring-up is unblocked and green as of 2026-01-06 (see archive for details).
 - `startup.check.files` advanced with next TTY-relevant pdump candidates and higher caps (see archive for details).
+- 2026-01-07: added `clemacs:loop:elisp-core` (one-command high-signal loop) and extended the playbook for non-loader failures.
+- 2026-01-07: split `clemacs/elisp-compat.lisp` into `clemacs/elisp-compat/*.lisp` modules; advanced `startup.check.files` `lisp/loaddefs.el` to 300 with incremental fixes (`ctl-x-r-map`, `bindings--define-key`).
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 

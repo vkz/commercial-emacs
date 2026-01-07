@@ -89,6 +89,11 @@
   :expected "7"
   :emacs :match)
 
+ (:name "cl-generic-cl-defgeneric-supports-optional-args"
+  :expr "(progn (require 'cl-lib) (cl-defgeneric clemacs--g (a &optional b) (or b a)) (clemacs--g 1))"
+  :expected "1"
+  :emacs :match)
+
  (:name "strings-string-to-char-empty-is-zero"
   :expr "(string-to-char \"\")"
   :expected "0"
