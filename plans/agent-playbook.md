@@ -73,6 +73,9 @@ Common patterns:
 - `SB-EXT:SYMBOL-PACKAGE-LOCKED-ERROR` when adding an ELisp compat definition that collides with CL (e.g. `string-trim`)
   - Add the symbol to `clemacs/package.lisp` `defpackage #:elisp` `:shadow`, and qualify host uses as `cl:...` (e.g. `cl:string-trim`) where needed.
 
+- CL string ops vs ELisp strings (common pitfall)
+  - `symbol-name` returns an ELisp string (often unibyte); wrap with `elisp::%elisp-string->cl-string` before calling CL functions like `string-downcase`.
+
 ### A) Loader fails while loading startup manifests
 
 1) Run: `mise run clemacs:report:first-failure -- --mode startup-check --debug`
