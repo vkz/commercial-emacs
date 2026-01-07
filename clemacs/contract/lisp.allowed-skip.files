@@ -14,3 +14,8 @@ lisp/emacs-lisp/nadvice.el
 # 2026-01-07: Too compile-time heavy when loaded as source (eval-when-compile),
 # and currently depends on full translation tables + Unicode charprop/translate.
 lisp/international/ucs-normalize.el
+
+# 2026-01-07: Blocked on macroexp/pcase bring-up (cl--generic-lambda expects
+# full `cl-function' + macroexpand patterns we don't support yet).  Use clemacs
+# `cl-defgeneric' / `cl-defmethod' shims for now.
+lisp/emacs-lisp/cl-generic.el

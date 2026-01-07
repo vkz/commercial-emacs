@@ -123,6 +123,14 @@ an augmented SBCL lexical environment."
   "Minimal subset of cl-lib's `cl-flet'."
   `(cl:flet ,bindings ,@body))
 
+(cl:defmacro cl-function (fn)
+  "Bring-up subset of cl-lib's `cl-function'.
+
+Upstream uses this macro to add Common Lisp-ish lambda-list support (e.g. &key).
+For clemacs bring-up we only need `cl-generic` to be able to macroexpand away
+the `cl-function` wrapper around a plain `lambda`."
+  `(function ,fn))
+
 (cl:defmacro cl-labels (bindings &body body)
   "Minimal subset of cl-lib's `cl-labels'."
   `(cl:labels ,bindings ,@body))
@@ -484,7 +492,10 @@ named constructors."
            (mapcar
             (lambda (slot)
               ;; cl-lib sometimes includes :documentation in slot plists;
-              ;; CL:DEFSTRUCT doesn't accept it, so drop it.
+              ;; CL:DEFSTRUCT doesn't accept it, so drop it.  Also drop :type
+              ;; constraints: upstream cl-lib uses them for documentation / hints,
+              ;; and SBCL may enforce them at runtime (which can break bring-up
+              ;; code that stores symbols where cl-lib wrote :type string).
               (cond
                ((symbolp slot) slot)
                ((consp slot)
@@ -493,7 +504,7 @@ named constructors."
                       (plist (cddr slot)))
                   (list* nm init
                          (loop for (k v) on plist by #'cddr
-                               unless (eq k :documentation)
+                               unless (or (eq k :documentation) (eq k :type))
                                  append (list k v)))))
                (t slot)))
             rest))
@@ -550,7 +561,25 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
   "Bring-up subset of cl-generic's `cl-defmethod'."
   (unless (and (listp args) (not (null args)))
     (cl:error "ELISP:CL-DEFMETHOD expects (NAME ARGS ...), got: ~S ~S" name args))
-  (labels ((normalize-class-specializer (spec)
+  (labels ((&context-marker-p (x)
+             (and (symbolp x)
+                  (cl:string-equal "&context" (cl:symbol-name x))))
+           (strip-&context (lambda-list)
+             ;; cl-generic extends `cl-defmethod' with `&context' pseudo-args
+             ;; used for dispatching on dynamic "contexts" like `window-system'.
+             ;;
+             ;; clemacs does not implement context dispatch yet.  For bring-up,
+             ;; drop `&context' and everything after it, so core files like
+             ;; `frame.el` can load.
+             (let ((out nil)
+                   (rest lambda-list))
+               (loop while rest do
+                 (let ((a (pop rest)))
+                   (when (&context-marker-p a)
+                     (return (nreverse out)))
+                   (push a out)))
+               (nreverse out)))
+           (normalize-class-specializer (spec)
              ;; We shadow ELISP::STRING as a function, but ELisp cl-generic uses
              ;; the symbol `string' as a type specializer.  Rewrite to the CL
              ;; class so the underlying CLOS dispatch works.
@@ -559,7 +588,8 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
               ((eq spec 'marker) 'elisp-marker)
               ((eq spec 'window-configuration) 'elisp-window-configuration)
               (t spec))))
-    (let* ((saw-string-specializer nil)
+    (let* ((args (strip-&context args))
+           (saw-string-specializer nil)
            (method-args
              (mapcar
               (lambda (a)

@@ -41,6 +41,179 @@
   (set 'local-map keymap)
   keymap)
 
+(cl:defvar *window-display-table* nil)
+
+(cl:defun window-display-table (&optional _window)
+  "Bring-up stub for ELisp `window-display-table'.
+
+clemacs does not implement windows yet; this returns a single global
+window display table."
+  (declare (cl:ignore _window))
+  *window-display-table*)
+
+(cl:defun set-window-display-table (window display-table)
+  "Bring-up stub for ELisp `set-window-display-table'."
+  (declare (cl:ignore window))
+  (setf *window-display-table* display-table)
+  display-table)
+
+(cl:defvar *face-id-by-symbol* (make-hash-table :test 'eq))
+(cl:defvar *face-symbols-by-id* (make-hash-table :test 'eql))
+(cl:defvar *face-next-id* 0)
+
+(cl:defmacro cl-generic-define-context-rewriter (&rest _args)
+  "Bring-up stub for `cl-generic-define-context-rewriter'.
+
+This is used at top-level in `lisp/frame.el` and should not evaluate its
+arguments during bring-up."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defmacro cl-generic-define-generalizer (&rest _args)
+  "Bring-up stub for `cl-generic-define-generalizer'.
+
+This appears early in `lisp/emacs-lisp/cl-generic.el`; ignore it for bring-up."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defmacro oclosure-define (name &rest _rest)
+  "Bring-up stub for `oclosure-define'.
+
+Upstream uses this to define \"open closures\" (see `lisp/emacs-lisp/oclosure.el`).
+For bring-up, define a placeholder function so dependent files can load."
+  (declare (cl:ignore _rest))
+  (let ((fn (cond
+             ((symbolp name) name)
+             ((and (consp name) (symbolp (car name))) (car name))
+             (t nil))))
+    (if (null fn)
+        `(progn nil)
+        `(progn
+           (defun ,fn (&rest _args)
+             (declare (cl:ignore _args))
+             (error "ELISP:OCLOSURE is not implemented yet: %S" ',fn))
+           ',fn))))
+
+(cl:defun %face-register (face id)
+  (unless (symbolp face)
+    (error "ELISP:FACE register expects symbol face, got: %S" face))
+  (unless (and (integerp id) (<= 0 id))
+    (error "ELISP:FACE register expects natnump id, got: %S" id))
+  (multiple-value-bind (_existing presentp) (gethash face *face-id-by-symbol*)
+    (declare (cl:ignore _existing))
+    (unless presentp
+      (setf (gethash face *face-id-by-symbol*) id)
+      (setf (gethash id *face-symbols-by-id*) face)
+      (setf *face-next-id* (max *face-next-id* (1+ id)))))
+  id)
+
+(eval-when (:load-toplevel :execute)
+  ;; These core face IDs appear stable in upstream Emacs (and are used by
+  ;; glyph packing in `disp-table.el`).
+  (dolist (pair '((default . 0)
+                  (bold . 1)
+                  (italic . 2)
+                  (bold-italic . 3)
+                  (underline . 4)
+                  (fixed-pitch . 5)
+                  (fixed-pitch-serif . 6)
+                  (variable-pitch . 7)
+                  (variable-pitch-text . 8)))
+    (%face-register (car pair) (cdr pair))))
+
+(cl:defun face-id (face &optional _frame)
+  "Bring-up subset of ELisp `face-id'.
+
+Return a numeric face ID for FACE.  clemacs currently uses a global registry
+and ignores the FRAME argument."
+  (declare (cl:ignore _frame))
+  (cond
+   ((null face) 0)
+   ((integerp face) face)
+   ((symbolp face)
+    (multiple-value-bind (id presentp) (gethash face *face-id-by-symbol*)
+      (if presentp
+          id
+          (%face-register face *face-next-id*))))
+   (t
+    (error "ELISP:FACE-ID expects symbol or integer, got: %S" face))))
+
+(cl:defun face-list (&optional _frame)
+  "Bring-up subset of ELisp `face-list'.
+
+Return a list of known face symbols.  clemacs currently uses a global registry
+and ignores the FRAME argument."
+  (declare (cl:ignore _frame))
+  (let ((pairs nil))
+    (maphash (lambda (id sym) (push (cons id sym) pairs)) *face-symbols-by-id*)
+    (mapcar #'cdr (sort pairs #'< :key #'car))))
+
+(cl:defun %map--plist-p (xs)
+  "Return non-nil when XS looks like an ELisp plist (bring-up heuristic)."
+  (and (listp xs)
+       (or (null xs)
+           (and (consp xs)
+                (not (consp (car xs)))
+                (consp (cdr xs))))))
+
+(cl:defun %copy-hash-table (ht)
+  (unless (hash-table-p ht)
+    (error "ELISP:%COPY-HASH-TABLE expects hash-table, got: %S" (type-of ht)))
+  (let ((copy (make-hash-table :test (hash-table-test ht)
+                               :size (hash-table-size ht)
+                               :rehash-size (hash-table-rehash-size ht)
+                               :rehash-threshold (hash-table-rehash-threshold ht))))
+    (maphash (lambda (k v) (setf (gethash k copy) v)) ht)
+    copy))
+
+(cl:defun map-insert (map key value)
+  "Bring-up subset of ELisp `map-insert'.
+
+This is a small helper used early by upstream `ert.el`.  Full generic map
+support is provided by `lisp/emacs-lisp/map.el` when loaded."
+  (cond
+   ((hash-table-p map)
+    (let ((copy (%copy-hash-table map)))
+      (setf (gethash key copy) value)
+      copy))
+   ((vectorp map)
+    (cond
+     ((and (integerp key) (<= 0 key) (< key (length map)))
+      (let ((copy (cl:copy-seq map)))
+        (setf (aref copy key) value)
+        copy))
+     ((and (integerp key) (<= 0 key))
+      (let* ((newlen (1+ key))
+             (copy (make-array newlen :initial-element nil)))
+        (dotimes (i (length map))
+          (setf (aref copy i) (aref map i)))
+        (setf (aref copy key) value)
+        copy))
+     (t
+      (error "ELISP:MAP-INSERT vector key must be a natnump, got: %S" key))))
+   ((listp map)
+    (if (%map--plist-p map)
+        (cons key (cons value map))
+        (cons (cons key value) map)))
+   (t
+    (error "ELISP:MAP-INSERT unsupported map type: %S" (type-of map)))))
+
+(cl:defun backtrace (&optional _output)
+  "Bring-up subset of ELisp `backtrace'.
+
+Print a host backtrace to `*standard-output*' and return nil."
+  (declare (cl:ignore _output))
+  (write-string (backtrace-to-string (backtrace-get-frames)) *standard-output*)
+  nil)
+
+(cl:defun kill-emacs (&optional arg)
+  "Bring-up subset of ELisp `kill-emacs'.
+
+Exit the hosting process.  ARG, when an integer, is used as the process exit
+code."
+  (let ((code (if (integerp arg) arg 0)))
+    (uiop:quit code)))
+
 (defstruct elisp-timer
   (secs 0)
   (repeat nil)

@@ -230,6 +230,30 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
   (declare (cl:ignore _args))
   nil)
 
+(cl:defun help-add-fundoc-usage (doc &rest _args)
+  "Bring-up stub for ELisp `help-add-fundoc-usage'."
+  (declare (cl:ignore _args))
+  doc)
+
+(cl:defun help-fns--signature (&rest _args)
+  "Bring-up stub for ELisp `help-fns--signature'."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun help-fns-short-filename (filename)
+  "Bring-up stub for ELisp `help-fns-short-filename'."
+  filename)
+
+(cl:defun help-insert-xref-button (&rest _args)
+  "Bring-up stub for ELisp `help-insert-xref-button'."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun help-split-fundoc (doc &rest _args)
+  "Bring-up stub for ELisp `help-split-fundoc'."
+  (declare (cl:ignore _args))
+  doc)
+
 (cl:defun substitute-command-keys (string)
   "Bring-up stub for ELisp `substitute-command-keys'."
   string)

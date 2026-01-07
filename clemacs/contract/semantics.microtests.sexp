@@ -64,6 +64,16 @@
   :expected "t"
   :emacs :match)
 
+ (:name "faces-face-id-core"
+  :expr "(mapcar (lambda (s) (face-id s)) '(default bold italic bold-italic underline fixed-pitch fixed-pitch-serif variable-pitch variable-pitch-text))"
+  :expected "(0 1 2 3 4 5 6 7 8)"
+  :emacs :match)
+
+ (:name "faces-face-list-includes-core"
+  :expr "(and (memq 'default (face-list)) (memq 'underline (face-list)) t)"
+  :expected "t"
+  :emacs :match)
+
  (:name "files-interpreter-mode-alist-boundp"
   :expr "(boundp 'interpreter-mode-alist)"
   :expected "t"
@@ -97,6 +107,11 @@
  (:name "macros-let-when-compile-binds-for-eval-when-compile"
   :expr "(progn (setq clemacs--tmp-lwc 0) (let-when-compile ((x 7)) (eval-when-compile (setq clemacs--tmp-lwc x))) clemacs--tmp-lwc)"
   :expected "7"
+  :emacs :match)
+
+ (:name "function-lambda-funcall"
+  :expr "(funcall (function (lambda (x) (1+ x))) 1)"
+  :expected "2"
   :emacs :match)
 
  (:name "rewrite-let-binding-if-variable"

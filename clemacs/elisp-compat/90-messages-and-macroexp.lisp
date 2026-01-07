@@ -166,6 +166,20 @@ FORM.  For bring-up, suppress the warning and return FORM."
 
 (cl:defvar macroexpand-all-environment nil)
 
+(cl:defun macroexpand-1 (form &optional env)
+  "Bring-up subset of ELisp `macroexpand-1'.
+
+If ENV is an Emacs-style macro environment (an alist), ignore it: SBCL's
+`macroexpand-1' expects a lexical environment object or NIL."
+  (cl:macroexpand-1 form (and (not (listp env)) env)))
+
+(cl:defun macroexpand (form &optional env)
+  "Bring-up subset of ELisp `macroexpand'.
+
+If ENV is an Emacs-style macro environment (an alist), ignore it: SBCL's
+`macroexpand' expects a lexical environment object or NIL."
+  (cl:macroexpand form (and (not (listp env)) env)))
+
 (cl:defun %macroexpand-all--normalize-lambda-list (lambda-list)
   (labels ((rw (xs)
              (cond

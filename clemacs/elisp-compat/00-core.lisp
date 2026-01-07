@@ -6,7 +6,7 @@
 ;; `with-output-to-string' is also a CL macro; shadow it so ELisp code resolves
 ;; to our compatibility macro instead of tripping SBCL's package lock.
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (shadow 'with-output-to-string))
+  (shadow '(with-output-to-string macroexpand macroexpand-1)))
 
 ;; Upstream ELisp uses declaration specifiers that CL implementations don't know
 ;; about.  Declare them so SBCL doesn't spam style warnings during bring-up.
@@ -28,6 +28,10 @@
 (cl:defvar last-command nil)
 (cl:defvar overlay-arrow-variable-list nil)
 (cl:defvar standard-display-table nil)
+(cl:defvar buffer-display-table nil)
+(cl:defvar window-system nil)
+;; `disp-table.el` assumes this is a vector (it grows it on demand).
+(cl:defvar glyph-table (make-array 32 :initial-element nil))
 (cl:defvar text-property-default-nonsticky nil)
 (cl:defvar comment-start-skip nil)
 ;; `ert-with-temp-file' (and friends) consult these during macroexpansion.
@@ -223,8 +227,8 @@ iterating all symbols accessible in the ELISP package."
 
 Emacs Lisp's `function' special form is more of a \"function designator\"
 than a strict CL:FUNCTION: for symbols, it yields the symbol (resolved later
-by `funcall' / `apply').  For lambdas, we keep the form as data so early
-bootstrap loads don't macroexpand/compile lambda bodies."
+by `funcall' / `apply').  For lambdas, return a real CL function object so
+upstream macroexpanders can safely parse lambda lists/bodies."
   (cond
    ((symbolp arg)
     (multiple-value-bind (_kind localp _decls)
@@ -237,13 +241,17 @@ bootstrap loads don't macroexpand/compile lambda bodies."
           `(cl:function ,arg)
           `(quote ,arg))))
    ((and (consp arg) (eq (car arg) 'lambda))
-    `(quote ,arg))
+    ;; In ELisp, (function (lambda ...)) evaluates to a closure.
+    ;; Keep this as a real CL function object so upstream `macroexpand` users
+    ;; (notably `cl-generic`) see `#'(lambda ...)` rather than a quoted lambda
+    ;; list and can safely parse the lambda list/body.
+    `(cl:function ,arg))
    ((and (consp arg) (eq (car arg) '|,|) (null (cddr arg)))
     (cadr arg))
    ((and (consp arg) (eq (car arg) '|,@|) (null (cddr arg)))
     (cadr arg))
    (t
-    `(quote ,arg))))
+     `(quote ,arg))))
 
 (defvar *elisp-function-cells* (cl:make-hash-table :test 'eq))
 

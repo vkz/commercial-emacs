@@ -82,10 +82,10 @@ lisp/composite.el 1
 lisp/indent.el -
 
 # pdump: cl-generic.
-lisp/emacs-lisp/cl-generic.el 5
+lisp/emacs-lisp/cl-generic.el 47
 
 # pdump: simple.
-lisp/simple.el 379
+lisp/simple.el 147
 
 # pdump: nadvice.
 lisp/emacs-lisp/nadvice.el 2
@@ -94,7 +94,7 @@ lisp/emacs-lisp/nadvice.el 2
 lisp/minibuffer.el 11
 
 # pdump: frame.
-lisp/frame.el 1
+lisp/frame.el 200
 
 # pdump: startup.
 lisp/startup.el 1
