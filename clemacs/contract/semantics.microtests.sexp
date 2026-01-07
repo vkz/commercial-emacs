@@ -59,6 +59,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "display-standard-display-table-boundp"
+  :expr "(boundp 'standard-display-table)"
+  :expected "t"
+  :emacs :match)
+
  (:name "rewrite-let-binding-if-variable"
   :expr "(let ((if 1)) (if (numberp if) if 0))"
   :expected "1"

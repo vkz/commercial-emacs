@@ -39,7 +39,7 @@ lisp/emacs-lisp/pp.el 50
 lisp/ldefs-boot.el 50
 
 # pdump: loaddefs.
-lisp/loaddefs.el 300
+lisp/loaddefs.el 400
 
 # pdump: button, gv, cl-lib, cl-macs, cl-preloaded, oclosure, cl-seq, seq.
 lisp/button.el 10
@@ -160,3 +160,6 @@ lisp/emacs-lisp/cconv.el 1
 lisp/cus-start.el 1
 lisp/international/iso-transl.el 1
 lisp/emacs-lisp/rmc.el 1
+
+# pdump: disp-table.
+lisp/disp-table.el 20

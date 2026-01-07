@@ -27,6 +27,7 @@
 (cl:defvar fill-prefix nil)
 (cl:defvar last-command nil)
 (cl:defvar overlay-arrow-variable-list nil)
+(cl:defvar standard-display-table nil)
 (cl:defvar text-property-default-nonsticky nil)
 (cl:defvar comment-start-skip nil)
 ;; `ert-with-temp-file' (and friends) consult these during macroexpansion.
