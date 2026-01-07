@@ -85,7 +85,7 @@ Gate
 Next actions
 - Grow `clemacs/contract/startup.{smoke,check,editor-core}.files` monotonically, following pdump order.
 - For `startup.check.files`, only add TTY-relevant candidates (ignore GUI/W32 files) and raise caps gradually.
-- Default cap strategy: `lisp/loaddefs.el` +500; most other files +200 (bisect when a checkpoint is unclear: `mise run clemacs:bisect:file -- --file <lisp/.../foo.el> --manifest clemacs/contract/startup.check.files`).
+- Default cap strategy: take bigger jumps and bisect early (rule of thumb: `lisp/loaddefs.el` +1000; most other files +300–800; if the failure location is unclear, bisect immediately: `mise run clemacs:bisect:file -- --file <lisp/.../foo.el> --manifest clemacs/contract/startup.check.files`).
 - After each bump: run `mise run clemacs:test:contract -- --level elisp-core`.
 - On failure: run `mise run clemacs:report:first-failure-startup-check-debug` and implement the single top offender before moving on.
 

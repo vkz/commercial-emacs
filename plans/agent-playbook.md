@@ -88,8 +88,10 @@ Common patterns:
 Then choose one:
 
 - **Raising startup checkpoints (default strategy)**
-  - Prefer larger cap jumps (e.g. `loaddefs.el` +500; most other files +100–200), then run `mise run clemacs:loop:elisp-core`.
-  - If it fails, use `build/clemacs/reports/first-failure.startup-check.md` to fix only the top offender; if the failing point is unclear, run `mise run clemacs:bisect:file -- --file <lisp/.../foo.el> --manifest clemacs/contract/startup.check.files` and set the manifest checkpoint to the reported “max passing max-forms” while you fix the underlying issue.
+  - Default to bigger cap jumps to maintain pace (rule of thumb: `loaddefs.el` +1000; most other files +300–800), then run `mise run clemacs:loop:elisp-core`.
+  - If it fails, do not “creep” in tiny increments: bisect immediately when the failing point is unclear or too far into the file:
+    - `mise run clemacs:bisect:file -- --file <lisp/.../foo.el> --manifest clemacs/contract/startup.check.files`
+  - Set the manifest checkpoint to the reported “max passing max-forms”, fix only the top offender from `build/clemacs/reports/first-failure.startup-check.md`, then repeat with another big jump.
 
 - **Missing primitive / unbound variable**
   - Implement or shim the primitive (prefer `clemacs/elisp-compat.lisp` first).
