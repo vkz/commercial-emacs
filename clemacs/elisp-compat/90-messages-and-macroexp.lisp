@@ -991,6 +991,22 @@ Supports the common pattern of a self-referential closure (used by ERT)."
     (setf (gethash (car (last events)) (elisp-keymap-table km)) definition)
     definition))
 
+(cl:defun bindings--define-key (map key item)
+  "Bring-up subset of ELisp `bindings--define-key'."
+  (define-key
+   map key
+   (cond
+    ((not (consp item)) item)
+    ((keymapp item) item)
+    ((stringp (car item)) item)
+    ((eq 'menu-item (car item))
+     (if (keymapp (nth 2 item))
+         (append (list 'menu-item (nth 1 item) (nth 2 item)) (nthcdr 3 item))
+         item))
+    (t
+     (message "non-menu-item: %S" item)
+     item))))
+
 (cl:defun define-abbrev-table (name defs &optional _docstring &rest _rest)
   "Bring-up stub for ELisp `define-abbrev-table'."
   (declare (cl:ignore _docstring _rest))

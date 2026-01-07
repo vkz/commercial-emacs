@@ -74,6 +74,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "keymaps-bindings--define-key-defines-key"
+  :expr "(let ((m (make-sparse-keymap))) (bindings--define-key m [load] 'foo) (eq (lookup-key m [load]) 'foo))"
+  :expected "t"
+  :emacs :match)
+
  (:name "cl-progv-binds-dynamically"
   :expr "(progn (require 'cl-lib) (cl-progv '(x) '(7) x))"
   :expected "7"
