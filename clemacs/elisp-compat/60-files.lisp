@@ -5,6 +5,8 @@
 ;; ---------------------------------------------------------------------------
 
 (cl:defvar interpreter-mode-alist nil)
+(cl:defvar major-mode-remap-defaults nil)
+(cl:defvar file-name-handler-alist nil)
 
 (cl:defun get-load-suffixes ()
   "Bring-up subset of ELisp `get-load-suffixes'.

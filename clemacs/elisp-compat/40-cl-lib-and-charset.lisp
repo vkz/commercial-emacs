@@ -639,6 +639,39 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
     (error "ELISP:GETENV expects a string, got: ~S" var))
   (uiop:getenv (%elisp-string->cl-string var)))
 
+(cl:defun getenv-internal (variable &optional environment)
+  "Bring-up subset of the C primitive `getenv-internal'.
+
+VARIABLE is a string name.  ENVIRONMENT, when non-nil, is treated like an ELisp
+`process-environment' list of \"NAME=VALUE\" strings."
+  (unless (stringp variable)
+    (error "ELISP:GETENV-INTERNAL expects a string, got: ~S" variable))
+  (let* ((name (%elisp-string->cl-string variable)))
+    (cond
+     ((null environment)
+      (uiop:getenv name))
+     ((consp environment)
+      (let ((prefix (concatenate 'cl:string name "=")))
+        (dolist (entry environment nil)
+          (when (stringp entry)
+            (let ((s (%elisp-string->cl-string entry)))
+              (when (and (>= (length s) (length prefix))
+                         (string= prefix (subseq s 0 (length prefix))))
+                (return (subseq s (length prefix)))))))))
+     (t
+     (error "ELISP:GETENV-INTERNAL bad ENVIRONMENT: ~S" environment)))))
+
+(cl:defvar locale-coding-system nil)
+
+(cl:defun decode-coding-string (string _coding-system &optional _nocopy _buffer)
+  "Bring-up stub for the C primitive `decode-coding-string'.
+
+For now, treat STRING as already decoded and return it unchanged."
+  (declare (cl:ignore _coding-system _nocopy _buffer))
+  (unless (stringp string)
+    (error "ELISP:DECODE-CODING-STRING expects string, got: ~S" string))
+  string)
+
 (cl:defvar user-emacs-directory
   (namestring (merge-pathnames ".emacs.d/" (user-homedir-pathname))))
 

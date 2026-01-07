@@ -4,6 +4,8 @@
 ;; Minimal buffer/marker surface (enough for upstream ERT bring-up)
 ;; ---------------------------------------------------------------------------
 
+(cl:defvar enable-multibyte-characters t)
+
 (defstruct elisp-marker-edit
   ;; :insert  a=at  b=len
   ;; :delete  a=start  b=end
