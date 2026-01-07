@@ -163,3 +163,6 @@ lisp/emacs-lisp/rmc.el 1
 
 # pdump: disp-table.
 lisp/disp-table.el 60
+
+# pdump: ls-lisp.
+lisp/ls-lisp.el 1
