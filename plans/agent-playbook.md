@@ -92,6 +92,7 @@ Common patterns:
 
 - If the report says "No `elisp-load-error` found", scan the Tail for `ELisp load error in ...` anyway; if present, treat it as a bug in `clemacs:report:scan-load-log`.
 - If SBCL dies with `SB-KERNEL::CONTROL-STACK-EXHAUSTED` during macroexpansion (often `macroexp--all-forms`), prefer restoring the clemacs stack-safe `macroexpand-all` shim after `lisp/emacs-lisp/macroexp.el` loads (see `clemacs/elisp.lisp` `%maybe-install-post-load-shims`).
+- If the debug backtrace shows an ELisp error message as a truncated byte vector (`#(85 110 101 ...)`), catch `elisp::elisp-load-error` and print `(elisp::%elisp-string->cl-string (car (elisp::elisp-signal-data (elisp::elisp-load-error-cause e))))` to recover the full string.
 
 Then choose one:
 
