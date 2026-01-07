@@ -1882,6 +1882,33 @@ for upstream ERT's `ert--make-xrefs-region'."
 
 (cl:defvar frame-internal-parameters nil)
 
+(cl:defvar *terminal-parameters*
+  (cl:make-hash-table :test 'eq))
+
+(cl:defun %terminal-parameters--key (terminal)
+  (cond
+   ((null terminal) (selected-frame))
+   ((framep terminal) terminal)
+   (t terminal)))
+
+(cl:defun terminal-parameter (terminal parameter)
+  "Bring-up subset of ELisp `terminal-parameter'."
+  (plist-get (gethash (%terminal-parameters--key terminal) *terminal-parameters*) parameter))
+
+(cl:defun set-terminal-parameter (terminal parameter value)
+  "Bring-up subset of ELisp `set-terminal-parameter' (returns old value)."
+  (let* ((key (%terminal-parameters--key terminal))
+         (plist (gethash key *terminal-parameters*))
+         (old (plist-get plist parameter)))
+    (setf (gethash key *terminal-parameters*)
+          (plist-put plist parameter value))
+    old))
+
+(cl:defun set-input-mode (&rest _args)
+  "Bring-up stub for ELisp `set-input-mode'."
+  (declare (cl:ignore _args))
+  nil)
+
 (cl:defun windowp (object)
   "Bring-up subset of ELisp `windowp' (single-window)."
   (and (elisp-window-p object) t))

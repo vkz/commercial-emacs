@@ -138,6 +138,52 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
        (string-to-multibyte a)
        (string-to-multibyte b))))))
 
+(cl:defun %compare-strings--normalize-index (idx len default caller)
+  (cond
+   ((null idx) default)
+   ((integerp idx)
+    (let ((i (if (minusp idx) (+ len idx) idx)))
+      (unless (and (integerp i) (<= 0 i) (<= i len))
+        (error "ELISP:~A bad index: ~S (len ~S)" caller idx len))
+      i))
+   (t
+    (error "ELISP:~A bad index: ~S" caller idx))))
+
+(cl:defun compare-strings (string1 start1 end1 string2 start2 end2 &optional ignore-case)
+  "Bring-up subset of ELisp `compare-strings'."
+  (unless (and (stringp string1) (stringp string2))
+    (error "ELISP:COMPARE-STRINGS expects strings, got: ~S ~S" string1 string2))
+  (let* ((s1 (string-to-multibyte string1))
+         (s2 (string-to-multibyte string2))
+         (len1 (length s1))
+         (len2 (length s2))
+         (b1 (%compare-strings--normalize-index start1 len1 0 "COMPARE-STRINGS"))
+         (e1 (%compare-strings--normalize-index end1 len1 len1 "COMPARE-STRINGS"))
+         (b2 (%compare-strings--normalize-index start2 len2 0 "COMPARE-STRINGS"))
+         (e2 (%compare-strings--normalize-index end2 len2 len2 "COMPARE-STRINGS")))
+    (when (> b1 e1)
+      (error "ELISP:COMPARE-STRINGS bad range: ~S..~S (len ~S)" start1 end1 len1))
+    (when (> b2 e2)
+      (error "ELISP:COMPARE-STRINGS bad range: ~S..~S (len ~S)" start2 end2 len2))
+    (let* ((n1 (- e1 b1))
+           (n2 (- e2 b2))
+           (n (min n1 n2)))
+      (labels ((fold (ch)
+                 (if ignore-case (char-downcase ch) ch)))
+        (loop for i from 0 below n do
+          (let* ((c1 (fold (char s1 (+ b1 i))))
+                 (c2 (fold (char s2 (+ b2 i)))))
+            (unless (char= c1 c2)
+              (let ((pos (1+ i)))
+                (return-from compare-strings
+                  (if (< (char-code c1) (char-code c2))
+                      (- pos)
+                      pos)))))))
+      (cond
+       ((= n1 n2) t)
+       ((< n1 n2) (- (1+ n)))
+       (t (1+ n))))))
+
 (cl:defun string-equal (a b)
   "ELisp-ish STRING-EQUAL (case-sensitive; alias of `string=')."
   (string= a b))

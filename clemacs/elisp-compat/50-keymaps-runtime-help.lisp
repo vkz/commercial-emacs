@@ -169,6 +169,7 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
 (cl:defvar special-mode-map (make-elisp-keymap))
 (defparameter minibuffer-local-map (make-elisp-keymap))
 (cl:defvar local-map nil)
+(cl:defvar local-function-key-map (make-elisp-keymap))
 (defparameter find-function-space-re "")
 (cl:defvar find-function-regexp-alist nil)
 (defparameter buffer-file-name nil)

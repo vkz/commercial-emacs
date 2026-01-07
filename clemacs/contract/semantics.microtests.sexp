@@ -199,6 +199,16 @@
   :expected "(\"foo\" \"foo\" \"bark\")"
   :emacs :match)
 
+ (:name "strings-compare-strings-basic"
+  :expr "(list (compare-strings \"abc\" 0 nil \"abc\" 0 nil nil) (compare-strings \"abc\" 0 nil \"abd\" 0 nil nil) (compare-strings \"abd\" 0 nil \"abc\" 0 nil nil) (compare-strings \"ab\" 0 nil \"abc\" 0 nil nil) (compare-strings \"abc\" 0 nil \"ab\" 0 nil nil) (compare-strings \"Ab\" 0 nil \"aB\" 0 nil t))"
+  :expected "(t -3 3 -3 3 t)"
+  :emacs :match)
+
+ (:name "strings-compare-strings-nil-and-negative-indices"
+  :expr "(list (compare-strings \"abc\" 1 3 \"xbc\" 1 3 nil) (compare-strings \"abc\" -2 nil \"xbc\" -2 nil nil) (compare-strings \"abc\" nil nil \"xbc\" nil nil nil) (compare-strings \"abc\" nil nil \"abcd\" nil nil nil) (compare-strings \"abcd\" nil nil \"abc\" nil nil nil))"
+  :expected "(t t -1 -4 4)"
+  :emacs :match)
+
  (:name "keymaps-copy-keymap-parent-basic"
   :expr "(let* ((p (make-sparse-keymap)) (m (make-sparse-keymap)) (_ (set-keymap-parent m p)) (c (copy-keymap m))) (list (keymapp c) (eq (keymap-parent c) p) (eq c m)))"
   :expected "(t t nil)"
