@@ -107,6 +107,13 @@ leave the repo in a state where documentation/tests are knowingly stale.
 All project tasks should be run via `mise` (prefer `mise run ...`).
 If you see `mise WARN ... not trusted`, run `mise trust` in the repo root once.
 
+### Codex CLI / shell working directory
+
+When running commands via the Codex CLI tool API, prefer setting the tool call's
+working directory to the repo root (instead of prefixing commands with
+`cd ... &&`). This keeps logs readable and avoids copy/paste noise while still
+being robust across independent shell invocations.
+
 ### clemacs bring-up (SBCL-hosted, experimental)
 
 clemacs is the experimental SBCL-hosted runtime (Option B) being brought up
