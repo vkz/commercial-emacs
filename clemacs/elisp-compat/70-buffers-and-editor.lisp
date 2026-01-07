@@ -1146,6 +1146,20 @@ Emacs clamps positions outside the buffer to the nearest valid position."
   "Bring-up subset of ELisp `buffer-substring-no-properties'."
   (buffer-substring start end))
 
+(cl:defun insert-buffer-substring (buffer &optional start end)
+  "Bring-up subset of ELisp `insert-buffer-substring'."
+  (let ((src (cond
+              ((bufferp buffer) buffer)
+              ((stringp buffer) (get-buffer buffer))
+              (t (error "ELISP:INSERT-BUFFER-SUBSTRING bad buffer: ~S" buffer)))))
+    (unless (bufferp src)
+      (error "ELISP:INSERT-BUFFER-SUBSTRING no such buffer: ~S" buffer))
+    (let ((chunk
+            (with-current-buffer src
+              (buffer-substring (or start (point-min)) (or end (point-max))))))
+      (insert chunk)
+      nil)))
+
 (cl:defun delete-region (start end)
   (let* ((s (%pos start))
          (e (%pos end))
@@ -1356,6 +1370,37 @@ Emacs clamps positions outside the buffer to the nearest valid position."
                   (goto-char pos))))))
     (point))
 
+(cl:defun search-forward (string &optional bound noerror count)
+  "Bring-up subset of ELisp `search-forward'."
+  (unless (stringp string)
+    (error "ELISP:SEARCH-FORWARD expects a string, got: ~S" string))
+  (let* ((needle (string-to-multibyte string))
+         (count* (or count 1)))
+    (unless (and (integerp count*) (< 0 count*))
+      (error "ELISP:SEARCH-FORWARD bad COUNT: ~S" count))
+    (loop repeat count* do
+      (let* ((hay (elisp-buffer-text *current-buffer*))
+             (start (1- (point)))
+             (end (if bound
+                      (max start (min (length hay) (1- (%pos bound))))
+                      (length hay)))
+             (test (if (and (boundp 'case-fold-search) case-fold-search)
+                       #'char-equal
+                       #'char=))
+             (pos (search needle hay :start2 start :end2 end :test test)))
+        (when (null pos)
+          (setf *match-data* nil *match-source-string* nil)
+          (when noerror
+            (when (and (eq noerror 'move) bound)
+              (goto-char (%pos bound)))
+            (return-from search-forward nil))
+          (error "Search failed: %S" string))
+        (let ((ms pos)
+              (me (+ pos (length needle))))
+          (%set-buffer-match-data ms me nil nil)
+          (goto-char (1+ me)))))
+    (point)))
+
 (cl:defun replace-match (replacement &optional _fixedcase literal string subexp)
   "Bring-up subset of ELisp `replace-match'."
   (declare (cl:ignore _fixedcase))
@@ -1492,6 +1537,29 @@ Emacs clamps positions outside the buffer to the nearest valid position."
 (cl:defun insert-before-markers-and-inherit (&rest parts)
   "Bring-up subset of ELisp `insert-before-markers-and-inherit'."
   (apply #'insert parts))
+
+(cl:defun insert-file-contents (filename &optional _visit beg end replace)
+  "Bring-up subset of ELisp `insert-file-contents'."
+  (declare (cl:ignore _visit))
+  (unless (stringp filename)
+    (error "ELISP:INSERT-FILE-CONTENTS expects a file name string, got: ~S" filename))
+  (when (and beg (not (integerp beg)))
+    (error "ELISP:INSERT-FILE-CONTENTS bad BEG: ~S" beg))
+  (when (and end (not (integerp end)))
+    (error "ELISP:INSERT-FILE-CONTENTS bad END: ~S" end))
+  (let* ((path (%file-name->cl-string filename))
+         (txt (uiop:read-file-string path :external-format :utf-8))
+         (b (or beg 0))
+         (e (or end (length txt))))
+    (unless (<= 0 b e (length txt))
+      (error "ELISP:INSERT-FILE-CONTENTS bad range: ~S..~S for ~S" beg end filename))
+    (when replace
+      (erase-buffer)
+      (goto-char (point-min)))
+    (let ((chunk (subseq txt b e)))
+      (insert chunk)
+      ;; Return (FILENAME SIZE).
+      (list filename (length chunk)))))
 
 (cl:defun newline (&optional n)
   "Bring-up subset of ELisp `newline'."

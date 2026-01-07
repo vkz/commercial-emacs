@@ -184,6 +184,11 @@
   :expected "3"
   :emacs :match)
 
+ (:name "files-insert-file-contents-basic"
+  :expr "(let ((f (make-temp-file \"clemacs-ifc-\" nil nil \"hi\"))) (with-temp-buffer (let ((ret (insert-file-contents f))) (and (equal (buffer-string) \"hi\") (= (cadr ret) 2) t))))"
+  :expected "t"
+  :emacs :match)
+
  (:name "strings-string-empty-p-empty"
   :expr "(string-empty-p \"\")"
   :expected "t"
@@ -197,6 +202,66 @@
  (:name "strings-string-trim-family-basic"
   :expr "(list (string-trim \" foo \") (string-trim-left \"oofoo\" \"o+\") (string-trim-right \"barkss\" \"s+\"))"
   :expected "(\"foo\" \"foo\" \"bark\")"
+  :emacs :match)
+
+ (:name "strings-number-to-string-floats"
+  :expr "(list (number-to-string 42) (number-to-string 1.0) (number-to-string 1.5) (number-to-string 1000000.0) (number-to-string 1e-6) (number-to-string 1e-4) (number-to-string 1e15))"
+  :expected "(\"42\" \"1.0\" \"1.5\" \"1000000.0\" \"1e-06\" \"0.0001\" \"1e+15\")"
+  :emacs :match)
+
+ (:name "strings-string-replace-basic"
+  :expr "(string-replace \"%%\" \"%\" \"a%%b%%\")"
+  :expected "\"a%b%\""
+  :emacs :match)
+
+ (:name "strings-replace-regexp-in-string-basic"
+  :expr "(list (replace-regexp-in-string \"[ \\t]*\\\\'\" \"\" \"a \\t\") (replace-regexp-in-string \"foo\" \"bar\" \" foo foo\"))"
+  :expected "(\"a\" \" bar bar\")"
+  :emacs :match)
+
+ (:name "strings-string-collate-lessp-basic"
+  :expr "(list (string-collate-lessp \"a\" \"b\") (string-collate-lessp \"b\" \"a\") (string-collate-lessp \"A\" \"a\" nil t) (string-collate-lessp \"a\" \"A\" nil t))"
+  :expected "(t nil t nil)"
+  :emacs :match)
+
+ (:name "files-file-name-absolute-p-basic"
+  :expr "(list (file-name-absolute-p \"/a\") (file-name-absolute-p \"a\") (file-name-absolute-p \"~/a\"))"
+  :expected "(t nil t)"
+  :emacs :match)
+
+ (:name "files-file-name-directory-basic"
+  :expr "(list (file-name-directory \"foo\") (file-name-directory \"foo/bar\") (file-name-directory \"/foo\") (file-name-directory \"/foo/\") (file-name-directory \"~/a\"))"
+  :expected "(nil \"foo/\" \"/\" \"/foo/\" \"~/\")"
+  :emacs :match)
+
+ (:name "files-file-name-extension-basic"
+  :expr "(list (file-name-extension \"foo.tar.gz\") (file-name-extension \"foo.tar.gz\" t) (file-name-extension \"foo.\") (file-name-extension \"foo.\" t) (file-name-extension \"/a/b.c~\") (file-name-extension \"/a/b.c~\" t))"
+  :expected "(\"gz\" \".gz\" \"\" \".\" \"c\" \".c\")"
+  :emacs :match)
+
+ (:name "files-file-truename-dot-absolute-and-noslash"
+  :expr "(let* ((s (file-truename \".\")) (n (length s))) (and (file-name-absolute-p s) (not (and (> n 1) (= (aref s (1- n)) ?/)))))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "coding-coding-system-p-basic"
+  :expr "(list (coding-system-p 'utf-8) (coding-system-p nil) (coding-system-p t))"
+  :expected "(t t nil)"
+  :emacs :match)
+
+ (:name "coding-unibyte-char-to-multibyte-basic"
+  :expr "(list (unibyte-char-to-multibyte 161) (unibyte-char-to-multibyte 65) (unibyte-char-to-multibyte 128) (unibyte-char-to-multibyte 255))"
+  :expected "(4194209 65 4194176 4194303)"
+  :emacs :match)
+
+ (:name "coding-max-char-basic"
+  :expr "(list (max-char 'unicode) (max-char 'ascii) (max-char))"
+  :expected "(1114111 1114111 4194303)"
+  :emacs :match)
+
+ (:name "display-display-graphic-p-nil"
+  :expr "(display-graphic-p)"
+  :expected "nil"
   :emacs :match)
 
  (:name "strings-compare-strings-basic"
@@ -611,6 +676,16 @@
  (:name "windows-with-selected-window-noop"
   :expr "(let ((w (selected-window))) (with-selected-window w (eq (selected-window) w)))"
   :expected "t"
+  :emacs :match)
+
+ (:name "buffers-search-forward-basic"
+  :expr "(with-temp-buffer (insert \"abc abc\") (goto-char 1) (list (search-forward \"abc\") (point) (search-forward \"abc\" nil t) (point) (match-beginning 0) (match-end 0)))"
+  :expected "(4 4 8 8 5 8)"
+  :emacs :match)
+
+ (:name "buffers-insert-buffer-substring-basic"
+  :expr "(let ((a (get-buffer-create \"*A*\") ) (b (get-buffer-create \"*B*\"))) (with-current-buffer a (erase-buffer) (insert \"abc\")) (with-current-buffer b (erase-buffer) (insert \"x\") (insert-buffer-substring a 2 4) (buffer-string)))"
+  :expected "\"xbc\""
   :emacs :match)
 
  (:name "windows-minibuffer-selected-window-nil"

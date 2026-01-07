@@ -202,6 +202,100 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
     (error "ELISP:STRING-EMPTY-P expects a string, got: ~S" string))
   (zerop (length string)))
 
+(cl:defun string-collate-lessp (string1 string2 &optional _locale ignore-case)
+  "Bring-up subset of ELisp `string-collate-lessp'."
+  (declare (cl:ignore _locale ignore-case))
+  (unless (and (stringp string1) (stringp string2))
+    (error "ELISP:STRING-COLLATE-LESSP expects strings, got: ~S ~S" string1 string2))
+  ;; For bring-up, ignore locale/case and use codepoint ordering.
+  (and (string< (string-to-multibyte string1)
+                (string-to-multibyte string2))
+       t))
+
+(cl:defun number-to-string (number)
+  "Bring-up subset of ELisp `number-to-string'."
+  (unless (numberp number)
+    (error "ELISP:NUMBER-TO-STRING expects a number, got: ~S" number))
+  (cond
+   ((integerp number)
+    (cl:format nil "~D" number))
+   ((floatp number)
+    (let* ((x (cl:coerce number 'double-float))
+           (abs (abs x))
+           ;; `number-to-string' uses fixed format for 1e-4 but exponent for 1e-5,
+           ;; and fixed format up through 1e14 but exponent for 1e15.  Because
+           ;; some floats don't round-trip exactly, use a small slack factor.
+           (small-threshold (* 1.0d-4 (- 1.0d0 1.0d-7)))
+           (large-threshold (* 1.0d15 (- 1.0d0 1.0d-7))))
+      (cond
+       ((= x 0.0d0) "0.0")
+       ((or (< abs small-threshold) (>= abs large-threshold))
+        (let* ((s (cl:string-trim '(#\Space) (cl:format nil "~E" (cl:coerce x 'single-float))))
+               (e-pos (position #\e s)))
+          (if (null e-pos)
+              s
+              (let* ((mant (subseq s 0 e-pos))
+                     (exp (subseq s (1+ e-pos)))
+                     (sign (if (and (> (length exp) 0)
+                                    (or (char= (char exp 0) #\+)
+                                        (char= (char exp 0) #\-)))
+                               (char exp 0)
+                               #\+))
+                     (digits (if (or (char= sign #\+) (char= sign #\-))
+                                 (subseq exp 1)
+                                 exp))
+                     (mant*
+                       (let ((m mant))
+                         (when (position #\. m)
+                           (loop while (and (> (length m) 0)
+                                            (char= (char m (1- (length m))) #\0))
+                                 do (setf m (subseq m 0 (1- (length m)))))
+                           (when (and (> (length m) 0)
+                                      (char= (char m (1- (length m))) #\.))
+                             (setf m (subseq m 0 (1- (length m))))))
+                         m))
+                     (d (cl:format nil "~D" (parse-integer digits)))
+                     (pad (if (< (length d) 2) (concatenate 'cl:string "0" d) d)))
+                (concatenate 'cl:string mant* "e" (string sign) pad)))))
+       (t
+        (let ((s (cl:format nil "~,7F" x)))
+          ;; Strip trailing zeros, but keep at least one digit after '.'.
+          (when (position #\. s)
+            (loop while (and (> (length s) 0) (char= (char s (1- (length s))) #\0))
+                  do (setf s (subseq s 0 (1- (length s)))))
+            (when (and (> (length s) 0) (char= (char s (1- (length s))) #\.))
+              (setf s (concatenate 'cl:string s "0"))))
+          s)))))
+   (t
+    (cl:format nil "~A" number))))
+
+(cl:defun string-replace (from-string to-string in-string)
+  "Bring-up subset of ELisp `string-replace'."
+  (unless (and (stringp from-string) (stringp to-string) (stringp in-string))
+    (error "ELISP:STRING-REPLACE expects strings, got: %S %S %S"
+           from-string to-string in-string))
+  (let ((from (%elisp-string->cl-string (string-to-multibyte from-string)))
+        (to (%elisp-string->cl-string (string-to-multibyte to-string)))
+        (in (string-to-multibyte in-string)))
+    (when (= (length from) 0)
+      (error "ELISP:STRING-REPLACE FROM-STRING must be non-empty"))
+    (let* ((s (%elisp-string->cl-string in))
+           (out
+             (cl:with-output-to-string (o)
+               (let ((pos 0))
+                 (loop for hit = (search from s :start2 pos) do
+                   (if (null hit)
+                       (progn
+                         (write-string (subseq s pos) o)
+                         (return))
+                       (progn
+                         (write-string (subseq s pos hit) o)
+                         (write-string to o)
+                         (setf pos (+ hit (length from))))))))))
+      (if (unibyte-string-p in-string)
+          (or (ignore-errors (string-to-unibyte out)) out)
+          out))))
+
 (cl:defun string-trim-left (string &optional regexp)
   "Bring-up subset of ELisp `string-trim-left'."
   (unless (stringp string)

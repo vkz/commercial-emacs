@@ -28,6 +28,8 @@
 (cl:defvar exec-path (%initial-exec-path))
 (cl:defvar exec-suffixes (list ""))
 
+(cl:defvar buffer-file-truename nil)
+
 (cl:defun file-name-quote (name &optional _top)
   "Bring-up stub for ELisp `file-name-quote'.
 
@@ -189,6 +191,80 @@ plain `.el' files by searching `load-path' and evaluating the file via
   (and (file-exists-p filename)
        (not (file-directory-p filename))
        t))
+
+(cl:defun file-name-absolute-p (file)
+  "Bring-up subset of the C primitive `file-name-absolute-p'."
+  (let ((s (%file-name->cl-string file)))
+    (and (> (length s) 0)
+         (or (char= (char s 0) #\/)
+             (char= (char s 0) #\~))
+         t)))
+
+(cl:defun file-name-extension (filename &optional period)
+  "Bring-up subset of ELisp `file-name-extension'."
+  (let* ((s0 (%file-name->cl-string filename))
+         ;; Emacs ignores a trailing backup suffix.
+         (s (if (and (> (length s0) 0) (char= (char s0 (1- (length s0))) #\~))
+                (subseq s0 0 (1- (length s0)))
+                s0))
+         (slash (or (position #\/ s :from-end t) -1))
+         (dot (position #\. s :from-end t)))
+    (cond
+     ((or (null dot) (<= dot slash))
+      nil)
+     (t
+      (let ((ext (subseq s (1+ dot))))
+        (if period
+            (concatenate 'cl:string "." ext)
+            ext))))))
+
+(cl:defun file-name-directory (filename)
+  "Bring-up subset of ELisp `file-name-directory'."
+  (let* ((is-unibyte (unibyte-string-p filename))
+         (s (%file-name->cl-string filename))
+         (pos1 (position #\/ s :from-end t))
+         (pos2 (position #\\ s :from-end t))
+         (pos (cond
+               ((and pos1 pos2) (max pos1 pos2))
+               (pos1 pos1)
+               (pos2 pos2)
+               (t nil))))
+    (when (null pos)
+      (return-from file-name-directory nil))
+    (let ((dir (subseq s 0 (1+ pos))))
+      (if is-unibyte (string-to-unibyte dir) dir))))
+
+(cl:defun file-name-nondirectory (filename)
+  "Bring-up subset of ELisp `file-name-nondirectory'."
+  (let* ((is-unibyte (unibyte-string-p filename))
+         (s (%file-name->cl-string filename))
+         (pos1 (position #\/ s :from-end t))
+         (pos2 (position #\\ s :from-end t))
+         (pos (cond
+               ((and pos1 pos2) (max pos1 pos2))
+               (pos1 pos1)
+               (pos2 pos2)
+               (t nil))))
+    (let ((base
+            (cond
+             ((null pos) s)
+             ((= pos (1- (length s))) "")
+             (t (subseq s (1+ pos))))))
+      (if is-unibyte (string-to-unibyte base) base))))
+
+(cl:defun file-truename (filename)
+  "Bring-up subset of the C primitive `file-truename'."
+  (let* ((s (%file-name->cl-string filename))
+         (expanded (expand-file-name s))
+         (p (or (probe-file expanded)
+                (error "ELISP:FILE-TRUENAME no such file or directory: %S" filename)))
+         (tn (truename p))
+         (out (namestring tn)))
+    ;; Normalize: avoid a trailing slash for directories (matches Emacs).
+    (when (and (> (length out) 1)
+               (char= (char out (1- (length out))) #\/))
+      (setf out (subseq out 0 (1- (length out)))))
+    out))
 
 (cl:defun file-size-human-readable (file-size &optional flavor space unit)
   "Bring-up subset of ELisp `file-size-human-readable'."

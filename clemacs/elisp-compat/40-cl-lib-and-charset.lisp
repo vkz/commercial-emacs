@@ -663,6 +663,86 @@ VARIABLE is a string name.  ENVIRONMENT, when non-nil, is treated like an ELisp
 
 (cl:defvar locale-coding-system nil)
 
+(cl:defvar current-language-environment "English")
+(cl:defvar selection-coding-system nil)
+(cl:defvar terminal-coding-system nil)
+
+(cl:defun coding-system-p (object)
+  "Bring-up stub for the C primitive `coding-system-p'."
+  ;; Emacs treats nil as a valid coding system (meaning: use defaults).
+  (or (null object)
+      (and (symbolp object) (not (eq object t)) t)))
+
+(cl:defun display-graphic-p (&optional _frame)
+  "Bring-up stub for the C primitive `display-graphic-p'."
+  (declare (cl:ignore _frame))
+  nil)
+
+(cl:defun terminal-coding-system (&optional _terminal)
+  "Bring-up subset of ELisp `terminal-coding-system'."
+  (declare (cl:ignore _terminal))
+  terminal-coding-system)
+
+(cl:defun set-terminal-coding-system (coding-system &optional _terminal)
+  "Bring-up subset of ELisp `set-terminal-coding-system'."
+  (declare (cl:ignore _terminal))
+  (setf terminal-coding-system coding-system)
+  coding-system)
+
+(cl:defun set-selection-coding-system (coding-system &optional _terminal)
+  "Bring-up subset of ELisp `set-selection-coding-system'."
+  (declare (cl:ignore _terminal))
+  (setf selection-coding-system coding-system)
+  coding-system)
+
+(cl:defun prefer-coding-system (coding-system)
+  "Bring-up subset of ELisp `prefer-coding-system'."
+  (setf locale-coding-system coding-system)
+  coding-system)
+
+(cl:defun set-locale-environment (locale)
+  "Bring-up stub for ELisp `set-locale-environment'."
+  (setf system-time-locale locale)
+  locale)
+
+(cl:defun set-language-environment (language)
+  "Bring-up subset of ELisp `set-language-environment'."
+  (setf current-language-environment language)
+  language)
+
+(cl:defun standard-display-european-internal (&rest _args)
+  "Bring-up stub for ELisp `standard-display-european-internal'."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun unibyte-char-to-multibyte (char)
+  "Bring-up subset of ELisp `unibyte-char-to-multibyte'."
+  (unless (integerp char)
+    (error "ELISP:UNIBYTE-CHAR-TO-MULTIBYTE expects an integer char code, got: ~S" char))
+  (unless (<= 0 char 255)
+    (error "ELISP:UNIBYTE-CHAR-TO-MULTIBYTE expects 0..255, got: ~S" char))
+  (if (<= char 127)
+      char
+      (+ #x3FFF00 char)))
+
+(cl:defun max-char (&optional charset)
+  "Bring-up subset of the C primitive `max-char'."
+  (cond
+   ((null charset) #x3FFFFF)
+   (t #x10FFFF)))
+
+(cl:defun char-displayable-p (char &optional _display)
+  "Bring-up subset of ELisp `char-displayable-p'."
+  (declare (cl:ignore _display))
+  (let ((code (typecase char
+                (integer char)
+                (character (char-code char))
+                (t (return-from char-displayable-p nil)))))
+    (and (<= 0 code (max-char 'unicode))
+         ;; Treat NUL and other control chars as non-displayable.
+         (or (>= code 32) (member code '(9 10 13)))
+         t)))
+
 (cl:defvar system-time-locale nil)
 
 (cl:defvar init-file-user nil)

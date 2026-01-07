@@ -240,6 +240,45 @@ This is used for ELisp `looking-at', which must not search forward past point."
       (setf *match-data* saved-md
             *match-source-string* saved-s))))
 
+(cl:defun replace-regexp-in-string (regexp rep string &optional fixedcase literal subexp start)
+  "Bring-up subset of ELisp `replace-regexp-in-string'."
+  (declare (cl:ignore fixedcase))
+  (unless (and (stringp regexp) (stringp string))
+    (error "ELISP:REPLACE-REGEXP-IN-STRING expects strings, got: %S %S" regexp string))
+  (let ((saved-md *match-data*)
+        (saved-s *match-source-string*))
+    (unwind-protect
+        (let* ((l (length string))
+               (pos (or start 0))
+               (pieces nil))
+          (unless (and (integerp pos) (<= 0 pos))
+            (error "ELISP:REPLACE-REGEXP-IN-STRING bad start: %S" start))
+          (loop while (and (< pos l) (string-match regexp string pos)) do
+            (let ((mb (match-beginning 0))
+                  (me (match-end 0)))
+              (unless (and (integerp mb) (integerp me))
+                (error "ELISP:REPLACE-REGEXP-IN-STRING internal: bad match bounds"))
+              ;; Ensure progress on empty matches.
+              (when (= me mb)
+                (setf me (min l (1+ mb))))
+              (push (substring string pos mb) pieces)
+              ;; Operate on the matched substring to keep match indices small.
+              ;; Translate match-data so `replace-match' sees match indices
+              ;; relative to STR.
+              (let ((str (substring string mb me)))
+                (match-data--translate (- mb))
+                (let* ((rep* (cond
+                              ((stringp rep) rep)
+                              ((functionp rep) (funcall rep (match-string 0 str)))
+                              (t (error "ELISP:REPLACE-REGEXP-IN-STRING bad REP: %S" rep))))
+                       (repl (replace-match rep* fixedcase literal str subexp)))
+                  (push repl pieces)))
+              (setf pos me)))
+          (push (substring string pos l) pieces)
+          (apply #'concat (nreverse pieces)))
+      (setf *match-data* saved-md
+            *match-source-string* saved-s))))
+
 (cl:defun regexp-quote (string &optional _lax)
   "Bring-up subset of the C primitive `regexp-quote'."
   (declare (cl:ignore _lax))
