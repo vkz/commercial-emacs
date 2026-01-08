@@ -40,27 +40,32 @@
   (:export #:run-smoke))
 
 (defpackage #:elisp
-  (:use #:cl)
-  (:shadow #:defmacro #:defun #:equal #:eval #:funcall #:function #:intern #:make-hash-table #:provide #:require #:setq
-           #:defvar #:defconst
-           #:make-symbol
-           #:gensym
-           #:functionp
-           #:make-list #:format
-           #:make-string
-           #:string
-           #:string-trim
-           #:load
-           #:+ #:-
-           #:ignore
-           #:1+ #:1-
-           #:append
-           #:member
-           #:mapcar
-           #:prin1 #:princ #:prin1-to-string #:princ-to-string #:read-from-string
-           #:read
+	  (:use #:cl)
+	  (:shadow #:defmacro #:defun #:equal #:eval #:funcall #:function #:intern #:make-hash-table #:provide #:require #:setq
+	           #:defvar #:defconst
+	           #:make-symbol
+	           #:gensym
+	           #:functionp
+	           #:make-list #:format
+	           #:make-string
+	           #:string
+	           #:string-trim
+	           #:load
+	           #:+ #:-
+	           #:ignore
+	           #:1+ #:1-
+	           #:append
+	           #:dolist
+	           #:member
+	           #:typep
+	           #:mapcar
+	           #:mapc
+	           #:map-into
+	           #:prin1 #:princ #:prin1-to-string #:princ-to-string #:read-from-string
+	           #:read
            #:string= #:string-equal
            #:aref
+           #:hash-table-test
            #:stringp
            #:vectorp
            #:characterp

@@ -1037,7 +1037,7 @@ Emacs clamps positions outside the buffer to the nearest valid position."
     (elisp-marker (%pos x))
     (integer x)
     (real x)
-    (t (error "ELISP: expected a number/marker, got: ~S" x))))
+    (t (signal 'wrong-type-argument (list 'number-or-marker-p x)))))
 
 (cl:defun prefix-numeric-value (raw)
   "Bring-up subset of ELisp `prefix-numeric-value'."
@@ -1400,6 +1400,24 @@ Emacs clamps positions outside the buffer to the nearest valid position."
           (%set-buffer-match-data ms me nil nil)
           (goto-char (1+ me)))))
     (point)))
+
+(cl:defun how-many (regexp &optional start end _interactive)
+  "Bring-up subset of ELisp `how-many'."
+  (declare (cl:ignore _interactive))
+  (unless (stringp regexp)
+    (error "ELISP:HOW-MANY expects a string, got: ~S" regexp))
+  (save-excursion
+    (when start (goto-char start))
+    (let ((count 0)
+          (lim (or end (point-max))))
+      (loop while (and (< (point) lim)
+                       (re-search-forward regexp lim t))
+            do (incf count))
+      count)))
+
+(cl:defun count-matches (regexp &optional start end)
+  "Bring-up subset of ELisp `count-matches' (alias of `how-many')."
+  (how-many regexp start end))
 
 (cl:defun replace-match (replacement &optional _fixedcase literal string subexp)
   "Bring-up subset of ELisp `replace-match'."

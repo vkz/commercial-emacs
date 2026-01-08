@@ -114,6 +114,12 @@ strings are CL strings."
 In ELisp, strings are arrays but *not* vectors."
   (and (cl:vectorp x) (not (stringp x)) t))
 
+(cl:defun sequencep (x)
+  "Bring-up subset of ELisp `sequencep'.
+
+In Emacs, a sequence is a list or an array (including strings)."
+  (and (or (listp x) (vectorp x) (stringp x)) t))
+
 (cl:defun multibyte-string-p (s)
   "Bring-up subset of the C primitive `multibyte-string-p'."
   (and (stringp s) (not (unibyte-string-p s)) t))
@@ -454,14 +460,50 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
         ;; Emacs Lisp supports `#s(NAME ...)` object literals (primarily from
         ;; cl-defstruct and printer roundtripping). In CL, `#s` reads a struct
         ;; instance, which breaks on unknown structure types while loading
-        ;; upstream ELisp tests. Treat it as an opaque self-evaluating object
-        ;; with a stable printed representation.
+        ;; upstream ELisp tests.
+        ;;
+        ;; For bring-up, we treat most literals as opaque self-evaluating
+        ;; objects with a stable printed representation, but we special-case
+        ;; a few core runtime literals that upstream tests rely on, like
+        ;; `#s(hash-table ...)`.
         (flet ((read-struct-literal (stream subchar arg)
                  (declare (cl:ignore subchar arg))
                  (let ((form (cl:read stream t nil t)))
                    (unless (and (consp form) (symbolp (car form)))
                      (cl:error "ELISP: invalid #s literal: ~S" form))
-                   (make-elisp-struct-literal :name (car form) :fields (cdr form)))))
+                   (let* ((name (car form))
+                          (fields (cdr form)))
+                     (labels ((plist-get* (plist key)
+                                (loop for (k v) on plist by #'cddr
+                                      when (eq k key) do (return v)
+                                      finally (return :missing)))
+                              (even-plist-p (plist)
+                                (loop for xs = plist then (cddr xs)
+                                      while (consp xs) do
+                                        (unless (consp (cdr xs))
+                                          (return nil))
+                                      finally (return (null xs)))))
+                       (cond
+                        ;; Emacs prints hash-tables readably as:
+                        ;;   #s(hash-table test equal data (k1 v1 k2 v2))
+                        ;; Parse the common subset we need for upstream tests.
+                        ((and (eq name 'hash-table) (even-plist-p fields))
+                         (let* ((test (plist-get* fields 'test))
+                                (data (plist-get* fields 'data))
+                                (test*
+                                  (cond
+                                   ((or (eq test :missing) (null test)) 'eql)
+                                   ((memq test '(eq eql equal equalp)) test)
+                                   (t 'eql)))
+                                (ht (cl:make-hash-table :test test*)))
+                           (when (and (not (eq data :missing)) (consp data))
+                             (unless (even-plist-p data)
+                               (cl:error "ELISP: invalid #s(hash-table ...) data: ~S" data))
+                             (loop for (k v) on data by #'cddr do
+                               (setf (gethash k ht) v)))
+                           ht))
+                        (t
+                         (make-elisp-struct-literal :name name :fields fields))))))))
           (set-dispatch-macro-character #\# #\s #'read-struct-literal rt)
           (set-dispatch-macro-character #\# #\S #'read-struct-literal rt))
         (set-macro-character

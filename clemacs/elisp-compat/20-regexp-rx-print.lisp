@@ -4,7 +4,7 @@
 
 (cl:defvar lexical-binding t)
 
-(cl:defvar case-fold-search nil)
+(cl:defvar case-fold-search t)
 
 (defvar *match-data* nil)
 (defvar *match-source-string* nil)
@@ -811,6 +811,20 @@ match to Elisp than CL:EQUAL.
        (t nil)))
     (apply #'cl:make-hash-table out)))
 
+(cl:defun hash-table-test (table)
+  "Bring-up subset of the C primitive `hash-table-test'."
+  (unless (cl:hash-table-p table)
+    (signal 'wrong-type-argument (list 'hash-table-p table)))
+  (let ((test (cl:hash-table-test table)))
+    ;; clemacs currently maps ELisp `equal' to CL:EQUALP to approximate Emacs
+    ;; vector semantics.  Expose the ELisp surface test name here so upstream
+    ;; tests comparing against #'equal still pass.
+    (cond
+     ((eq test 'cl:eq) 'eq)
+     ((eq test 'cl:eql) 'eql)
+     ((or (eq test 'cl:equal) (eq test 'cl:equalp)) 'equal)
+     (t test))))
+
 (cl:defun puthash (key value table)
   "ELisp-ish PUTHASH."
   (setf (gethash key table) value)
@@ -928,6 +942,20 @@ terminates at the shortest sequence."
           (dolist (st states)
             (advance st)))
         (nreverse out)))))
+
+(cl:defun mapc (function &rest sequences)
+  "ELisp-ish MAPC.
+
+Like `mapcar', but return the first sequence and do not collect results."
+  (when (null sequences)
+    (error "ELISP:MAPC expects at least one sequence"))
+  (let ((first-seq (car sequences)))
+    (apply #'mapcar
+           (lambda (&rest args)
+             (apply #'funcall function args)
+             nil)
+           sequences)
+    first-seq))
 
 (cl:defun mapconcat (function sequence &optional separator)
   "Bring-up subset of ELisp `mapconcat'.

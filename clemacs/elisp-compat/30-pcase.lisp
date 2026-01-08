@@ -23,9 +23,11 @@
 
 This defines a pattern-macro expander for patterns of the form (NAME ...).
 
-We intentionally do not attach the expander via symbol properties yet; our
-current `pcase' implementation consults `*pcase--pattern-macroexpanders*'
-directly."
+For bring-up, we register the expander in two places:
+- `*pcase--pattern-macroexpanders*' for the early CL-side `pcase' subset.
+- The `pcase-macroexpander' symbol property, so upstream `pcase.el' (when
+  loaded later) can reuse expanders that were defined earlier (notably
+  `cl-macs.el' defines the `cl-type' pattern before `pcase.el' is loaded)."
   (let ((doc-form
           (and body
                (or (cl:stringp (car body)) (cl:vectorp (car body)))
@@ -43,6 +45,7 @@ directly."
            ,@(when doc-string (list doc-string))
            ,@body)
          (setf (gethash ',name *pcase--pattern-macroexpanders*) #',fsym)
+         (setf (get ',name 'pcase-macroexpander) #',fsym)
          ',name))))
 
 (cl:defun %pcase--dontcare-p (pat)
@@ -295,7 +298,8 @@ On mismatch, `return-from' FAIL-TAG with FAIL-VALUE."
 Supports destructuring patterns of the form:
 - SYMBOL (binds the whole value)
 - `_`/`t` (don't care)
-- backquote templates using `\, and `\,@ (from the ELisp reader)."
+- backquote templates using `\, and `\,@ (from the ELisp reader).
+- pattern macros defined via `pcase-defmacro' (e.g. `seq' from `seq.el')."
   (let ((forms body))
     (labels
         ((expand (bs)
@@ -309,33 +313,18 @@ Supports destructuring patterns of the form:
                   ((symbolp pat)
                    `(let ((,pat ,expr))
                       ,(expand (cdr bs))))
-                  ((%pcase--bq-form-p pat)
-                   (let ((tmp (gensym "PCASE-VALUE-")))
-                     (multiple-value-bind (ll checks subpatterns _vars)
-                         (%pcase--template->lambda-list (cadr pat))
-                       (declare (cl:ignore _vars))
-                       (let* ((fail-tag (gensym "PCASE-LET*-FAIL-"))
-                              (fail-marker (gensym "PCASE-LET*-MISMATCH-"))
-                              (k (expand (cdr bs))))
-                         (dolist (sp (reverse subpatterns))
-                           (destructuring-bind (var subpat) sp
-                             (setf k (%pcase--emit-match subpat var
-                                                         fail-tag `',fail-marker
-                                                         k))))
-                         `(let ((,tmp ,expr))
-                            (handler-case
-                                (destructuring-bind ,ll ,tmp
-                                  (unless (and ,@checks)
-                                    (error "pcase-let*: pattern mismatch: %S %S" ',pat ,tmp))
-                                  (let ((res (block ,fail-tag
-                                               ,k)))
-                                    (when (eq res ',fail-marker)
-                                      (error "pcase-let*: pattern mismatch: %S %S" ',pat ,tmp))
-                                    res))
-                              (cl:error ()
-                                (error "pcase-let*: pattern mismatch: %S %S" ',pat ,tmp))))))))
                   (t
-                   (cl:error "pcase-let*: unsupported pattern: ~S" pat)))))))
+                   (let* ((tmp (gensym "PCASE-VALUE-"))
+                          (fail-tag (gensym "PCASE-LET*-FAIL-"))
+                          (fail-marker (gensym "PCASE-LET*-MISMATCH-"))
+                          (k (expand (cdr bs)))
+                          (match-form
+                            (%pcase--emit-match pat tmp fail-tag `',fail-marker k)))
+                     `(let ((,tmp ,expr))
+                        (let ((res (block ,fail-tag ,match-form)))
+                          (when (eq res ',fail-marker)
+                            (error "pcase-let*: pattern mismatch: %S %S" ',pat ,tmp))
+                          res)))))))))
       (expand bindings))))
 
 (cl:defmacro pcase-let (bindings &rest body)
@@ -436,7 +425,24 @@ Records enough symbol properties for upstream ERT's `should-error':
           "Beginning of buffer")
     (seed 'end-of-buffer
           (list 'end-of-buffer 'error)
-          "End of buffer")))
+          "End of buffer")
+    ;; Common argument/type errors used by upstream tests and core libs.
+    (seed 'wrong-type-argument
+          (list 'wrong-type-argument 'error)
+          "Wrong type argument")
+    (seed 'args-out-of-range
+          (list 'args-out-of-range 'error)
+          "Args out of range")
+    ;; cl-generic condition names used by upstream tests (e.g. map.el).
+    (seed 'cl-no-applicable-method
+          (list 'cl-no-applicable-method 'error)
+          "No applicable method")
+    (seed 'cl-no-next-method
+          (list 'cl-no-next-method 'error)
+          "No next method")
+    (seed 'wrong-number-of-arguments
+          (list 'wrong-number-of-arguments 'error)
+          "Wrong number of arguments")))
 
 (cl:defmacro cl-assert (form &rest _args)
   "Bring-up subset of cl-lib's `cl-assert'.

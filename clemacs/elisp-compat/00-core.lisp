@@ -66,6 +66,22 @@
   "Bring-up subset of ELisp `bound-and-true-p'."
   `(and (cl:boundp ',var) ,var))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Upstream `pcase.el` uses `pure`/`side-effect-free` symbol properties to
+  ;; reason about predicates during macroexpansion (e.g. quote-branch
+  ;; elimination in `pcase-tests-quote-optimization`).
+  (cl:dolist (sym '(consp
+                    symbolp
+                    keywordp
+                    stringp
+                    vectorp
+                    functionp
+                    compiled-function-p
+                    symbol-with-pos-p))
+    (setf (get sym 'side-effect-free) t)
+    (setf (get sym 'pure) t)
+    (setf (get sym 'error-free) t)))
+
 (cl:defmacro interactive (&rest _spec)
   "Bring-up stub for ELisp `interactive'.
 
@@ -99,9 +115,47 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
      (t
       `(cl:defvar ,var ,init ,doc*)))))
 
+(cl:defmacro dolist (spec &body body)
+  "Bring-up subset of ELisp `dolist'."
+  (destructuring-bind (var list-form &optional result) spec
+    (unless (symbolp var)
+      (error "ELISP:DOLIST expects a symbol var, got: %S" var))
+    (let ((tail (cl:gensym "DOLIST-TAIL-")))
+      `(cl:block nil
+         (let ((,tail ,list-form)
+               (,var nil))
+           (cl:tagbody
+            start
+              (when (endp ,tail)
+                (go end))
+              (setf ,var (car ,tail))
+              (setf ,tail (cdr ,tail))
+              ,@body
+              (go start)
+            end)
+           (setf ,var nil)
+           ,result)))))
+
 (cl:defun symbol-name (sym)
   "ELisp-ish SYMBOL-NAME that returns lowercase names by default."
-  (let* ((name (string-downcase (cl:symbol-name sym))))
+  (let* ((pkg (cl:symbol-package sym))
+         (base (string-downcase (cl:symbol-name sym)))
+         (name
+           (cond
+            ;; In Emacs, (symbol-name :foo) => \":foo\".
+            ((and pkg (eq pkg (find-package "KEYWORD")))
+             (concatenate 'cl:string ":" base))
+            ;; Emacs Lisp has no CL package prefixes, but clemacs uses CL
+            ;; packages as a bring-up hack for symbols like GUI:bottom; preserve
+            ;; the original surface spelling for those.
+            ((and pkg
+                  (not (eq pkg (find-package "ELISP")))
+                  (not (eq pkg (find-package "CL"))))
+             (concatenate 'cl:string
+                          (string-downcase (cl:package-name pkg))
+                          ":"
+                          base))
+            (t base))))
     ;; Emacs returns unibyte strings for ASCII-only symbol names.
     (if (every (lambda (ch) (< (char-code ch) 128)) name)
         (let ((out (%make-unibyte-string (length name))))

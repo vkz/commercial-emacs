@@ -702,11 +702,41 @@ a specific leaf type.  Which bit represents which type is unspecified.")
 
 ;; Extra predicates
 (defun pcase--mutually-exclusive-p (pred1 pred2)
-  (let ((subtypes1 (gethash pred1 pcase--subtype-bitsets)))
-    (when subtypes1
-      (let ((subtypes2 (gethash pred2 pcase--subtype-bitsets)))
-        (when subtypes2
-          (zerop (logand subtypes1 subtypes2)))))))
+  (let* ((subtypes1 (gethash pred1 pcase--subtype-bitsets))
+         (subtypes2 (gethash pred2 pcase--subtype-bitsets)))
+    (cond
+     ((and subtypes1 subtypes2)
+      (zerop (logand subtypes1 subtypes2)))
+     ;; Early bootstrap under clemacs: we don't currently have the built-in
+     ;; class lattice used to populate `pcase--subtype-bitsets'.  Provide a
+     ;; small heuristic fallback for predicates used by `pcase-tests.el'.
+     ((and (hash-table-p pcase--subtype-bitsets)
+           (zerop (hash-table-count pcase--subtype-bitsets)))
+      (cond
+       ;; `functionp' can be true for lambda expressions (cons cells), so it is
+       ;; not mutually exclusive with `consp'.
+       ((or (and (eq pred1 'functionp) (eq pred2 'consp))
+            (and (eq pred2 'functionp) (eq pred1 'consp)))
+        nil)
+       ((or (and (eq pred1 'functionp) (eq pred2 'stringp))
+            (and (eq pred2 'functionp) (eq pred1 'stringp)))
+        t)
+       ((or (and (eq pred1 'compiled-function-p) (eq pred2 'consp))
+            (and (eq pred2 'compiled-function-p) (eq pred1 'consp)))
+        t)
+       ;; Keywords are symbols, so not mutually exclusive with `symbolp'
+       ;; nor `symbol-with-pos-p' (which can include plain symbols).
+       ((or (and (eq pred1 'keywordp) (eq pred2 'symbolp))
+            (and (eq pred2 'keywordp) (eq pred1 'symbolp)))
+        nil)
+       ((or (and (eq pred1 'keywordp) (eq pred2 'symbol-with-pos-p))
+            (and (eq pred2 'keywordp) (eq pred1 'symbol-with-pos-p)))
+        nil)
+       ((or (and (eq pred1 'keywordp) (eq pred2 'stringp))
+            (and (eq pred2 'keywordp) (eq pred1 'stringp)))
+        t)
+       (t nil)))
+     (t nil))))
 
 (defun pcase--split-match (sym splitter match)
   (cond

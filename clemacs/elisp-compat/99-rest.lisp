@@ -27,22 +27,39 @@
 
 (cl:defun aset (array idx value)
   "ELisp-ish ASET."
-  (cond
-   ((unibyte-string-p array)
-    (unless (integerp value)
-      (error "ELISP:ASET expects character code for unibyte string, got: %S" value))
-    (unless (and (integerp value) (<= 0 value 255))
-      (error "ELISP:ASET unibyte string code out of range: %S" value))
-    (setf (aref array idx) value)
-    value)
-   ((cl:stringp array)
-    (unless (integerp value)
-      (error "ELISP:ASET expects character code for string, got: %S" value))
-    (setf (char array idx) (%elisp-code->char value))
-    value)
-   (t
-    (setf (aref array idx) value)
-    value)))
+  (labels ((bad-index ()
+             (signal 'args-out-of-range (list array idx))))
+    (cond
+     ((unibyte-string-p array)
+      (unless (integerp idx)
+        (signal 'wrong-type-argument (list 'integerp idx)))
+      (unless (integerp value)
+        (error "ELISP:ASET expects character code for unibyte string, got: %S" value))
+      (unless (and (integerp value) (<= 0 value 255))
+        (error "ELISP:ASET unibyte string code out of range: %S" value))
+      (handler-case
+          (setf (aref array idx) value)
+        #+sbcl
+        (sb-int:invalid-array-index-error () (bad-index)))
+      value)
+     ((cl:stringp array)
+      (unless (integerp idx)
+        (signal 'wrong-type-argument (list 'integerp idx)))
+      (unless (integerp value)
+        (error "ELISP:ASET expects character code for string, got: %S" value))
+      (handler-case
+          (setf (char array idx) (%elisp-code->char value))
+        #+sbcl
+        (sb-int:invalid-array-index-error () (bad-index)))
+      value)
+     (t
+      (unless (integerp idx)
+        (signal 'wrong-type-argument (list 'integerp idx)))
+      (handler-case
+          (setf (aref array idx) value)
+        #+sbcl
+        (sb-int:invalid-array-index-error () (bad-index)))
+      value))))
 
 (cl:defun use-global-map (keymap)
   "Extremely small stub for ELisp `use-global-map'."
@@ -334,6 +351,11 @@ and ignores the FRAME argument."
     (maphash (lambda (k v) (setf (gethash k copy) v)) ht)
     copy))
 
+(cl:defun copy-hash-table (table &optional _copy-keys _copy-values)
+  "Bring-up subset of ELisp `copy-hash-table'."
+  (declare (cl:ignore _copy-keys _copy-values))
+  (%copy-hash-table table))
+
 (cl:defun map-insert (map key value)
   "Bring-up subset of ELisp `map-insert'.
 
@@ -427,14 +449,66 @@ If NAME lives in the CL package, ignore the definition."
   `(progn ,@body))
 
 (cl:defun set-advertised-calling-convention (&rest _args)
-  "Stub for ELisp `set-advertised-calling-convention'."
+  "Bring-up subset of ELisp `set-advertised-calling-convention'.
+
+Supports the usage exercised by `map-tests.el' via `cl-defgeneric' declares."
   (declare (cl:ignore _args))
-  nil)
+  (destructuring-bind (function arglist &optional _version &rest _rest) _args
+    (declare (cl:ignore _version _rest))
+    (labels ((function-name-symbol (fn)
+               (cond
+                ((symbolp fn) fn)
+                #+sbcl
+                ((typep fn 'cl:generic-function)
+                 (let ((nm (sb-mop:generic-function-name fn)))
+                   (and (symbolp nm) nm)))
+                (t
+                 (multiple-value-bind (_lambda _closed name)
+                     (cl:function-lambda-expression fn)
+                   (declare (cl:ignore _lambda _closed))
+                   (and (symbolp name) name))))))
+      (let ((sym (function-name-symbol function)))
+        (when sym
+          (function-put sym 'advertised-calling-convention arglist))
+        arglist))))
 
 (cl:defun get-advertised-calling-convention (&rest _args)
-  "Stub for ELisp `get-advertised-calling-convention'."
+  "Bring-up subset of ELisp `get-advertised-calling-convention'."
   (declare (cl:ignore _args))
-  nil)
+  (destructuring-bind (function &optional _argspec &rest _rest) _args
+    (declare (cl:ignore _argspec _rest))
+    (labels ((function-name-symbol (fn)
+               (cond
+                ((symbolp fn) fn)
+                #+sbcl
+                ((typep fn 'cl:generic-function)
+                 (let ((nm (sb-mop:generic-function-name fn)))
+                   (and (symbolp nm) nm)))
+                (t
+                 (multiple-value-bind (_lambda _closed name)
+                     (cl:function-lambda-expression fn)
+                   (declare (cl:ignore _lambda _closed))
+                   (and (symbolp name) name))))))
+      (let* ((sym (function-name-symbol function))
+             (stored (and sym (function-get sym 'advertised-calling-convention))))
+        (or stored
+            ;; Heuristic fallback: for the core `map.el` generics the only
+            ;; advertised signature differences are deprecated trailing
+            ;; `testfn` args.  When we don't have the stored advertised
+            ;; convention, derive a best-effort value from the generic lambda
+            ;; list.
+            #+sbcl
+            (when (typep function 'cl:generic-function)
+              (let* ((ll (copy-list (sb-mop:generic-function-lambda-list function))))
+                (when (and ll
+                           (symbolp (car (last ll)))
+                           (cl:string-equal "TESTFN" (cl:symbol-name (car (last ll)))))
+                  (setf ll (butlast ll))
+                  (when (and ll
+                             (symbolp (car (last ll)))
+                             (cl:string-equal "&OPTIONAL" (cl:symbol-name (car (last ll)))))
+                    (setf ll (butlast ll))))
+                ll)))))))
 
 (cl:defun make-obsolete-variable (&rest _args)
   "Stub for ELisp `make-obsolete-variable'."
@@ -1146,20 +1220,48 @@ When PREDICATE is non-nil, use it to compare property keys (Emacs 29+)."
   (let ((pred (or predicate #'eq))
         (p plist))
     (loop while (consp p) do
+      (unless (consp (cdr p))
+        (signal 'wrong-type-argument (list 'plistp plist)))
       (when (funcall pred (car p) prop)
         (setf (cadr p) value)
         (return-from plist-put plist))
       (setf p (cddr p)))
-    (list* prop value plist)))
+    ;; If we fell off the end via an improper tail (e.g. (a 1 . b)), treat it
+    ;; as a malformed plist for insertion and signal instead of mutating it.
+    (when p
+      (signal 'wrong-type-argument (list 'plistp plist)))
+    (cond
+     ((null plist)
+      (list prop value))
+     (t
+      ;; Destructively append so callers like `map-put!' don't need to replace
+      ;; the head pointer of PLIST.
+      (let ((tail plist))
+        (loop while (consp (cdr tail)) do (setf tail (cdr tail)))
+        (setf (cdr tail) (list prop value))
+        plist)))))
 
-(cl:defun plist-member (plist prop)
-  "Bring-up subset of ELisp `plist-member'."
-  (let ((p plist))
-    (loop while (consp p) do
-      (when (eq (car p) prop)
+(cl:defun plist-member (plist prop &optional predicate)
+  "Bring-up subset of ELisp `plist-member'.
+
+When PREDICATE is non-nil, use it to compare property keys (Emacs 29+)."
+  (let ((pred (or predicate #'eq))
+        (p plist))
+    (loop
+      (cond
+       ((null p) (return nil))
+       ((not (consp p))
+        (signal 'wrong-type-argument (list 'plistp plist)))
+       ((funcall pred (car p) prop)
         (return p))
-      (setf p (cddr p))
-      finally (return nil))))
+       ((null (cdr p))
+        ;; Odd length: treat as terminated.
+        (return nil))
+       ((not (consp (cdr p)))
+        ;; Improper tail: signal if we didn't match above.
+        (signal 'wrong-type-argument (list 'plistp plist)))
+       (t
+        (setf p (cddr p)))))))
 
 (cl:defun setcdr (cell newcdr)
   "ELisp-ish SETCDR."
@@ -1260,6 +1362,38 @@ When PREDICATE is non-nil, use it to compare property keys (Emacs 29+)."
             ,alist-store-form)
           ,new)
        `(alist-get ,k ,alist-access ,d ,r ,tf)))))
+
+(cl:define-setf-expander map-elt (map key &optional default testfn &environment env)
+  "CL:SETF expansion for ELisp `map-elt'.
+
+This is an approximation of `map.el`'s gv-expander, expressed as a Common Lisp
+setf expander so it works even when ELisp `setf` isn't available."
+  (multiple-value-bind (map-temps map-vals map-store-vars map-store-form map-access)
+      (cl:get-setf-expansion map env)
+    (let ((k (gensym "KEY"))
+          (d (gensym "DEFAULT"))
+          (tf (gensym "TESTFN"))
+          (new (gensym "NEW"))
+          (map-var (gensym "MAP")))
+      (cl:values
+       (append map-temps (list k d tf))
+       (append map-vals (list key default testfn))
+       (list new)
+       `(let* ((,map-var ,map-access))
+          (handler-case
+              (progn
+                (map-put! ,map-var ,k ,new ,tf)
+                (let (,@(loop for sv in map-store-vars collect `(,sv ,map-var)))
+                  ,map-store-form)
+                ,new)
+            (elisp-signal (e)
+              (if (eq (elisp-signal-symbol e) 'map-not-inplace)
+                  (let* ((,map-var (map-insert ,map-var ,k ,new)))
+                    (let (,@(loop for sv in map-store-vars collect `(,sv ,map-var)))
+                      ,map-store-form)
+                    ,new)
+                  (cl:error e)))))
+       `(map-elt ,map-access ,k ,d ,tf)))))
 
 (cl:defun memq (elt list)
   "ELisp-ish MEMQ."

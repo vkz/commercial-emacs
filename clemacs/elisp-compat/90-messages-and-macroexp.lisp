@@ -169,12 +169,28 @@ FORM.  For bring-up, suppress the warning and return FORM."
 (cl:defun %clemacs-macroexpand-1 (form &optional env)
   "Bring-up subset of ELisp `macroexpand-1'.
 
-If ENV is an Emacs-style macro environment (an alist), ignore it: SBCL's
-`macroexpand-1' expects a lexical environment object or NIL."
+If ENV is an Emacs-style macro environment (an alist), honor the subset we
+need for bring-up:
+- local macros from `cl-macrolet' (NAME . EXPANDER)
+- local FUNCTION-designator rewrite hooks (via a `function' env expander)."
   ;; In upstream ELisp, `function' is a special operator and is not subject to
   ;; macroexpansion.  In clemacs bring-up, we implement it as a macro for
   ;; pragmatic interop, so suppress its expansion here to match ELisp callers
   ;; (notably `cl-generic') which pattern-match on `#'' forms.
+  (when (and (listp env) (consp form) (symbolp (car form)))
+    (let* ((head (car form))
+           (binding (cl:assoc head env :test #'eq))
+           (expander (and binding (cdr binding))))
+      (when (and expander (or (cl:functionp expander) (symbolp expander)))
+        ;; `cl-labels' installs a special expander for FUNCTION so
+        ;; (function F) and #'F resolve through local bindings.
+        (when (and (or (eq head 'function) (eq head 'cl:function))
+                   (consp (cdr form))
+                   (null (cddr form)))
+          (return-from %clemacs-macroexpand-1
+            (cl:values (funcall expander (cadr form)) t)))
+        (return-from %clemacs-macroexpand-1
+          (cl:values (cl:apply expander (cdr form)) t)))))
   (if (and (consp form)
            (symbolp (car form))
            (eq (car form) 'function))
@@ -527,6 +543,12 @@ This is sufficient for `letrec' in `lisp/subr.el' during ERT bring-up."
                  (case (car x)
                    ((setq)
                     (return-from expand-1 (cl:values x nil)))
+                   ((loop)
+                    ;; Avoid deep expansion of SBCL's CL:LOOP into SB-LOOP
+                    ;; TAGBODY forms: those expansions can include SBCL-internal
+                    ;; non-ANSI type specifiers (e.g. (if real number)), which
+                    ;; then trip runtime type checks under clemacs.
+                    (return-from expand-1 (cl:values x nil)))
                    ((function cl:function)
                     ;; In upstream ELisp, `function' is a special operator, but
                     ;; `cl-flet' / `cl-labels' install an ENV expander for it.
@@ -571,16 +593,28 @@ This is sufficient for `letrec' in `lisp/subr.el' during ERT bring-up."
                    (cond
                     ((atom x) x)
                     ;; Do not macroexpand under QUOTE.
-                    ((and (consp x) (eq (car x) 'quote) (consp (cdr x)) (null (cddr x)))
+                   ((and (consp x) (eq (car x) 'quote) (consp (cdr x)) (null (cddr x)))
                      x)
-                    ;; Expand under FUNCTION only far enough to let ENV rewrite
-                    ;; (function F) references (cl-labels); don't traverse inside
-                    ;; arbitrary function objects.
+                    ;; Do not traverse into CL:LOOP clause syntax.  Once we stop
+                    ;; expanding CL:LOOP itself (see EXPAND-1), a naive cons-tree
+                    ;; walk would treat keywords like DO as macro calls.
+                    ((and (consp x) (eq (car x) 'loop))
+                     x)
+                    ;; Expand under FUNCTION for lambda expressions so local
+                    ;; macro expanders (notably `cl-macrolet') can rewrite their
+                    ;; bodies.  Still avoid traversing inside (function SYMBOL)
+                    ;; and other arbitrary function objects.
                     ((and (consp x)
                           (or (eq (car x) 'function) (eq (car x) 'cl:function))
                           (consp (cdr x))
                           (null (cddr x)))
-                     x)
+                     (let ((arg (cadr x)))
+                       (if (and (consp arg) (eq (car arg) 'lambda))
+                           (list (car x)
+                                 (cons 'lambda
+                                       (cons (cadr arg)
+                                             (mapcar #'rw (cddr arg)))))
+                           x)))
                     ;; General cons rewrite: preserve dotted lists.
                     (t (cons (rw (car x)) (rw (cdr x))))))))))
       (rw form))))
@@ -671,9 +705,18 @@ Binds VAR (when non-nil) to an ELisp-style error datum:
                                (finish-output *error-output*)))
                            (throw ',tag
                              (list :err
-                                   (cond
-                                    ((typep ,e 'arithmetic-error)
-                                     (cons 'arith-error (list ,e)))
+	                                   (cond
+	                                    ((typep ,e 'arithmetic-error)
+	                                     (cons 'arith-error (list ,e)))
+	                                    #+sbcl
+	                                    ((typep ,e 'sb-kernel::arg-count-error)
+	                                     (cons 'wrong-number-of-arguments (list ,e)))
+	                                    #+sbcl
+	                                    ((typep ,e 'sb-pcl::no-applicable-method-error)
+	                                     (cons 'cl-no-applicable-method (list ,e)))
+	                                    #+sbcl
+	                                    ((typep ,e 'sb-pcl::no-next-method-error)
+                                     (cons 'cl-no-next-method (list ,e)))
                                     (t
                                      (cons 'error (list ,e))))))))))
                   (list :ok ,bodyform)))))

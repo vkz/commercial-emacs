@@ -63,16 +63,18 @@
   "Bring-up subset of cl-lib's `cl-plusp'."
   (and (numberp x) (> x 0)))
 
-(cl:defmacro cl-macrolet (bindings &body body &environment env0)
+(cl:defmacro cl-macrolet (bindings &body body &environment _env0)
   "Bring-up subset of cl-lib's `cl-macrolet'.
 
 ERT's `should' macro calls `macroexpand-all' and passes
 `macroexpand-all-environment'.  In Emacs, `cl-macrolet' extends that
 environment with its locally-bound macros.
 
-In CL, the body is macroexpanded/compiled before any runtime LET bindings
-exist, so we do the binding at macroexpansion time and pre-expand BODY under
-an augmented SBCL lexical environment."
+In clemacs, `macroexpand-all-environment' is an Emacs-style macro env alist
+(as expected by `lisp/emacs-lisp/macroexp.el').  Extend that env and fully
+macroexpand BODY so locally-defined macros are expanded inside the expansions
+of other macros (bug#46786 / `pcase-tests-bug46786')."
+  (declare (cl:ignore _env0))
   (labels
       ((normalize-lambda-list (lambda-list)
          (labels ((rw (xs)
@@ -103,21 +105,28 @@ an augmented SBCL lexical environment."
                                     `(progn ,@mbody))))
                  (list name
                        (cl:eval
-                        `(lambda (form env)
-                           (declare (ignorable form env))
-                           (let ((args (cdr form)))
-                             (declare (ignorable args))
-                             (destructuring-bind ,lambda-list args
-                               ,body-form)))))))))))
-    (let* ((macro-defs (mapcar #'binding->macro bindings))
-           (env1 (sb-cltl2:augment-environment env0 :macro macro-defs)))
+                        `(cl:function
+                          (lambda ,lambda-list
+                            ,body-form))))))))))
+    (let* ((macroexpanders (mapcar (lambda (binding)
+                                    (let ((m (binding->macro binding)))
+                                      (cons (car m) (cadr m))))
+                                  bindings))
+           (outer-env (if (listp macroexpand-all-environment)
+                          macroexpand-all-environment
+                          nil))
+           (env1 (append macroexpanders outer-env)))
       (let ((macroexpand-all-environment env1))
         (declare (special macroexpand-all-environment))
-        ;; Keep expansion shallow: we only need to macroexpand top-level forms
-        ;; so ERT's `should' macro sees `macroexpand-all-environment'.  A deep
-        ;; walker can easily break code that relies on backquote internals.
-        (let ((expanded-body (mapcar (lambda (f) (cl:macroexpand f env1)) body)))
-          `(progn ,@expanded-body))))))
+        ;; Prefer the clemacs-compatible `macroexpand-all' saved during core
+        ;; bring-up: upstream `macroexpand-all' can be loaded later and will
+        ;; overwrite the global function name.
+        (let ((body-form (macroexp-progn body)))
+          (cond
+           ((and (boundp '*macroexpand-all-compat*) *macroexpand-all-compat*)
+            (funcall *macroexpand-all-compat* body-form env1))
+           (t
+            (macroexpand-all body-form env1))))))))
 
 (cl:defmacro cl-flet (bindings &body body)
   "Bring-up subset of cl-lib's `cl-flet'.
@@ -197,6 +206,21 @@ where TARGET evaluates to a callable object."
   "Bring-up subset of cl-lib's `cl-reduce'."
   (apply #'cl:reduce function sequence keys))
 
+(cl:defun cl-some (predicate sequence &rest sequences)
+  "Bring-up subset of cl-lib's `cl-some'."
+  (let ((result nil)
+        (foundp nil))
+    (apply #'mapc
+           (lambda (&rest args)
+             (unless foundp
+               (let ((v (apply #'funcall predicate args)))
+                 (when v
+                   (setf result v
+                         foundp t)))))
+           sequence
+           sequences)
+    result))
+
 (cl:defmacro cl-loop (&rest clauses)
   "Minimal subset of cl-lib's `cl-loop'."
   (labels ((rewrite-by (x)
@@ -207,6 +231,38 @@ where TARGET evaluates to a callable object."
                     ((and (consp arg) (eq (car arg) 'lambda)) `(cl:function ,arg))
                     (t x)))
                  x))
+           (rewrite-below (xs)
+             ;; SBCL's CL:LOOP expansion emits a non-standard internal type
+             ;; specifier for `for VAR below ...` with an implicit start of 0:
+             ;;   (declare (type (if number real) var))
+             ;; which later trips runtime type checks.  Normalize to the
+             ;; explicit CL spelling so SBCL uses a standard type:
+             ;;   for VAR from 0 below ...
+             (let ((out nil)
+                   (rest xs))
+               (loop while rest do
+                 (cond
+                  ((and (consp rest)
+                        (cl:member (car rest) '(for as) :test #'eq)
+                        (consp (cdr rest))
+                        (symbolp (cadr rest))
+                        (consp (cddr rest))
+                        (eq (caddr rest) 'below)
+                        (consp (cdddr rest)))
+                   (let ((kw (car rest))
+                         (var (cadr rest))
+                         (limit (cadddr rest)))
+                     (push kw out)
+                     (push var out)
+                     (push 'from out)
+                     (push 0 out)
+                     (push 'below out)
+                     (push limit out)
+                     (setf rest (cddddr rest))))
+                  (t
+                   (push (car rest) out)
+                   (setf rest (cdr rest)))))
+               (nreverse out)))
            (rewrite-across (xs)
              ;; cl-lib's `cl-loop' iterates strings by character codes
              ;; (because `aref' returns integers).  CL:LOOP iterates strings
@@ -253,6 +309,7 @@ where TARGET evaluates to a callable object."
               (t (cons (car xs) (walk (cdr xs)))))))
     (multiple-value-bind (bindings clauses*)
         (rewrite-across clauses)
+      (setf clauses* (rewrite-below clauses*))
       (if (null bindings)
           `(cl:loop ,@(walk clauses*))
           `(cl:let ,bindings
@@ -268,11 +325,44 @@ where TARGET evaluates to a callable object."
 
 (cl:defun cl-typep (object type)
   "Bring-up subset of cl-lib's `cl-typep'."
-  (cond
-   ((and (consp type) (eq (car type) 'satisfies) (= (length type) 2))
-    (funcall (cadr type) object))
-   (t
-    (typep object type))))
+  (labels ((type-op-p (op name)
+             (and (symbolp op)
+                  (cl:string-equal (cl:symbol-name op) name))))
+    (cond
+     ((and (consp type) (type-op-p (car type) "IF") (= (length type) 3))
+      ;; cl-lib sometimes uses a 2-branch conditional type:
+      ;;   (if COND THEN)
+      ;; Treat the implicit ELSE as T: values not matching COND are accepted.
+      (if (cl-typep object (cadr type))
+          (cl-typep object (caddr type))
+        t))
+     ((and (consp type) (type-op-p (car type) "IF") (= (length type) 4))
+      ;; cl-lib's extended type specifier:
+      ;;   (if COND THEN ELSE)
+      ;; Interpret this as: if OBJECT matches COND, then require THEN, else ELSE.
+      (if (cl-typep object (cadr type))
+          (cl-typep object (caddr type))
+        (cl-typep object (cadddr type))))
+     ((and (consp type) (type-op-p (car type) "SATISFIES") (= (length type) 2))
+      (funcall (cadr type) object))
+     ((and (consp type) (type-op-p (car type) "MEMBER"))
+      ;; In Emacs, `cl-typep' treats MEMBER tests as `equal' comparisons (so it
+      ;; works on lists/vectors/strings), rather than CL's EQL-based member type.
+      (and (member object (cdr type)) t))
+     (t
+      (cl:typep object type)))))
+
+(cl:defun typep (object type)
+  "Bring-up subset of cl-lib's `typep'.
+
+Unlike CL:TYPEP, this accepts cl-lib's extended type specifiers (e.g. (if ...))
+and treats (member ...) as an `equal'-based membership test."
+  (cl-typep object type))
+
+(pcase-defmacro cl-type (type)
+  "Pcase pattern that matches objects of TYPE.
+TYPE is a type descriptor as accepted by `cl-typep', which see."
+  `(pred (cl-typep _ ',type)))
 
 (cl:defmacro cl-check-type (form type &optional _string)
   "Bring-up subset of cl-lib's `cl-check-type'."
@@ -553,7 +643,11 @@ macro suite."
 
 (cl:defmacro cl-callf (fun place &rest args)
   "Bring-up subset of cl-lib's `cl-callf'."
-  `(setf ,place (funcall ,fun ,place ,@args)))
+  ;; In ELisp, symbols in "function position" are resolved via the function cell.
+  ;; `cl-callf' is used like: (cl-callf + place ...).  The function designator
+  ;; must therefore be passed as a symbol, not evaluated as a variable.
+  (let ((fun* (if (symbolp fun) `',fun fun)))
+    `(setf ,place (funcall ,fun* ,place ,@args))))
 
 (cl:defmacro cl-defstruct (&rest args)
   "Minimal subset of cl-lib's `cl-defstruct'.
@@ -613,41 +707,66 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
   (unless (and (symbolp name) (listp args))
     (cl:error "ELISP:CL-DEFGENERIC expects (NAME ARGS ...), got: ~S ~S" name args))
   (let* ((doc (and rest (stringp (car rest)) (pop rest)))
-         (body rest)
-         (method-args
-           (let ((out nil)
-                 (in-keyword-section nil))
-             (dolist (a args (nreverse out))
-               (cond
-                ((and (symbolp a)
-                      (let ((nm (symbol-name a)))
-                        (and (plusp (length nm))
-                             (= (aref nm 0) (char-code #\&)))))
-                 (setf in-keyword-section t)
-                 (push a out))
-                (in-keyword-section
-                 (push a out))
-                ((symbolp a)
-                 ;; Only required args participate in CLOS dispatch.  Keep the
-                 ;; rest of the lambda list (e.g. &optional) aligned with the
-                 ;; generic so SBCL doesn't reject the default method.
-                 (push `(,a t) out))
-                (t
-                 (push a out)))))))
-    `(progn
-       ;; Bring-up: clemacs sometimes defines small stubs for functions that
-       ;; later become cl-generic generics (e.g. from `seq.el`).  SBCL rejects
-       ;; DEFGENERIC when NAME already has a non-generic function definition,
-       ;; so drop that placeholder to let the generic take over.
-       (cl:when (and (cl:fboundp ',name)
-                     (cl:not (cl:typep (cl:fdefinition ',name) 'cl:generic-function)))
-         (cl:fmakunbound ',name))
-       (cl:defgeneric ,name ,args
-         ,@(when doc `((:documentation ,doc))))
-       ,@(when body
-           `((cl:defmethod ,name ,method-args
-               ,@body)))
-       ',name)))
+         (decl-forms nil))
+    (labels ((declare-form-p (x)
+               (and (consp x)
+                    (symbolp (car x))
+                    (cl:string-equal "DECLARE" (cl:symbol-name (car x))))))
+      (loop while (and rest (declare-form-p (car rest))) do
+        (push (pop rest) decl-forms)))
+    (setf decl-forms (nreverse decl-forms))
+    (let* ((decl-items (mapcan #'cdr decl-forms))
+           (gv-expander nil)
+           (advertised-cc nil)
+           (body rest)
+           (method-args
+             (let ((out nil)
+                   (in-keyword-section nil))
+               (dolist (a args (nreverse out))
+                 (cond
+                  ((and (symbolp a)
+                        (let ((nm (symbol-name a)))
+                          (and (plusp (length nm))
+                               (= (aref nm 0) (char-code #\&)))))
+                   (setf in-keyword-section t)
+                   (push a out))
+                  (in-keyword-section
+                   (push a out))
+                  ((symbolp a)
+                   ;; Only required args participate in CLOS dispatch.  Keep the
+                   ;; rest of the lambda list (e.g. &optional) aligned with the
+                   ;; generic so SBCL doesn't reject the default method.
+                   (push `(,a t) out))
+                  (t
+                   (push a out)))))))
+      (dolist (decl decl-items)
+        (when (and (consp decl) (symbolp (car decl)))
+          (let ((nm (cl:symbol-name (car decl))))
+            (cond
+             ((cl:string-equal nm "GV-EXPANDER")
+              (when (and (consp (cdr decl)) (null (cddr decl)))
+                (setf gv-expander (cadr decl))))
+             ((cl:string-equal nm "ADVERTISED-CALLING-CONVENTION")
+              (when (and (consp (cdr decl)) (listp (cadr decl)))
+                (setf advertised-cc (cadr decl))))))))
+      `(progn
+         ;; Bring-up: clemacs sometimes defines small stubs for functions that
+         ;; later become cl-generic generics (e.g. from `seq.el`).  SBCL rejects
+         ;; DEFGENERIC when NAME already has a non-generic function definition,
+         ;; so drop that placeholder to let the generic take over.
+         (cl:when (and (cl:fboundp ',name)
+                       (cl:not (cl:typep (cl:fdefinition ',name) 'cl:generic-function)))
+           (cl:fmakunbound ',name))
+         (cl:defgeneric ,name ,args
+           ,@(when doc `((:documentation ,doc))))
+         ,@(when gv-expander
+             `((function-put ',name 'gv-expander ,gv-expander)))
+         ,@(when advertised-cc
+             `((set-advertised-calling-convention ',name ',advertised-cc)))
+         ,@(when body
+             `((cl:defmethod ,name ,method-args
+                 ,@body)))
+         ',name))))
 
 (cl:defmacro cl-defmethod (name args &rest body)
   "Bring-up subset of cl-generic's `cl-defmethod'."
@@ -682,6 +801,7 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
               (t spec))))
     (let* ((args (strip-&context args))
            (saw-string-specializer nil)
+           (head-guards nil)
            (method-args
              (mapcar
               (lambda (a)
@@ -694,6 +814,18 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
                     ;; specializer on the symbol itself (i.e. effectively
                     ;; (eql 'SOME-SYMBOL)), not as a variable reference.
                     (cond
+                     ;; cl-generic `(head SYMBOL)` specializer: dispatch on the
+                     ;; head of a cons cell (used heavily by `map.el`).
+                     ;;
+                     ;; We approximate it by specializing on CONS and using a
+                     ;; runtime guard to fall through to the next method.
+                     ((and (consp spec)
+                           (eq (car spec) 'head)
+                           (consp (cdr spec))
+                           (null (cddr spec))
+                           (symbolp (cadr spec)))
+                      (push `(eq (car ,var) ',(cadr spec)) head-guards)
+                      (list var 'cl:cons))
                      ((and (consp spec)
                            (eq (car spec) 'eql)
                            (consp (cdr spec))
@@ -707,6 +839,11 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
                      (t a))))
                  (t (cl:error "ELISP:CL-DEFMETHOD unsupported arg spec: ~S" a))))
               args)))
+      (when head-guards
+        (setf body
+              `((if (and ,@(nreverse head-guards))
+                    (progn ,@body)
+                    (call-next-method)))))
       ;; ELisp `string' specializers must match both CL strings (multibyte) and
       ;; our unibyte string representation (a specialized (unsigned-byte 8)
       ;; vector).  For the common 1-arg case, emit a second method to catch
@@ -716,7 +853,7 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
                (consp (car method-args))
                (eq (cadar method-args) 'cl:string))
           (let ((var (caar method-args)))
-            `(progn
+          `(progn
                (cl:defmethod ,name ((,var cl:string)) ,@body)
                (cl:defmethod ,name ((,var cl:vector))
                  (if (unibyte-string-p ,var)
@@ -724,6 +861,10 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
                      (call-next-method)))))
           `(cl:defmethod ,name ,method-args
              ,@body)))))
+
+(cl:defmacro cl-call-next-method (&rest args)
+  "Bring-up subset of cl-lib's `cl-call-next-method'."
+  `(call-next-method ,@args))
 
 (cl:defun put (symbol prop value)
   "ELisp-ish PUT for symbol plists."
