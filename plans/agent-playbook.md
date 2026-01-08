@@ -42,6 +42,8 @@ Repo-local skills live under `.codex/skills/` in this repo. Use them as the defa
 6) Write a progress snapshot:
    - `mise run clemacs:report:progress`
 
+Commit helper (avoids shell quoting issues): `mise run git:commit -- 'scope: subject' <<'MSG' ... MSG`
+
 ## Decision tree (what to do next)
 
 ### A0) Non-loader failure modes (no `elisp-load-error`)

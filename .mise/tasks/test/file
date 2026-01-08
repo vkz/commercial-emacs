@@ -34,6 +34,7 @@ path="${path%.log}"
 target="${path}.log"
 
 echo "[test:file] ${target} (-j${jobs})"
+echo "[test:file] hint: use -f when chasing flakes (forces rebuild)"
 if [[ "${usage_force:-false}" == "true" ]]; then
   make -C "${test_dir}" -B -j"${jobs}" "${target}"
 else

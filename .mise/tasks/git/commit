@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Commit with a stdin heredoc message (avoids shell quoting issues)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--no-verify" help="Pass --no-verify to git commit"
+#USAGE flag "--edit" help="Open editor after writing message file (git commit --edit)"
+#USAGE arg "<subject>" help="Commit subject (ASCII, no trailing period)"
+#
+# Examples:
+#   mise run git:commit -- 'tools: update instructions' <<'MSG'
+#   Body line 1
+#   Body line 2
+#   MSG
+#
+#   mise run git:commit -- 'tools: update instructions'
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+subject="${usage_subject}"
+
+tmp_dir="${project_root}/build/tmp"
+mkdir -p "${tmp_dir}"
+msg="$(mktemp "${tmp_dir}/git-commit-msg.XXXXXX.txt")"
+cleanup() { rm -f "${msg}"; }
+trap cleanup EXIT
+
+{
+  printf "%s\n" "${subject}"
+  if [[ ! -t 0 ]]; then
+    printf "\n"
+    cat
+  fi
+} > "${msg}"
+
+args=()
+if [[ "${usage_no_verify:-false}" == "true" ]]; then
+  args+=("--no-verify")
+fi
+if [[ "${usage_edit:-false}" == "true" ]]; then
+  args+=("--edit")
+fi
+
+git commit -F "${msg}" "${args[@]}"
