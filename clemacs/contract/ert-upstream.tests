@@ -137,3 +137,7 @@ test-seq-remove
 
 # `kbd` / key-parse bring-up (subr-tests).
 subr-test-kbd
+
+# More keymap bring-up (subr-tests).
+subr-test-key-valid-p
+subr-test-define-prefix-command
