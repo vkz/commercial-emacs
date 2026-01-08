@@ -59,6 +59,11 @@
   :expected "127"
   :emacs :match)
 
+ (:name "reader-string-literal-control-c-x"
+  :expr "(aref \"\\C-x\" 0)"
+  :expected "24"
+  :emacs :match)
+
  (:name "text-props-text-property-default-nonsticky-boundp"
   :expr "(boundp 'text-property-default-nonsticky)"
   :expected "t"

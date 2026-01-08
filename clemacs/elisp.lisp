@@ -528,6 +528,28 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
                          (#\f (push-byte 12))
                          (#\a (push-byte 7))
                          (#\e (push-byte 27))
+                         (#\C
+                          ;; Emacs-style control escapes inside strings, e.g. "\C-x".
+                          ;; This is essential for shipped keymaps that use strings
+                          ;; like "\C-x" and "\C-g" in `define-key'.
+                          (let ((dash (peek-char nil stream nil nil t)))
+                            (when (and dash (char= dash #\-))
+                              (read-char stream nil nil t)))
+                          (let* ((base0 (read-char stream nil nil t)))
+                            (when (null base0)
+                              (cl:error "EOF in \\C- string escape"))
+                            (let* ((base-code
+                                     (if (char= base0 #\\)
+                                         (let ((e2 (read-char stream nil nil t)))
+                                           (when (null e2)
+                                             (cl:error "EOF in \\C- string escape"))
+                                           (%read-elisp-escape-code stream e2))
+                                         (char-code base0)))
+                                   (ctl-code
+                                     (if (= base-code (char-code #\?))
+                                         127
+                                         (cl:logand base-code #x1f))))
+                              (push-byte ctl-code))))
                          (#\\ (push-byte (char-code #\\)))
                          (#\" (push-byte (char-code #\")))
                          (#\Newline nil) ; line continuation
