@@ -46,11 +46,14 @@
 (cl:defun %pcase--template->lambda-list (tmpl)
   "Translate a backquote template TMPL into a destructuring-bind lambda list.
 
-Returns (values LAMBDA-LIST CHECKS BINDINGS), where:
+Returns (values LAMBDA-LIST CHECKS SUBPATTERNS BINDINGS), where:
 - LAMBDA-LIST is suitable for CL:DESTRUCTURING-BIND.
 - CHECKS is a list of forms (in terms of the destructured vars) that must hold.
+- SUBPATTERNS is a list of (VAR PATTERN) pairs for elements introduced as
+  temporaries that need additional pcase matching.
 - BINDINGS is the list of ELisp variables introduced."
   (let ((checks nil)
+        (subpatterns nil)
         (bindings nil))
     (labels ((gen-elt (x)
                (cond
@@ -61,16 +64,16 @@ Returns (values LAMBDA-LIST CHECKS BINDINGS), where:
                     ((symbolp p) (pushnew p bindings :test #'eq) p)
                     (t
                      (let ((g (gensym "PCASE-")))
-                       (push `(elisp:equal ,g ',p) checks)
+                       (push (list g p) subpatterns)
                        g)))))
                 ((%pcase--comma-at-form-p x)
                  (let ((p (cadr x)))
                    (cond
-                    ((%pcase--dontcare-p p) '&rest)
+                    ((%pcase--dontcare-p p) (list '&rest (gensym "_")))
                     ((symbolp p) (pushnew p bindings :test #'eq) (list '&rest p))
                     (t
                      (let ((g (gensym "REST-")))
-                       (push `(elisp:equal ,g ',p) checks)
+                       (push (list g p) subpatterns)
                        (list '&rest g))))))
                 ((consp x)
                  ;; Dotted cdr patterns in backquote templates (e.g.
@@ -95,7 +98,7 @@ Returns (values LAMBDA-LIST CHECKS BINDINGS), where:
                                    ((symbolp pat) (pushnew pat bindings :test #'eq) pat)
                                    (t
                                     (let ((g (gensym "PCASE-TAIL-")))
-                                      (push `(elisp:equal ,g ',pat) checks)
+                                      (push (list g pat) subpatterns)
                                       g))))
                                 (ll (if (null prefix-ll)
                                         tail-ll
@@ -121,7 +124,81 @@ Returns (values LAMBDA-LIST CHECKS BINDINGS), where:
                    (push `(elisp:equal ,g ',x) checks)
                    g)))))
       (let ((ll (gen-elt tmpl)))
-        (cl:values ll (nreverse checks) (nreverse bindings))))))
+        (cl:values ll (nreverse checks) (nreverse subpatterns) (nreverse bindings))))))
+
+(cl:defun %pcase--emit-match--emit (pat val ft fv k)
+  (cond
+   ((%pcase--dontcare-p pat) k)
+   ((%pcase--bq-form-p pat)
+    (let ((tmp (gensym "PCASE-TMP-")))
+      (multiple-value-bind (ll checks subpatterns _vars)
+          (%pcase--template->lambda-list (cadr pat))
+        (declare (cl:ignore _vars))
+        (dolist (sp (reverse subpatterns))
+          (destructuring-bind (var subpat) sp
+            (setf k (%pcase--emit-match--emit subpat var ft fv k))))
+        `(let ((,tmp ,val))
+           (handler-case
+               (destructuring-bind ,ll ,tmp
+                 (unless (and ,@checks)
+                   (return-from ,ft ,fv))
+                 ,k)
+             (cl:error ()
+               (return-from ,ft ,fv)))))))
+   ((and (consp pat) (eq (car pat) 'or))
+    (let ((or-done (gensym "PCASE-OR-")))
+      `(block ,or-done
+         ,@(mapcar
+            (lambda (p)
+              (let ((alt-fail (gensym "PCASE-ALT-FAIL-")))
+                `(block ,alt-fail
+                   ,(%pcase--emit-match--emit p val alt-fail nil
+                                             `(return-from ,or-done (progn ,k)))
+                   nil)))
+            (cdr pat))
+         (return-from ,ft ,fv))))
+   ((and (consp pat) (eq (car pat) 'and))
+    (let ((acc k))
+      (dolist (p (reverse (cdr pat)) acc)
+        (setf acc (%pcase--emit-match--emit p val ft fv acc)))))
+   ((and (consp pat) (eq (car pat) 'guard) (= (length pat) 2))
+    `(if ,(cadr pat) ,k (return-from ,ft ,fv)))
+   ((and (consp pat) (eq (car pat) 'pred) (= (length pat) 2))
+    (let ((pred (cadr pat)))
+      (cond
+       ((symbolp pred)
+        `(if (,pred ,val) ,k (return-from ,ft ,fv)))
+       ((and (consp pred) (eq (car pred) 'not)
+             (consp (cdr pred)) (symbolp (cadr pred)) (null (cddr pred)))
+        `(if (not (,(cadr pred) ,val)) ,k (return-from ,ft ,fv)))
+       (t
+        (cl:error "pcase: unsupported (pred ~S) pattern" pred)))))
+   ((and (consp pat) (eq (car pat) 'let) (= (length pat) 3))
+    (let ((tmp (gensym "PCASE-LET-")))
+      `(let ((,tmp ,(caddr pat)))
+         ,(%pcase--emit-match--emit (cadr pat) tmp ft fv k))))
+   ((and (consp pat) (eq (car pat) 'quote) (= (length pat) 2))
+    `(if (elisp:equal ,val ',(cadr pat)) ,k (return-from ,ft ,fv)))
+   ((or (integerp pat) (cl:stringp pat))
+    `(if (elisp:equal ,val ,pat) ,k (return-from ,ft ,fv)))
+   ((and (symbolp pat)
+         (eq (symbol-package pat) (find-package "KEYWORD")))
+    `(if (eql ,val ,pat) ,k (return-from ,ft ,fv)))
+   ((null pat)
+    `(if (null ,val) ,k (return-from ,ft ,fv)))
+   ((and (symbolp pat) (not (eq pat t)))
+    ;; ELisp pcase binds symbols as variables.  We treat all
+    ;; non-keyword symbols (except don'tcare patterns above) as
+    ;; bindings.
+    `(let ((,pat ,val)) ,k))
+   (t
+    (cl:error "pcase: unsupported pattern: ~S" pat))))
+
+(cl:defun %pcase--emit-match (pattern value-sym fail-tag fail-value cont)
+  "Return code that matches PATTERN against VALUE-SYM and runs CONT on success.
+
+On mismatch, `return-from' FAIL-TAG with FAIL-VALUE."
+  (%pcase--emit-match--emit pattern value-sym fail-tag fail-value cont))
 
 (cl:defmacro pcase-let* (bindings &rest body)
   "Bring-up subset of ELisp `pcase-let*'.
@@ -145,14 +222,29 @@ Supports destructuring patterns of the form:
                       ,(expand (cdr bs))))
                   ((%pcase--bq-form-p pat)
                    (let ((tmp (gensym "PCASE-VALUE-")))
-                     (multiple-value-bind (ll checks _vars)
+                     (multiple-value-bind (ll checks subpatterns _vars)
                          (%pcase--template->lambda-list (cadr pat))
                        (declare (cl:ignore _vars))
-                       `(let ((,tmp ,expr))
-                          (destructuring-bind ,ll ,tmp
-                            (unless (and ,@checks)
-                              (error "pcase-let*: pattern mismatch: %S %S" ',pat ,tmp))
-                            ,(expand (cdr bs)))))))
+                       (let* ((fail-tag (gensym "PCASE-LET*-FAIL-"))
+                              (fail-marker (gensym "PCASE-LET*-MISMATCH-"))
+                              (k (expand (cdr bs))))
+                         (dolist (sp (reverse subpatterns))
+                           (destructuring-bind (var subpat) sp
+                             (setf k (%pcase--emit-match subpat var
+                                                         fail-tag `',fail-marker
+                                                         k))))
+                         `(let ((,tmp ,expr))
+                            (handler-case
+                                (destructuring-bind ,ll ,tmp
+                                  (unless (and ,@checks)
+                                    (error "pcase-let*: pattern mismatch: %S %S" ',pat ,tmp))
+                                  (let ((res (block ,fail-tag
+                                               ,k)))
+                                    (when (eq res ',fail-marker)
+                                      (error "pcase-let*: pattern mismatch: %S %S" ',pat ,tmp))
+                                    res))
+                              (cl:error ()
+                                (error "pcase-let*: pattern mismatch: %S %S" ',pat ,tmp))))))))
                   (t
                    (cl:error "pcase-let*: unsupported pattern: ~S" pat)))))))
       (expand bindings))))

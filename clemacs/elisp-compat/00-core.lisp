@@ -60,6 +60,7 @@
 (cl:defvar load-path nil)
 (cl:defvar load-file-rep-suffixes nil)
 (cl:defvar temporary-file-directory nil)
+(cl:defvar pdumper--pure-pool nil)
 
 (cl:defmacro bound-and-true-p (var)
   "Bring-up subset of ELisp `bound-and-true-p'."
@@ -109,10 +110,28 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
   ;; leave this unshadowed, the ELISP package inherits CL:STRING-LESSP, which
   ;; doesn't accept our unibyte string representation.
   (cl:shadow 'string-lessp (find-package "ELISP"))
+  ;; Emacs `compiled-function-p' checks for byte-code / native-compiled
+  ;; *ELisp* functions.  In clemacs bring-up, our `lambda' currently yields a
+  ;; host function object, so we must not inherit CL:COMPILED-FUNCTION-P here.
+  (cl:shadow 'compiled-function-p (find-package "ELISP"))
   ;; These exist in CL too; shadow them so we can provide ELisp semantics
   ;; without tripping SBCL package locks.
   (cl:shadow 'assoc (find-package "ELISP"))
   (cl:shadow 'rassoc (find-package "ELISP")))
+
+(cl:defun compiled-function-p (_object)
+  "Bring-up stub for ELisp `compiled-function-p'."
+  (declare (cl:ignore _object))
+  nil)
+
+(cl:defun byte-code-function-p (_object)
+  "Bring-up stub for ELisp `byte-code-function-p'."
+  (declare (cl:ignore _object))
+  nil)
+
+(cl:defun car-less-than-car (a b)
+  "Bring-up subset of ELisp `car-less-than-car'."
+  (cl:< (cl:car a) (cl:car b)))
 
 (cl:defun string-lessp (s1 s2 &optional _start1 _end1 _start2 _end2)
   "Bring-up subset of ELisp `string-lessp'."
@@ -276,6 +295,21 @@ Returns NIL if SYMBOL has no function cell value."
         (not (null value))
         (cl:fboundp symbol))))
 
+(cl:defun functionp (object)
+  "Bring-up subset of ELisp `functionp'."
+  (cond
+   ;; In ELisp, symbols can denote functions via their function cell.
+   ((symbolp object) (and (fboundp object) t))
+   ;; ELisp lambda forms are callable objects.
+   ((and (consp object) (eq (car object) 'lambda)) t)
+   ;; Macro objects and autoload markers are treated as callable in the places
+   ;; we care about during bring-up.
+   ((and (consp object) (eq (car object) 'macro)) t)
+   ((and (consp object) (eq (car object) 'autoload)) t)
+   ;; Host function objects.
+   ((cl:functionp object) t)
+   (t nil)))
+
 (cl:defun function-alias-p (symbol)
   "Bring-up subset of ELisp `function-alias-p'.
 
@@ -305,14 +339,29 @@ like: (defalias 'string= 'string-equal)."
   (loop with cur = fn
         for hop from 0 below max-hops do
           (cond
-           ((functionp cur) (return cur))
+           ((cl:functionp cur) (return cur))
+           #+sbcl
+           ((typep cur 'sb-mop:funcallable-standard-object) (return cur))
            ((and (consp cur) (eq (car cur) 'lambda))
             (return (cl:eval `(cl:function ,cur))))
+           ((and (consp cur) (eq (car cur) 'autoload))
+            (let ((next (autoload-do-load cur)))
+              (when (and (consp next) (eq (car next) 'autoload))
+                (error "ELISP: unresolved autoload: ~S" cur))
+              (setf cur next)))
            ((symbolp cur)
             (let ((next (symbol-function cur)))
               (when (null next)
                 (signal 'void-function (list cur)))
-              (setf cur next)))
+              (cond
+               ((and (consp next) (eq (car next) 'autoload))
+                (let ((loaded (autoload-do-load next cur)))
+                  (when (and (consp loaded) (eq (car loaded) 'autoload))
+                    (error "ELISP:AUTOLOAD failed to load function %S from %S"
+                           cur (cadr next)))
+                  (setf cur loaded)))
+               (t
+                (setf cur next)))))
            (t
             (error "ELISP: function cell is not callable: ~S" cur)))
         finally

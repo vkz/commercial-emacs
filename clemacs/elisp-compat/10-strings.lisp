@@ -186,7 +186,23 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
 
 (cl:defun string-equal (a b)
   "ELisp-ish STRING-EQUAL (case-sensitive; alias of `string=')."
-  (string= a b))
+  ;; Avoid defining STRING-EQUAL in terms of STRING=, since upstream ELisp may
+  ;; (re)alias STRING= to STRING-EQUAL during bootstrap.
+  (let ((a (if (symbolp a) (symbol-name a) a))
+        (b (if (symbolp b) (symbol-name b) b)))
+    (unless (and (stringp a) (stringp b))
+      (error "ELISP:STRING-EQUAL expects strings or symbols, got: ~S ~S" a b))
+    (cond
+     ((and (unibyte-string-p a) (unibyte-string-p b))
+      (and (= (length a) (length b))
+           (loop for i from 0 below (length a)
+                 always (= (aref a i) (aref b i)))))
+     ((and (cl:stringp a) (cl:stringp b))
+      (cl:string= a b))
+     (t
+      (cl:string=
+       (string-to-multibyte a)
+       (string-to-multibyte b))))))
 
 (cl:defun string-equal-ignore-case (a b)
   "Bring-up subset of ELisp `string-equal-ignore-case'."

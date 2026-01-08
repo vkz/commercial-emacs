@@ -114,6 +114,11 @@
   :expected "2"
   :emacs :match)
 
+ (:name "function-compiled-function-p-lambda-nil"
+  :expr "(compiled-function-p (lambda (x) x))"
+  :expected "nil"
+  :emacs :match)
+
  (:name "rewrite-let-binding-if-variable"
   :expr "(let ((if 1)) (if (numberp if) if 0))"
   :expected "1"
@@ -625,6 +630,36 @@
 
  (:name "pcase-constant-integer-pattern"
   :expr "(pcase 0 (0 'yes) (_ 'no))"
+  :expected "yes"
+  :emacs :match)
+
+ (:name "pcase-symbol-binding-and-pred"
+  :expr "(pcase \"x\" ((and v (pred stringp)) v) (_ nil))"
+  :expected "\"x\""
+  :emacs :match)
+
+ (:name "pcase-and-guard"
+  :expr "(pcase 3 ((and x (guard (> x 2))) x) (_ nil))"
+  :expected "3"
+  :emacs :match)
+
+ (:name "pcase-let-expr-guard"
+  :expr "(let ((mandatory 'context)) (pcase 'foo ((let 'context mandatory) 'yes) (_ 'no)))"
+  :expected "yes"
+  :emacs :match)
+
+ (:name "pcase-let-binds-from-and"
+  :expr "(pcase 'foo ((and (pred symbolp) var (let exp var)) (list var exp)) (_ nil))"
+  :expected "(foo foo)"
+  :emacs :match)
+
+ (:name "pcase-bq-unquote-subpattern-pred"
+  :expr "(pcase '(a . b) (`(a . ,(pred symbolp)) 'yes) (_ 'no))"
+  :expected "yes"
+  :emacs :match)
+
+ (:name "pcase-bq-unquote-subpattern-or"
+  :expr "(pcase '(1 2) (`(1 ,(or 2 3)) 'yes) (_ 'no))"
   :expected "yes"
   :emacs :match)
 

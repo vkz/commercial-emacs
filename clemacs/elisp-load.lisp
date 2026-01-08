@@ -94,6 +94,16 @@ ported copy instead of the original source tree path."
          (ported-root (merge-pathnames ported-root project-root))
          (skips (%read-skip-lines skip-file))
          (loaded 0))
+    ;; Many upstream libraries rely on `load-path' for `require' and autoloads.
+    ;; Populate it with a minimal source-tree + ported-tree search path the
+    ;; first time we load a manifest.
+    (when (and (boundp 'load-path) (null load-path))
+      (setf load-path
+            (list
+             (namestring (merge-pathnames #p"clemacs/ported/lisp/emacs-lisp/" project-root))
+             (namestring (merge-pathnames #p"clemacs/ported/lisp/" project-root))
+             (namestring (merge-pathnames #p"lisp/emacs-lisp/" project-root))
+             (namestring (merge-pathnames #p"lisp/" project-root)))))
     (dolist (line (%read-noncomment-lines manifest))
       (when (and limit (>= loaded limit))
         (return))

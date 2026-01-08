@@ -45,6 +45,7 @@
            #:defvar #:defconst
            #:make-symbol
            #:gensym
+           #:functionp
            #:make-list #:format
            #:make-string
            #:string

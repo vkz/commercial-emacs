@@ -176,3 +176,4 @@ failure, a useful debug flag, a missing helper task):
 - If `startup-check` fails in `lisp/emacs-lisp/seq.el` with a `cl-defgeneric` error like “already names an ordinary function”, check for early clemacs stubs (e.g. `seq-filter`) and ensure `cl-defgeneric` can drop placeholder fdefinitions before defining the generic.
 - When adding top-level initializers inside the `ELISP` package, qualify CL operators/predicates (`cl:>`, `cl:=`, `cl:<=`, etc.) and avoid calling ELisp helpers at load time unless they are already defined (package `:shadow` makes unqualified operators resolve to `ELISP::...`).
 - Avoid binding local functions/macros named after `CL` symbols inside the `ELISP` package (SBCL package locks): e.g. don’t `labels` a helper named `bit`; pick `mode-bit`/`%bit` instead.
+- When upgrading `load`/`require`, keep `get-load-suffixes` to `.el` only (there are checked-in `.elc` files, but clemacs can’t load bytecode).

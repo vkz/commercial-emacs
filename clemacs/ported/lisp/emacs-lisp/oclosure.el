@@ -32,6 +32,10 @@
     ((%oclosure-type :initarg :oclosure-type :reader oclosure-type)
      (%call :initarg :call :accessor %oclosure-call))))
 
+(cl:defmethod oclosure-type ((o t))
+  (declare (ignore o))
+  nil)
+
 (cl:defclass accessor (oclosure)
   ((%accessor-type :initarg :type :reader accessor--type)
    (%accessor-slot :initarg :slot :reader accessor--slot)))

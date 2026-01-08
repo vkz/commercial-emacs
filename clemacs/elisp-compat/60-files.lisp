@@ -48,8 +48,8 @@ TTY-relevant default."
     (cond
      ((consp v) v)
      (t
-      (list (string-to-unibyte ".elc")
-            (string-to-unibyte ".el"))))))
+      ;; clemacs does not support bytecode (.elc) yet; prefer source.
+      (list (string-to-unibyte ".el"))))))
 
 (cl:defun %locate-file-minimal (filename path &optional suffixes predicate)
   (let* ((name (%file-name->cl-string filename))
@@ -106,23 +106,88 @@ plain `.el' files by searching `load-path' and evaluating the file via
          (direct (probe-file filestr))
          (load-path*
            (and (boundp 'load-path) (symbol-value 'load-path)))
+         (suffixes
+           (cond
+            (nosuffix (list (string-to-unibyte "")))
+            (t (get-load-suffixes))))
          (found
            (or direct
                (and load-path*
-                    (let* ((suffixes
-                             (cond
-                              (nosuffix (list (string-to-unibyte "")))
-                              (t (list (string-to-unibyte ""))))))
-                      (let ((s (locate-file file load-path* suffixes)))
-                        (and s (probe-file (%file-name->cl-string s)))))))))
+                    (let ((s (locate-file file load-path* suffixes)))
+                      (and s (probe-file (%file-name->cl-string s))))))))
     (cond
      (found
-      (load-elisp-file found :package nil)
+      (load-elisp-file found)
       t)
      (noerror
       nil)
      (t
       (error "ELISP:LOAD could not find: ~S" file)))))
+
+(cl:defvar *require-feature->checkpoint*
+  (let ((h (cl:make-hash-table :test 'eq)))
+    ;; Minimal feature->checkpoint map to turn `require' into "load when needed"
+    ;; without pulling in arbitrary files during bring-up.  We intentionally
+    ;; load only a known-safe prefix, then `provide' the feature (these files
+    ;; may not reach their upstream (provide ...) within the checkpoint).
+    ;; NOTE: `macroexp' and `gv' are provided by clemacs compat stubs; loading a
+    ;; partial checkpoint of the upstream files can leave helper functions
+    ;; undefined (e.g. gv-get calling gv--defsetter), so avoid checkpoint loads
+    ;; for those features until we can load them end-to-end.
+    (setf (gethash 'macroexp h) (list :library "macroexp" :max-forms nil))
+    (setf (gethash 'gv h)       (list :library "gv"       :max-forms nil
+                                      :requires '(macroexp)))
+    (setf (gethash 'cl-lib h)   (list :library "cl-lib"   :max-forms 10
+                                      :requires '(macroexp gv)))
+    (setf (gethash 'cl-macs h)  (list :library "cl-macs"  :max-forms 10
+                                      :requires '(cl-lib)))
+    h))
+
+(cl:defun require (feature &optional filename noerror)
+  "Bring-up subset of ELisp `require'.
+
+If FEATURE is not provided yet, try to load it using a minimal
+FEATURE->checkpoint mapping (or FILENAME when provided).  For unknown features
+without an explicit FILENAME, keep the old bring-up behavior and only record
+FEATURE as provided."
+  (when (featurep feature)
+    (return-from require feature))
+  (cond
+   ;; If the caller provided FILENAME, do a normal (full) load.
+   (filename
+    (let ((lib (cond
+                ((stringp filename) filename)
+                ((symbolp filename) (symbol-name filename))
+                (t (error "ELISP:REQUIRE bad filename: ~S" filename)))))
+      (let ((ok (load lib noerror)))
+        (when (and (not ok) noerror)
+          (return-from require nil))
+        (provide feature))))
+   (t
+    (let ((spec (gethash feature *require-feature->checkpoint*)))
+      (when spec
+        (let* ((lib (getf spec :library))
+               (max-forms (getf spec :max-forms))
+               (reqs (getf spec :requires))
+               (load-path* (and (boundp 'load-path) (symbol-value 'load-path)))
+               (path (and load-path* (locate-file lib load-path* (list (string-to-unibyte ".el"))))))
+          (dolist (req reqs)
+            (require req nil noerror))
+          (when path
+            (handler-case
+                (if max-forms
+                    (load-elisp-file (probe-file (%file-name->cl-string path))
+                                     :max-forms max-forms)
+                    (load lib noerror))
+              (cl:error (e)
+                (if noerror
+                    (return-from require nil)
+                  (error (cl:format nil "ELISP:REQUIRE failed loading ~S: ~A"
+                                    lib e))))))))
+      ;; Preserve earlier bring-up behavior: if we didn't (or couldn't) load,
+      ;; just record the feature.
+      (provide feature))))
+  feature)
 
 (cl:defun %file-name->cl-string (x)
   (cond

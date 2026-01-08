@@ -43,7 +43,7 @@ lisp/loaddefs.el -
 
 # pdump: button, gv, cl-lib, cl-macs, cl-preloaded, oclosure, cl-seq, seq.
 lisp/button.el 10
-lisp/emacs-lisp/gv.el 10
+lisp/emacs-lisp/gv.el -
 lisp/emacs-lisp/cl-lib.el 10
 lisp/emacs-lisp/cl-macs.el 10
 lisp/emacs-lisp/cl-preloaded.el 60
@@ -82,7 +82,7 @@ lisp/composite.el 1
 lisp/indent.el -
 
 # pdump: cl-generic.
-lisp/emacs-lisp/cl-generic.el 47
+lisp/emacs-lisp/cl-generic.el 200
 
 # pdump: simple.
 lisp/simple.el 147

@@ -76,23 +76,44 @@ This appears early in `lisp/emacs-lisp/cl-generic.el`; ignore it for bring-up."
   (declare (cl:ignore _args))
   nil)
 
-(cl:defmacro oclosure-define (name &rest _rest)
-  "Bring-up stub for `oclosure-define'.
+(cl:defmacro oclosure-define (type-and-slots &rest _rest)
+  "Bring-up subset of ELisp `oclosure-define'.
 
-Upstream uses this to define \"open closures\" (see `lisp/emacs-lisp/oclosure.el`).
-For bring-up, define a placeholder function so dependent files can load."
+clemacs provides a small SBCL-oriented port of upstream `oclosure.el` under
+`clemacs/ported/...`, but that port doesn't include the macro layer used by
+`cl-generic.el`.  Provide just enough here to unblock `cl-generic`."
   (declare (cl:ignore _rest))
-  (let ((fn (cond
-             ((symbolp name) name)
-             ((and (consp name) (symbolp (car name))) (car name))
-             (t nil))))
-    (if (null fn)
-        `(progn nil)
-        `(progn
-           (defun ,fn (&rest _args)
-             (declare (cl:ignore _args))
-             (error "ELISP:OCLOSURE is not implemented yet: %S" ',fn))
-           ',fn))))
+  (let* ((type (cond
+                ((symbolp type-and-slots) type-and-slots)
+                ((and (consp type-and-slots) (symbolp (car type-and-slots))) (car type-and-slots))
+                (t nil)))
+         (slots (and (consp type-and-slots) (cdr type-and-slots))))
+    (when (or (null type) (not (null slots)))
+      (cl:error "ELISP:OCLOSURE-DEFINE unsupported: ~S" type-and-slots))
+    `(progn
+       (cl:defclass ,type (oclosure) ()
+         #+sbcl (:metaclass sb-mop:funcallable-standard-class))
+       ',type)))
+
+(cl:defmacro oclosure-lambda (type-and-slots args &rest body)
+  "Bring-up subset of ELisp `oclosure-lambda'."
+  (declare (indent 2))
+  (let* ((type (cond
+                ((symbolp type-and-slots) type-and-slots)
+                ((and (consp type-and-slots) (symbolp (car type-and-slots))) (car type-and-slots))
+                (t nil))))
+    (when (null type)
+      (cl:error "ELISP:OCLOSURE-LAMBDA unsupported type: ~S" type-and-slots))
+    `(make-instance ',type
+                    :oclosure-type ',type
+                    :call (lambda ,args ,@body))))
+
+;; `cl-generic.el` refers to `cl--generic-isnot-nnm-p' during bootstrap before
+;; its own definition later in the file.  Provide a conservative bring-up stub:
+;; assume any call-next-method function is "not the no-next-method sentinel".
+(cl:defun cl--generic-isnot-nnm-p (_cnm)
+  (declare (cl:ignore _cnm))
+  t)
 
 (cl:defun %face-register (face id)
   (unless (symbolp face)
@@ -263,6 +284,11 @@ If NAME lives in the CL package, ignore the definition."
   (declare (cl:ignore _args))
   nil)
 
+(cl:defun get-advertised-calling-convention (&rest _args)
+  "Stub for ELisp `get-advertised-calling-convention'."
+  (declare (cl:ignore _args))
+  nil)
+
 (cl:defun make-obsolete-variable (&rest _args)
   "Stub for ELisp `make-obsolete-variable'."
   (declare (cl:ignore _args))
@@ -340,6 +366,7 @@ implementation-specific ones."
   (cond
    ((null object) 'symbol)
    ((symbolp object) 'symbol)
+   ((typep object 'clemacs--builtin-class) 'built-in-class)
    ((consp object) 'cons)
    ((integerp object) 'integer)
    ((stringp object) 'string)
@@ -641,16 +668,61 @@ the prefix flag (\"p\")."
   (defalias obsolete-name current-definition)
   obsolete-name)
 
-(cl:defun autoload (function file &optional _docstring _interactive _type)
-  "Stub for ELisp `autoload'.
+(cl:defun autoload (function file &optional _docstring _interactive type)
+  "Bring-up subset of ELisp `autoload'.
 
-Stores a non-callable marker in the function cell; calling it will
-fail until proper autoload support exists."
-  (declare (cl:ignore _docstring _interactive _type))
+If TYPE is non-nil, treat FUNCTION as a macro (i.e. set its macro-function).
+If FUNCTION is already defined, do not overwrite it.
+
+For undefined symbols, install an autoload marker in its function cell."
+  (declare (cl:ignore _docstring _interactive))
   (unless (symbolp function)
     (error "ELISP:AUTOLOAD expects a function symbol, got: ~S" function))
-  (fset function (list 'autoload file))
-  function)
+  (when (and (symbolp function)
+             (eq (symbol-package function) (find-package "CL")))
+    ;; Avoid mutating CL package symbols while loading upstream ELisp.
+    (return-from autoload function))
+  (cond
+   (type
+    ;; Macro autoload.
+    (when (macro-function function)
+      (return-from autoload function))
+    (let ((tramp nil))
+      (setf tramp
+              (lambda (form env)
+                (declare (cl:ignore env))
+                ;; Best-effort: load the library (via `load-path') and retry.
+                (load file t)
+                (let ((mf (macro-function function)))
+                  (when (or (null mf) (eq mf tramp))
+                    (error "ELISP:AUTOLOAD failed to load macro %S from %S"
+                           function file))
+                  (funcall mf form env))))
+      (setf (macro-function function) tramp)
+      function))
+   (t
+    ;; Function autoload.
+	    (when (fboundp function)
+	      (return-from autoload function))
+	    (fset function (list 'autoload file))
+	    function)))
+
+(cl:defun autoload-do-load (autoload &optional name _macro-only)
+  "Bring-up subset of ELisp `autoload-do-load'.
+
+If AUTOLOAD looks like one of our bring-up autoload markers (a list whose CAR is
+`autoload'), try to load its referenced FILE and return the updated definition
+for NAME when provided.  Otherwise, return AUTOLOAD unchanged."
+  (declare (cl:ignore _macro-only))
+  (cond
+   ((and (consp autoload) (eq (car autoload) 'autoload) (consp (cdr autoload)))
+    (let ((file (cadr autoload)))
+      (when file
+        (load file t))
+      (if (and name (symbolp name))
+          (symbol-function name)
+          autoload)))
+   (t autoload)))
 
 (cl:defun custom-autoload (symbol file &optional _interactive)
   "Bring-up stub for ELisp `custom-autoload'.
@@ -857,17 +929,24 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
   (when (and (symbolp symbol)
              (eq (symbol-package symbol) (find-package "CL")))
     (return-from fset symbol))
+  (when (null definition)
+    (remhash symbol *elisp-function-cells*)
+    (when (symbolp symbol)
+      (ignore-errors (setf (cl:macro-function symbol) nil))
+      (when (cl:fboundp symbol)
+        (ignore-errors (cl:fmakunbound symbol))))
+    (return-from fset symbol))
   (setf (gethash symbol *elisp-function-cells*) definition)
   (when (symbolp symbol)
     (cond
-     ((and (consp definition) (eq (car definition) 'macro) (functionp (cdr definition)))
+     ((and (consp definition) (eq (car definition) 'macro) (cl:functionp (cdr definition)))
       (setf (cl:macro-function symbol) (cdr definition)))
-     ((functionp definition)
+     ((cl:functionp definition)
       (setf (cl:fdefinition symbol) definition))
-     ((not (cl:fboundp symbol))
+     (t
       (setf (cl:fdefinition symbol)
             (lambda (&rest args)
-              (cl:apply (%resolve-function definition) args))))))
+              (cl:apply (%resolve-function symbol) args))))))
   symbol)
 
 (cl:defun defalias (symbol definition &optional _docstring)

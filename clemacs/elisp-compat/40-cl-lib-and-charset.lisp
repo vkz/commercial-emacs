@@ -120,8 +120,36 @@ an augmented SBCL lexical environment."
           `(progn ,@expanded-body))))))
 
 (cl:defmacro cl-flet (bindings &body body)
-  "Minimal subset of cl-lib's `cl-flet'."
-  `(cl:flet ,bindings ,@body))
+  "Bring-up subset of cl-lib's `cl-flet'.
+
+Supports both normal local function bindings:
+  ((NAME (ARGLIST...) BODY...) ...)
+and cl-lib's alias shorthand:
+  ((NAME TARGET) ...)
+where TARGET evaluates to a callable object."
+  (let ((alias-lets nil)
+        (out-bindings nil))
+    (dolist (b bindings)
+      (unless (and (consp b) (symbolp (car b)))
+        (error "ELISP:CL-FLET invalid binding: %S" b))
+      (let ((name (car b))
+            (rest (cdr b)))
+        (cond
+         ;; Alias shorthand: (NAME TARGET)
+         ((and (consp rest) (null (cdr rest)) (not (listp (car rest))))
+          (let ((fn-var (cl:gensym "CL-FLET-FN-")))
+            (push (list fn-var (car rest)) alias-lets)
+            (push (list name '(&rest args) `(apply ,fn-var args)) out-bindings)))
+         ;; Normal definition: (NAME (ARGLIST...) BODY...)
+         ((and (consp rest) (listp (car rest)))
+          (push b out-bindings))
+         (t
+          (error "ELISP:CL-FLET invalid binding: %S" b)))))
+    (let ((out-bindings (nreverse out-bindings))
+          (alias-lets (nreverse alias-lets)))
+      (if alias-lets
+          `(let ,alias-lets (cl:flet ,out-bindings ,@body))
+          `(cl:flet ,out-bindings ,@body)))))
 
 (cl:defmacro cl-function (fn)
   "Bring-up subset of cl-lib's `cl-function'.
@@ -132,8 +160,38 @@ the `cl-function` wrapper around a plain `lambda`."
   `(function ,fn))
 
 (cl:defmacro cl-labels (bindings &body body)
-  "Minimal subset of cl-lib's `cl-labels'."
-  `(cl:labels ,bindings ,@body))
+  "Bring-up subset of cl-lib's `cl-labels'.
+
+Supports both normal local function bindings:
+  ((NAME (ARGLIST...) BODY...) ...)
+and cl-lib's alias shorthand:
+  ((NAME TARGET) ...)
+where TARGET evaluates to a callable object."
+  (let ((alias-lets nil)
+        (out-bindings nil))
+    (dolist (b bindings)
+      (unless (and (consp b) (symbolp (car b)))
+        (error "ELISP:CL-LABELS invalid binding: %S" b))
+      (let ((name (car b))
+            (rest (cdr b)))
+        (cond
+         ((and (consp rest) (null (cdr rest)) (not (listp (car rest))))
+          (let ((fn-var (cl:gensym "CL-LABELS-FN-")))
+            (push (list fn-var (car rest)) alias-lets)
+            (push (list name '(&rest args) `(apply ,fn-var args)) out-bindings)))
+         ((and (consp rest) (listp (car rest)))
+          (push b out-bindings))
+         (t
+          (error "ELISP:CL-LABELS invalid binding: %S" b)))))
+    (let ((out-bindings (nreverse out-bindings))
+          (alias-lets (nreverse alias-lets)))
+      (if alias-lets
+          `(let ,alias-lets (cl:labels ,out-bindings ,@body))
+          `(cl:labels ,out-bindings ,@body)))))
+
+(cl:defun cl-adjoin (item list &rest keys)
+  "Bring-up subset of cl-lib's `cl-adjoin'."
+  (apply #'cl:adjoin item list keys))
 
 (cl:defmacro cl-loop (&rest clauses)
   "Minimal subset of cl-lib's `cl-loop'."
@@ -211,6 +269,14 @@ the `cl-function` wrapper around a plain `lambda`."
     (funcall (cadr type) object))
    (t
     (typep object type))))
+
+(cl:defun %clemacs--oclosure--class-p (_object)
+  ;; Bring-up stub: clemacs does not model `oclosure-define' class objects yet.
+  (declare (cl:ignore _object))
+  nil)
+
+(cl:deftype oclosure--class ()
+  `(cl:satisfies %clemacs--oclosure--class-p))
 
 (cl:defmacro cl-check-type (form type &optional _string)
   "Bring-up subset of cl-lib's `cl-check-type'."
@@ -438,9 +504,35 @@ Returns a list of argument variable symbols from LAMBDA-LIST."
          (t nil))))
     (nreverse out)))
 
+(cl:defstruct (clemacs--builtin-class
+               (:constructor %make-clemacs--builtin-class (name))
+               (:copier nil))
+  name)
+
+(cl:defvar *clemacs--builtin-classes* (cl:make-hash-table :test 'eq))
+
+(cl:defun %clemacs--builtin-class (name)
+  (multiple-value-bind (v presentp)
+      (gethash name *clemacs--builtin-classes*)
+    (if presentp
+        v
+        (setf (gethash name *clemacs--builtin-classes*)
+              (%make-clemacs--builtin-class name)))))
+
+(cl:defun %clemacs--builtin-type-name-p (name)
+  ;; Start small and extend as needed while bringing up `cl-generic'.
+  (memq name
+        '(symbol cons integer string vector hash-table char-table
+          number marker window-configuration registerv
+          cl--generic-generalizer oclosure)))
+
 (cl:defun cl--find-class (name)
   "Bring-up stub for cl-lib's internal `cl--find-class'."
-  (and (symbolp name) (get name 'cl--class)))
+  (unless (symbolp name)
+    (return-from cl--find-class nil))
+  (or (get name 'cl--class)
+      (and (%clemacs--builtin-type-name-p name)
+           (%clemacs--builtin-class name))))
 
 (cl:defsetf cl--find-class (name) (value)
   `(progn

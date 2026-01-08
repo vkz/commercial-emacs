@@ -166,19 +166,39 @@ FORM.  For bring-up, suppress the warning and return FORM."
 
 (cl:defvar macroexpand-all-environment nil)
 
-(cl:defun macroexpand-1 (form &optional env)
+(cl:defun %clemacs-macroexpand-1 (form &optional env)
   "Bring-up subset of ELisp `macroexpand-1'.
 
 If ENV is an Emacs-style macro environment (an alist), ignore it: SBCL's
 `macroexpand-1' expects a lexical environment object or NIL."
-  (cl:macroexpand-1 form (and (not (listp env)) env)))
+  ;; In upstream ELisp, `function' is a special operator and is not subject to
+  ;; macroexpansion.  In clemacs bring-up, we implement it as a macro for
+  ;; pragmatic interop, so suppress its expansion here to match ELisp callers
+  ;; (notably `cl-generic') which pattern-match on `#'' forms.
+  (if (and (consp form)
+           (symbolp (car form))
+           (eq (car form) 'function))
+      (cl:values form nil)
+      (cl:macroexpand-1 form (and (not (listp env)) env))))
+
+(cl:defun macroexpand-1 (form &optional env)
+  "Bring-up subset of ELisp `macroexpand-1'."
+  (%clemacs-macroexpand-1 form env))
 
 (cl:defun macroexpand (form &optional env)
   "Bring-up subset of ELisp `macroexpand'.
 
 If ENV is an Emacs-style macro environment (an alist), ignore it: SBCL's
 `macroexpand' expects a lexical environment object or NIL."
-  (cl:macroexpand form (and (not (listp env)) env)))
+  (let ((env* (and (not (listp env)) env)))
+    (loop with cur = form do
+      ;; `lisp/emacs-lisp/macroexp.el` is typically loaded early and defines its
+      ;; own `macroexpand-1`.  Keep `macroexpand` stable by calling our private
+      ;; helper directly.
+      (multiple-value-bind (next expandedp) (%clemacs-macroexpand-1 cur env*)
+        (if expandedp
+            (setf cur next)
+            (return cur))))))
 
 (cl:defun %macroexpand-all--normalize-lambda-list (lambda-list)
   (labels ((rw (xs)
@@ -277,6 +297,102 @@ Return (values EXPANDED EXPANDEDP)."
    ((null (cdr body)) (car body))
    (t (cons 'progn body))))
 
+(cl:defun macroexp-let* (bindings exp)
+  "Bring-up subset of ELisp `macroexp-let*'.
+
+Return an expression equivalent to `(let* ,BINDINGS ,EXP)`."
+  (cond
+   ((null bindings) exp)
+   ((and (consp exp) (eq 'let* (car exp)) (consp (cdr exp)))
+    ;; Merge nested LET* to avoid excessive wrapping.
+    `(let* (,@bindings ,@(cadr exp)) ,@(cddr exp)))
+   (t `(let* ,bindings ,exp))))
+
+(cl:defmacro macroexp-let2 (test sym exp &rest body)
+  "Bring-up subset of ELisp `macroexp-let2'.
+
+Evaluate BODY with SYM bound to an expression for EXP's value."
+  (declare (indent 3))
+  (let ((bodysym (make-symbol "body"))
+        (expsym (make-symbol "exp"))
+        (pred (or test #'macroexp-copyable-p)))
+    `(let* ((,expsym ,exp)
+            (,sym (if (funcall ,pred ,expsym)
+                      ,expsym
+                      (make-symbol ,(symbol-name sym))))
+            (,bodysym ,(macroexp-progn body)))
+       (if (eq ,sym ,expsym)
+           ,bodysym
+           (macroexp-let* (list (list ,sym ,expsym)) ,bodysym)))))
+
+(cl:defmacro macroexp-let2* (test bindings &rest body)
+  "Bring-up subset of ELisp `macroexp-let2*'.
+
+Multiple binding version of `macroexp-let2'."
+  (declare (indent 2))
+  (when (consp test) ;; TEST omitted.
+    (push bindings body)
+    (setf bindings test)
+    (setf test nil))
+  (labels ((expand (bs)
+             (cond
+              ((null bs) (macroexp-progn body))
+              (t
+               (let* ((b (car bs))
+                      (tl (cdr bs)))
+                 (cond
+                  ((symbolp b)
+                   `(macroexp-let2 ,test ,b ,b ,(expand tl)))
+                  ((and (consp b) (consp (cdr b)) (null (cddr b)))
+                   (destructuring-bind (var exp) b
+                     `(macroexp-let2 ,test ,var ,exp ,(expand tl))))
+                  (t
+                   (error "ELISP:MACROEXP-LET2* invalid binding: ~S" b))))))))
+    (expand bindings)))
+
+;; ---------------------------------------------------------------------------
+;; Minimal gv subset (bring-up)
+;;
+;; Enough to support `with-memoization' (subr.el) and the early `cl-generic.el'
+;; method-combination memoization.
+;; ---------------------------------------------------------------------------
+
+(cl:defun gv-get (place do)
+  "Bring-up subset of ELisp `gv-get'.
+
+Build and return the code that applies DO to PLACE.
+DO is called with (GETTER SETTER), where SETTER is a function (V -> code)."
+  (cond
+   ((symbolp place)
+    (funcall do place (lambda (v) `(setq ,place ,v))))
+   ((and (consp place) (eq (car place) 'gethash))
+    (destructuring-bind (key table &optional default) (cdr place)
+      (let ((k (gensym "GV-KEY-"))
+            (tbl (gensym "GV-TABLE-"))
+            (def (gensym "GV-DEFAULT-")))
+        (let* ((getter
+                 (if (null default)
+                     `(gethash ,k ,tbl)
+                     `(gethash ,k ,tbl ,def)))
+               (setter
+                 (lambda (v) `(puthash ,k ,v ,tbl)))
+               (body (funcall do getter setter)))
+          (if (null default)
+              `(let* ((,k ,key)
+                      (,tbl ,table))
+                 ,body)
+              `(let* ((,k ,key)
+                      (,tbl ,table)
+                      (,def ,default))
+                 ,body))))))
+   (t
+    (error "ELISP:GV-GET unsupported place: ~S" place))))
+
+(cl:defmacro gv-letplace (vars place &rest body)
+  "Bring-up subset of ELisp `gv-letplace'."
+  (declare (indent 2))
+  `(gv-get ,place (lambda ,vars ,@body)))
+
 (cl:defmacro if-let (bindings then &optional else)
   "Bring-up subset of subr-x `if-let'."
   (let ((vars (mapcar #'car bindings)))
@@ -317,7 +433,11 @@ Return (values EXPANDED EXPANDEDP)."
 
 This is a compatibility stub for early bootstrapping. It supports:
 - `_` (default)
+- symbols as variable bindings
 - (pred FN)
+- (guard FORM)
+- (and PAT1 PAT2 ...)
+- (let PAT EXP)
 - (or PAT1 PAT2 ...) by expanding into multiple clauses.
 
 If no clause matches, returns nil."
@@ -339,93 +459,35 @@ If no clause matches, returns nil."
 (cl:defmacro pcase-exhaustive (expr &rest clauses)
   "Bring-up subset of ELisp `pcase-exhaustive'.
 
-Supports a small set of patterns used by upstream ERT:
-- `_` (default)
-- (pred FN)
-- quoted constants (e.g. 'nil)
-- keyword constants (e.g. :failed)
+Supports the patterns needed by `macroexp.el`, `gv.el`, and `cl-generic.el` in
+clemacs bring-up:
+- `_` / `pcase--dontcare` (default / don't care)
+- symbols as variable bindings
+- (pred PRED) including (pred (not PRED))
+- (guard FORM)
+- (and PAT1 PAT2 ...)
+- (let PAT EXP)
+- (or PAT1 PAT2 ...)
+- quoted constants (e.g. 'nil), integers/strings, keyword constants
 - backquote templates using `\, and `\,@."
   (let ((v (gensym "PCASE-"))
         (done (gensym "PCASE-DONE-")))
-    (labels ((test-form (pattern value-sym)
-               (cond
-                ((and (consp pattern) (eq (car pattern) 'pred) (= (length pattern) 2))
-                 (let ((pred (cadr pattern)))
-                   `(,pred ,value-sym)))
-                ((and (consp pattern) (eq (car pattern) 'quote) (= (length pattern) 2))
-                 (let ((k (cadr pattern)))
-                   `(elisp:equal ,value-sym ',k)))
-                ((or (integerp pattern) (cl:stringp pattern))
-                 `(elisp:equal ,value-sym ,pattern))
-                ((and (symbolp pattern)
-                      (eq (symbol-package pattern) (find-package "KEYWORD")))
-                 `(eql ,value-sym ,pattern))
-                ((null pattern)
-                 `(null ,value-sym))
-                (t
-                 (cl:error "ELISP:PCASE-EXHAUSTIVE unsupported OR subpattern: ~S" pattern)))))
-      `(let ((,v ,expr))
-         (block ,done
-           ,@(mapcar
-              (lambda (clause)
-                (destructuring-bind (pattern &rest body) clause
-                  (cond
-                   ((eq pattern '_)
-                    `(return-from ,done (progn ,@body)))
-                   ((and (consp pattern) (eq (car pattern) 'or))
-                    `(when (or ,@(mapcar (lambda (p) (test-form p v)) (cdr pattern)))
-                       (return-from ,done (progn ,@body))))
-                   ((and (consp pattern) (eq (car pattern) 'pred) (= (length pattern) 2))
-                    (let ((pred (cadr pattern)))
-                      `(when (,pred ,v)
-                         (return-from ,done (progn ,@body)))))
-                   ((and (consp pattern) (eq (car pattern) 'quote) (= (length pattern) 2))
-                    (let ((k (cadr pattern)))
-                      `(when (elisp:equal ,v ',k)
-                         (return-from ,done (progn ,@body)))))
-                   ((or (integerp pattern) (cl:stringp pattern))
-                    `(when (elisp:equal ,v ,pattern)
-                       (return-from ,done (progn ,@body))))
-                   ((and (symbolp pattern)
-                         (eq (symbol-package pattern) (find-package "KEYWORD")))
-                    `(when (eql ,v ,pattern)
-                       (return-from ,done (progn ,@body))))
-                   ((%pcase--bq-form-p pattern)
-                    (let ((tmp (gensym "PCASE-TMP-"))
-                          (thunk (gensym "PCASE-THUNK-")))
-                      (multiple-value-bind (ll checks _vars)
-                          (%pcase--template->lambda-list (cadr pattern))
-                        (declare (cl:ignore _vars))
-                        `(let ((,tmp ,v)
-                               (,thunk nil))
-                           (handler-case
-                               ,(cond
-                                  ;; CL:DESTRUCTURING-BIND requires a list lambda
-                                  ;; list; for atomic templates like `t` our
-                                  ;; template->lambda-list returns a single
-                                  ;; binding symbol.
-                                  ((symbolp ll)
-                                   `(let ((,ll ,tmp))
-                                      (when (and ,@checks)
-                                        (setf ,thunk (lambda () (progn ,@body))))))
-                                  ;; Future-proofing: treat vector templates as a
-                                  ;; mismatch for now.
-                                  ((vectorp ll)
-                                   nil)
-                                  (t
-                                   `(destructuring-bind ,ll ,tmp
-                                      (when (and ,@checks)
-                                        (setf ,thunk (lambda () (progn ,@body)))))))
-                             (cl:error () (setf ,thunk nil)))
-                           (when ,thunk
-                             (return-from ,done (cl:funcall ,thunk)))))))
-                   ((null pattern)
-                    `(when (null ,v)
-                       (return-from ,done (progn ,@body))))
-                   (t
-                    (cl:error "ELISP:PCASE-EXHAUSTIVE unsupported pattern: ~S" pattern)))))
-              clauses)
-           (error "pcase-exhaustive: no match for %S" ,v))))))
+    `(let ((,v ,expr))
+       (block ,done
+         ,@(mapcar
+            (lambda (clause)
+              (destructuring-bind (pattern &rest body) clause
+                (cond
+                 ((eq pattern '_)
+                  `(return-from ,done (progn ,@body)))
+                 (t
+                  (let ((fail (gensym "PCASE-FAIL-")))
+                    `(block ,fail
+                       ,(%pcase--emit-match pattern v fail nil
+                                            `(return-from ,done (progn ,@body)))
+                       nil))))))
+            clauses)
+         (error "pcase-exhaustive: no match for %S" ,v)))))
 
 (cl:defun macroexp--fgrep (bindings sexp)
   "Bring-up subset of `macroexp--fgrep'.
@@ -465,7 +527,7 @@ This is sufficient for `letrec' in `lisp/subr.el' during ERT bring-up."
                  (case (car x)
                    ((setq)
                     (return-from expand-1 (cl:values x nil)))
-                   ((function)
+                   ((function cl:function)
                     ;; In upstream ELisp, `function' is a special operator, but
                     ;; `cl-flet' / `cl-labels' install an ENV expander for it.
                     (unless (env-expander 'function)
@@ -478,7 +540,9 @@ This is sufficient for `letrec' in `lisp/subr.el' during ERT bring-up."
                    (when expander
                      (cond
                       ;; Only expand (function F) (1 arg).
-                      ((and (eq (car x) 'function) (consp (cdr x)) (null (cddr x)))
+                      ((and (or (eq (car x) 'function) (eq (car x) 'cl:function))
+                            (consp (cdr x))
+                            (null (cddr x)))
                        (return-from expand-1
                          (cl:values (funcall expander (cadr x)) t)))
                       (t
@@ -512,7 +576,10 @@ This is sufficient for `letrec' in `lisp/subr.el' during ERT bring-up."
                     ;; Expand under FUNCTION only far enough to let ENV rewrite
                     ;; (function F) references (cl-labels); don't traverse inside
                     ;; arbitrary function objects.
-                    ((and (consp x) (eq (car x) 'function) (consp (cdr x)) (null (cddr x)))
+                    ((and (consp x)
+                          (or (eq (car x) 'function) (eq (car x) 'cl:function))
+                          (consp (cdr x))
+                          (null (cddr x)))
                      x)
                     ;; General cons rewrite: preserve dotted lists.
                     (t (cons (rw (car x)) (rw (cdr x))))))))))
