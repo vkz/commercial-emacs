@@ -53,6 +53,8 @@ ert_x_tests_eval="nil"
 f="${project_root}/clemacs/contract/ert-x-tests.maxforms"
 [[ -f "${f}" ]] && ert_x_tests_eval="$(tr -d ' \t\r\n' < "${f}")"
 
+load_manifest="${project_root}/clemacs/contract/ert-upstream.load.files"
+
 if [[ "$#" -lt 1 ]]; then
   echo "[clemacs:test:ert-upstream-one] missing <test-name>" >&2
   echo "[clemacs:test:ert-upstream-one] usage: mise run clemacs:test:ert-upstream-one -- <test-name> [more-tests...]" >&2
@@ -97,6 +99,41 @@ if [[ "${usage_use_known_fail:-false}" == "true" ]]; then
   known_fail_lisp="${known_fail_lisp})"
 fi
 
+extra_eval_args=()
+if [[ -f "${load_manifest}" ]]; then
+  while IFS= read -r line; do
+    line="$(printf "%s" "${line}" | sed -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//')"
+    [[ -z "${line}" ]] && continue
+    [[ "${line}" == \#* ]] && continue
+    line="${line%%#*}"
+    line="$(printf "%s" "${line}" | sed -e 's/[[:space:]]*$//' -e 's/^[[:space:]]*//')"
+    [[ -z "${line}" ]] && continue
+
+    set -- ${line}
+    rel_path="${1:-}"
+    max_forms="${2:-}"
+    if [[ -z "${rel_path}" ]]; then
+      continue
+    fi
+    if [[ -n "${3:-}" ]]; then
+      echo "[clemacs:test:ert-upstream-one] bad load entry (too many fields): ${line}" >&2
+      exit 2
+    fi
+
+    max_forms_eval="nil"
+    if [[ -n "${max_forms}" && "${max_forms}" != "-" ]]; then
+      if [[ "${max_forms}" =~ ^[0-9]+$ ]]; then
+        max_forms_eval="${max_forms}"
+      else
+        echo "[clemacs:test:ert-upstream-one] bad max-forms: ${max_forms} (${line})" >&2
+        exit 2
+      fi
+    fi
+
+    extra_eval_args+=(--eval "(elisp:load-elisp-file #p\"${project_root}/${rel_path}\" :max-forms ${max_forms_eval})")
+  done < "${load_manifest}"
+fi
+
 clemacs_sbcl_eval \
   "${project_root}" \
   "${build_dir}" \
@@ -110,4 +147,5 @@ clemacs_sbcl_eval \
   --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert-x.el\")" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-tests.el\" :max-forms ${tests_eval})" \
   --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-x-tests.el\" :max-forms ${ert_x_tests_eval})" \
+  ${#extra_eval_args[@]:+"${extra_eval_args[@]}"} \
   --eval "(uiop:quit (clemacs:run-upstream-ert-tests :names ${names_lisp} :known-fail ${known_fail_lisp}))"

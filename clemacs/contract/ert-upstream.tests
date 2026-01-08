@@ -116,3 +116,14 @@ subr-x-test-when-let*-single-symbol-expansion
 subr-x-test-when-let*-body-expansion
 subr-x-test-if-let*-true
 subr-x-test-if-let*-false
+
+# rx bring-up (regexp DSL).
+rx-seq
+rx-or
+rx-any
+
+# seq bring-up (sequence library).
+test-setf-seq-elt
+test-seq-drop
+test-seq-take
+test-seq-map-indexed

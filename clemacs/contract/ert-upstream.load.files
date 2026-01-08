@@ -8,3 +8,9 @@
 # 2026-01-08: Bring up `subr-x` (string helpers + threading macros).
 lisp/subr-x.el -
 test/lisp/emacs-lisp/subr-x-tests.el -
+
+# 2026-01-08: Bring up `rx` + `seq` upstream tests.
+lisp/emacs-lisp/rx.el -
+test/lisp/emacs-lisp/rx-tests.el -
+lisp/emacs-lisp/seq.el -
+test/lisp/emacs-lisp/seq-tests.el -
