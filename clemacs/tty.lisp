@@ -252,7 +252,7 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
   (when (or (not (elisp::boundp 'elisp::global-map))
             (not (ignore-errors (elisp::keymapp (elisp::symbol-value 'elisp::global-map)))))
     (let ((project-root (%tty-project-root)))
-      (let* ((level (or (uiop:getenv "CLEMACS_TTY_STARTUP_LEVEL") "subr")))
+      (let* ((level (or (uiop:getenv "CLEMACS_TTY_STARTUP_LEVEL") "smoke")))
         (format t "[clemacs] loading startup (~A)~%" level)
         (finish-output)
         (handler-case
