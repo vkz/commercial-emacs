@@ -997,6 +997,8 @@ Supports the common pattern of a self-referential closure (used by ERT)."
    ((typep keymap 'elisp-keymap) keymap)
    ((and (symbolp keymap) (cl:boundp keymap))
     (%keymap-resolve (symbol-value keymap)))
+   ((and (symbolp keymap) (fboundp keymap))
+    (%keymap-resolve (symbol-function keymap)))
    ((and (consp keymap) (eq (car keymap) 'keymap))
     (cond
      ((and (consp (cddr keymap)) (typep (caddr keymap) 'elisp-keymap))

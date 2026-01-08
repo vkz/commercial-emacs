@@ -1,9 +1,8 @@
 (in-package #:clemacs)
 
 (defstruct tty-state
-  (buf (make-buffer) :type buffer)
+  (buf nil)
   (top-line 0 :type fixnum)
-  (goal-col nil)
   (frame nil))
 
 (defun %tty-read-key ()
@@ -29,11 +28,32 @@
       (code-char b))
      (t (list :byte b)))))
 
-(defun %tty-read-keyseq (prefixes)
+(defparameter +tty-elisp-event-left+ (cl:intern "LEFT" (find-package "ELISP")))
+(defparameter +tty-elisp-event-right+ (cl:intern "RIGHT" (find-package "ELISP")))
+(defparameter +tty-elisp-event-up+ (cl:intern "UP" (find-package "ELISP")))
+(defparameter +tty-elisp-event-down+ (cl:intern "DOWN" (find-package "ELISP")))
+
+(defun %tty-read-event ()
+  "Return a minimal Emacs-style event for the clemacs TTY loop.
+
+Events are either integer character codes (including control codes), or ELISP
+package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
   (let ((k (%tty-read-key)))
-    (if (member k prefixes :test #'equal)
-        (list k (%tty-read-key))
-        (list k))))
+    (cond
+     ((and (consp k) (eq (first k) :ctrl) (characterp (second k)))
+      ;; k is (:ctrl #\x) from bytes 1..26.
+      (- (char-code (second k)) 96))
+     ((characterp k) (char-code k))
+     ((eq k :enter) 13)
+     ((eq k :backspace) 127)
+     ((eq k :left) +tty-elisp-event-left+)
+     ((eq k :right) +tty-elisp-event-right+)
+     ((eq k :up) +tty-elisp-event-up+)
+     ((eq k :down) +tty-elisp-event-down+)
+     ((eq k :esc) 27)
+     ((and (consp k) (eq (first k) :byte) (integerp (second k)))
+      (second k))
+     (t 0))))
 
 (defun %tty-prompt (prompt)
   (multiple-value-bind (rows cols) (%tty-terminal-size)
@@ -95,15 +115,21 @@
     (let* ((header-lines 2)
            (footer-lines 2)
            (content-lines (max 1 (- rows header-lines footer-lines)))
-           (text (buffer-text buf))
-           (path (buffer-path buf))
+           (text (elisp::elisp-buffer-text buf))
+           (path elisp::clemacs-tty-path)
            (line-starts (%buffer-line-starts text))
            (frame (make-empty-grid-frame rows cols)))
       (setf (aref (grid-frame-lines frame) 0)
-            (format nil "clemacs tty: ~A" (or path "<buffer>")))
+            (format nil "clemacs tty: ~A"
+                    (or (and path (not (string= path "")) path)
+                        (let ((bn (elisp::buffer-name buf)))
+                          (if bn (elisp::%elisp-string->cl-string bn) "<buffer>"))
+                        "<buffer>")))
       (setf (aref (grid-frame-lines frame) 1) "")
 
-      (multiple-value-bind (cursor-line cursor-col) (buffer-line-column buf)
+      (let* ((idx (max 0 (min (1- (elisp::elisp-buffer-point buf)) (length text))))
+             (cursor-line (%line-number-at line-starts idx))
+             (cursor-col (elisp::current-column)))
         (let* ((max-top (max 0 (- (length line-starts) content-lines)))
                (top (min (max 0 top-line) max-top))
                (top (cond
@@ -197,115 +223,46 @@
          (error "Unknown grid patch op: ~S" (getf op :op)))))))
 
 (defun %tty-draw (state)
-  (multiple-value-bind (frame top)
-      (%tty-build-grid-frame (tty-state-buf state) (tty-state-top-line state))
-    (%tty-apply-grid-patch (grid-frame->patch frame (tty-state-frame state)) frame)
-    (setf (tty-state-frame state) frame)
-    top))
-
-(defun %tty-save (buf)
-  (unless (buffer-save buf)
-    (tty-write-string "\a")
-    (return-from %tty-save nil))
-  t)
-
-(defun %cmd-quit (_state)
-  (declare (ignore _state))
-  :quit)
-
-(defun %cmd-save (state)
   (let ((buf (tty-state-buf state)))
-    (unless (buffer-path buf)
-      (let ((path (%tty-prompt "Save as: ")))
-        (when (and path (not (string= path "")))
-          (setf (buffer-path buf) path))))
-    (%tty-save buf)
-    state))
-
-(defun %cmd-left (state)
-  (buffer-backward-char (tty-state-buf state))
-  (setf (tty-state-goal-col state) nil)
-  state)
-
-(defun %cmd-right (state)
-  (buffer-forward-char (tty-state-buf state))
-  (setf (tty-state-goal-col state) nil)
-  state)
-
-(defun %cmd-up (state)
-  (multiple-value-bind (_buf goal)
-      (buffer-move-vertical (tty-state-buf state) -1 :goal-column (tty-state-goal-col state))
-    (declare (ignore _buf))
-    (setf (tty-state-goal-col state) goal))
-  state)
-
-(defun %cmd-down (state)
-  (multiple-value-bind (_buf goal)
-      (buffer-move-vertical (tty-state-buf state) 1 :goal-column (tty-state-goal-col state))
-    (declare (ignore _buf))
-    (setf (tty-state-goal-col state) goal))
-  state)
-
-(defun %cmd-backspace (state)
-  (buffer-delete-backward (tty-state-buf state))
-  (setf (tty-state-goal-col state) nil)
-  state)
-
-(defun %cmd-enter (state)
-  (buffer-insert-char (tty-state-buf state) #\Newline)
-  (setf (tty-state-goal-col state) nil)
-  state)
-
-(defun %cmd-insert (state ch)
-  (buffer-insert-char (tty-state-buf state) ch)
-  (setf (tty-state-goal-col state) nil)
-  state)
-
-(defun %make-command-table ()
-  (let ((m (make-hash-table :test 'equal)))
-    (setf (gethash (list (list :ctrl #\q)) m) #'%cmd-quit)
-    (setf (gethash (list (list :ctrl #\s)) m) #'%cmd-save)
-    (setf (gethash (list (list :ctrl #\b)) m) #'%cmd-left)
-    (setf (gethash (list (list :ctrl #\f)) m) #'%cmd-right)
-    (setf (gethash (list (list :ctrl #\p)) m) #'%cmd-up)
-    (setf (gethash (list (list :ctrl #\n)) m) #'%cmd-down)
-
-    (setf (gethash (list :left) m) #'%cmd-left)
-    (setf (gethash (list :right) m) #'%cmd-right)
-    (setf (gethash (list :up) m) #'%cmd-up)
-    (setf (gethash (list :down) m) #'%cmd-down)
-
-    (setf (gethash (list :backspace) m) #'%cmd-backspace)
-    (setf (gethash (list :enter) m) #'%cmd-enter)
-
-    (setf (gethash (list (list :ctrl #\x) (list :ctrl #\c)) m) #'%cmd-quit)
-    (setf (gethash (list (list :ctrl #\x) (list :ctrl #\s)) m) #'%cmd-save)
-    m))
+    (when buf
+      (elisp::set-buffer buf))
+    (multiple-value-bind (frame top)
+        (%tty-build-grid-frame buf (tty-state-top-line state))
+      (%tty-apply-grid-patch (grid-frame->patch frame (tty-state-frame state)) frame)
+      (setf (tty-state-frame state) frame)
+      top)))
 
 (defun tty-main (&key path)
   (let* ((dump (uiop:getenv "CLEMACS_GRID_PATCH_DUMP"))
          (path* (and path (not (string= path "")) path))
-         (state (make-tty-state :buf (if path* (buffer-load-file path*) (make-buffer)))))
+         (state (make-tty-state)))
     (when (and dump (not (string= dump "")))
       (setf *grid-patch-sinks*
             (list (make-grid-patch-jsonl-sink dump))))
     (unwind-protect
         (progn
           (tty-enter-raw)
-          (let* ((prefixes (list (list :ctrl #\x)))
-                 (cmds (%make-command-table)))
+          (let ((buf (elisp::get-buffer-create (or path* "*scratch*"))))
+            (elisp::set-buffer buf)
+            (setf elisp::noninteractive nil)
+            (setf elisp::clemacs-tty-path path*)
+            (when path*
+              (elisp::insert-file-contents path* nil nil nil t))
+            (elisp::goto-char (elisp::point-max))
+            (elisp::clemacs-tty-setup :path path*)
+            (setf (tty-state-buf state) buf)
             (loop
               (setf (tty-state-top-line state)
                     (%tty-draw state))
-              (let* ((keys (%tty-read-keyseq prefixes))
-                     (cmd (gethash keys cmds)))
-                (cond
-                 (cmd
-                  (let ((r (funcall cmd state)))
-                    (when (eq r :quit)
-                      (return 0))))
-                 ((and (= (length keys) 1) (characterp (first keys)))
-                  (%cmd-insert state (first keys)))
-                 (t nil)))))))
+              (handler-case
+                  (let* ((keys (elisp::read-key-sequence nil))
+                         (cmd (elisp::key-binding keys t)))
+                    (if (and cmd (not (integerp cmd)) (not (elisp::keymapp cmd)))
+                        (elisp::command-execute cmd)
+                        (tty-write-string "\a")))
+                (clemacs-quit ()
+                  (return 0))
+                (error ()
+                  (tty-write-string "\a"))))))
       (ignore-errors (tty-exit-raw))
-      (%tty-clear)))
+      (%tty-clear))))

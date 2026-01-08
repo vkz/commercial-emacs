@@ -26,4 +26,5 @@
   (load-here "elisp-compat/70-buffers-and-editor.lisp")
   (load-here "elisp-compat/80-ewoc.lisp")
   (load-here "elisp-compat/90-messages-and-macroexp.lisp")
-  (load-here "elisp-compat/99-rest.lisp"))
+  (load-here "elisp-compat/99-rest.lisp")
+  (load-here "elisp-compat/55-command-loop.lisp"))

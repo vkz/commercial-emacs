@@ -149,6 +149,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "keymaps-keymapp-symbol-function-cell-keymap"
+  :expr "(let ((s (make-symbol \"clemacs--tmp-prefix\")) (m (make-sparse-keymap))) (fset s m) (keymapp s))"
+  :expected "t"
+  :emacs :match)
+
  (:name "keymaps-bindings--define-key-defines-key"
   :expr "(let ((m (make-sparse-keymap))) (bindings--define-key m [load] 'foo) (eq (lookup-key m [load]) 'foo))"
   :expected "t"

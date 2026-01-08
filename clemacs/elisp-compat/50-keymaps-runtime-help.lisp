@@ -9,6 +9,8 @@
    ((typep keymap 'elisp-keymap) keymap)
    ((and (symbolp keymap) (cl:boundp keymap))
     (%keymap-backend (symbol-value keymap)))
+   ((and (symbolp keymap) (fboundp keymap))
+    (%keymap-backend (symbol-function keymap)))
    ((and (consp keymap) (eq (car keymap) 'keymap)
          (consp (cddr keymap))
          (typep (caddr keymap) 'elisp-keymap))
@@ -18,9 +20,11 @@
 
 (cl:defun keymapp (object)
   "Bring-up subset of ELisp `keymapp'."
-  (let ((km (if (and (symbolp object) (cl:boundp object))
-                (symbol-value object)
-                object)))
+  (let* ((km (cond
+              ((not (symbolp object)) object)
+              ((cl:boundp object) (symbol-value object))
+              ((fboundp object) (symbol-function object))
+              (t object))))
     (or (and (typep km 'elisp-keymap) t)
         (and (consp km) (eq (car km) 'keymap) t))))
 
