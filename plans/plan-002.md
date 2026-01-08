@@ -295,7 +295,7 @@ Execution model (two loops, both supported)
 
 1. Non-interactive "agent gate" loop
    - Use one-shot invocations for determinism:
-     - `sbcl --non-interactive` for eval/test commands
+     - `mise run clemacs:sbcl:eval` for ad-hoc SBCL eval/test probes (qlot/core aware; heredoc-friendly)
      - add `--disable-debugger` for CI-like runs so we never wedge waiting on an
        interactive debugger prompt
    - Expectation: this is the default for `clemacs:test:*` and `clemacs:verify`.
@@ -881,4 +881,4 @@ Status (TODO, 2026-01-04)
   - `clemacs/contract/startup.editor-core.files` (seeded from `startup.check.files`).
   - Teach `clemacs:load:startup -- --level editor-core` about the new manifest level.
   - Default `mise run run:clemacs` to `--startup-level editor-core` (override by passing explicit args).
-- DONE (2026-01-04): Add a minimal `--eval` path in `build/clemacs/bin/emacs --batch` (non-interactive) for scripting/tests.
+- DONE (2026-01-04): Add a minimal `--eval` path in `build/clemacs/bin/emacs --batch` (non-interactive) for scripting/tests (prefer `mise run clemacs:sbcl:eval` for ad-hoc probes).

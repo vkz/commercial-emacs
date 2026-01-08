@@ -143,6 +143,8 @@ alongside the baseline C-hosted Emacs build.
 - Optional: faster startup via SBCL saved core:
   - `mise run clemacs:core:build` (writes `build/clemacs/clemacs.core`)
   - `mise run clemacs:run` / `mise run clemacs:test:smoke` uses it automatically when present
+- Ad-hoc SBCL eval (qlot/core aware; heredoc-friendly):
+  - `mise run clemacs:sbcl:eval` (see `plans/agent-playbook.md` for examples; avoid running `sbcl`/`qlot` directly)
 - Interactive TTY loop (manual testing; run inside tmux if possible):
   - `mise run clemacs:tty:run -- <optional-file>`
 - Non-interactive TTY gate (PTY-driven):

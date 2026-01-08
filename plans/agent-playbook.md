@@ -77,6 +77,8 @@ Common patterns:
   - `symbol-name` returns an ELisp string (often unibyte); wrap with `elisp::%elisp-string->cl-string` before calling CL functions like `string-downcase`.
   - For ad-hoc reference checks without shell-escaping ELisp, use:
     `mise run clemacs:ref-emacs:eval <<'EL' ... EL`
+  - For ad-hoc SBCL-side probes without rediscovering qlot paths or fighting `--eval` quoting, use:
+    `mise run clemacs:sbcl:eval <<'LISP' ... LISP`
 
 ### A) Loader fails while loading startup manifests
 
