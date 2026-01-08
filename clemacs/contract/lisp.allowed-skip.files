@@ -12,6 +12,10 @@ lisp/international/eucjp-ms.el
 # startup.*.files max-forms checkpoints); keep this list for intentionally
 # out-of-scope files only.
 
+# 2026-01-08: Defer LEIM/input-method registration; for now we only care about
+# UTF-8 working end-to-end (load/edit/save). Revisit once editor core is solid.
+lisp/leim/leim-list.el
+
 # 2026-01-07: Too compile-time heavy when loaded as source (eval-when-compile),
 # and currently depends on full translation tables + Unicode charprop/translate.
 lisp/international/ucs-normalize.el

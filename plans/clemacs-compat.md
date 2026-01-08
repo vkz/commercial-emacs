@@ -107,6 +107,15 @@ Runtime
     file is loaded; SBCL rejects `defgeneric` when a non-generic fdefinition
     already exists.
 
+- 2026-01-08: Scope internationalization to Unicode/UTF-8
+  - Decision: treat non-UTF-8 legacy encodings and LEIM input-method catalogs
+    as out of scope during bring-up; focus on “UTF-8 text in buffers + file
+    I/O” as the baseline.
+  - Rationale: simplifies early loader + coding-system surface area while we
+    converge on an interactive TTY editor core.
+  - Breadcrumbs:
+    - Skip entry: `clemacs/contract/lisp.allowed-skip.files` (`lisp/leim/leim-list.el`)
+
 ## Compiler/codegen notes (for later)
 
 These are constraints the eventual ELisp→CL compiler must preserve; if a new
