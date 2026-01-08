@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Run SBCL (qlot/core-aware) on Lisp from stdin or a file"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--file <path>" help="Load Lisp from file instead of stdin"
+#USAGE arg "[sbcl_args]" var=#true hide=#true
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+mkdir -p "${build_dir}"
+
+source "${project_root}/.mise/tasks/clemacs/lib/sbcl.sh"
+clemacs_setup_xdg_and_home "${project_root}" "${build_dir}"
+
+usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
+usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/substrate/build"
+
+substrate_dylib="${project_root}/${build_dir}/substrate/libemxsubstrate.dylib"
+export CLEMACS_SUBSTRATE_DYLIB="${substrate_dylib}"
+
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
+sbcl_dynamic_space="${CLEMACS_SBCL_DYNAMIC_SPACE_SIZE:-4096}"
+
+file="${usage_file:-}"
+
+tmp=""
+cleanup() {
+  if [[ -n "${tmp}" && -f "${tmp}" ]]; then
+    rm -f "${tmp}"
+  fi
+}
+trap cleanup EXIT
+
+script="${file}"
+if [[ -z "${script}" ]]; then
+  if [[ -t 0 ]]; then
+    echo "[clemacs:sbcl:eval] FAIL: no stdin; pass --file or pipe/heredoc Lisp" >&2
+    echo "Example:" >&2
+    echo "  mise run clemacs:sbcl:eval <<'LISP'" >&2
+    echo "  (in-package #:elisp)" >&2
+    echo "  (cl:format t \"~S~%\" (list (symbol-value 'load-path) (require 'cl-lib)))" >&2
+    echo "  LISP" >&2
+    exit 2
+  fi
+  tmp_dir="${project_root}/${build_dir}/tmp"
+  mkdir -p "${tmp_dir}"
+  tmp="$(mktemp "${tmp_dir}/sbcl-eval.XXXXXX.lisp")"
+  {
+    echo ";; -*- mode: lisp; -*-"
+    echo "(in-package #:elisp)"
+    cat
+  } >"${tmp}"
+  script="${tmp}"
+fi
+
+clemacs_sbcl_eval \
+  "${project_root}" \
+  "${build_dir}" \
+  "${deps_dir}" \
+  "${qlot_bin}" \
+  "${sbcl_dynamic_space}" \
+  --load "${script}" \
+  "$@"
