@@ -180,3 +180,4 @@ failure, a useful debug flag, a missing helper task):
 - Avoid binding local functions/macros named after `CL` symbols inside the `ELISP` package (SBCL package locks): e.g. don’t `labels` a helper named `bit`; pick `mode-bit`/`%bit` instead.
 - When upgrading `load`/`require`, keep `get-load-suffixes` to `.el` only (there are checked-in `.elc` files, but clemacs can’t load bytecode).
 - If `startup-check` fails with `:READ-ERROR` (often “end of file”), use `mise run clemacs:ref-emacs:eval` to print the failing top-level form by index and identify the unsupported reader syntax (e.g. `?\\^?`).
+- When debugging ELisp macros via `mise run clemacs:sbcl:eval`, remember the script runs in the `ELISP` package: use `cl:format` (not `format`), and build tricky reader forms (e.g. backquote pcase patterns) with `read-from-string` to match clemacs' ELisp reader representation.
