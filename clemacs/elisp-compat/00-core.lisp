@@ -136,6 +136,10 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
            (setf ,var nil)
            ,result)))))
 
+(cl:defun nlistp (object)
+  "Bring-up subset of ELisp `nlistp'."
+  (not (listp object)))
+
 (cl:defun symbol-name (sym)
   "ELisp-ish SYMBOL-NAME that returns lowercase names by default."
   (let* ((pkg (cl:symbol-package sym))

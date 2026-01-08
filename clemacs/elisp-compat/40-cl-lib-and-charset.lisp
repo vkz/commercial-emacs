@@ -516,6 +516,14 @@ whereas CL:COERCE expects CL type names."
            (t (cl:error "ELISP:CL-MISMATCH unsupported :test: ~S" test)))))
     (cl:mismatch sequence1 sequence2 :test test-fn)))
 
+(cl:defun cl-subseq (seq start &optional end)
+  "Bring-up subset of cl-extra's `cl-subseq'.
+
+Upstream `cl-subseq' is implemented in terms of `seq-subseq'."
+  (unless (fboundp 'seq-subseq)
+    (error "ELISP:CL-SUBSEQ requires SEQ (missing SEQ-SUBSEQ)"))
+  (seq-subseq seq start end))
+
 (cl:defun cl-remprop (symbol indicator)
   "Minimal subset of cl-lib's `cl-remprop'."
   (and (remprop symbol indicator) t))
@@ -660,7 +668,33 @@ named constructors."
          (doc (and rest (stringp (car rest)) (pop rest)))
          (doc* (and doc (if (cl:stringp doc) doc (%elisp-string->cl-string doc))))
          (name (if (consp spec) (car spec) spec))
-         (opts (and (consp spec) (cdr spec)))
+         (ctor-doc-forms nil)
+         (opts
+           (and (consp spec)
+                (mapcar
+                 (lambda (opt)
+                   (if (and (consp opt) (eq (car opt) :constructor))
+                       (cl:destructuring-bind
+                           (_kw &optional ctor-name ctor-lambda ctor-doc &rest _rest)
+                           opt
+                         (declare (cl:ignore _kw _rest))
+                         (when (and (symbolp ctor-name) ctor-doc)
+                           (let ((ctor-doc*
+                                   (if (cl:stringp ctor-doc)
+                                       ctor-doc
+                                       (%elisp-string->cl-string ctor-doc))))
+                             (push `(setf (cl:documentation ',ctor-name 'cl:function)
+                                          ,ctor-doc*)
+                                   ctor-doc-forms)))
+                         ;; SBCL's CL:DEFSTRUCT doesn't accept constructor
+                         ;; docstrings (cl-lib does), so strip them here and
+                         ;; reattach via CL:DOCUMENTATION above.
+                         (cond
+                          ((null ctor-name) '(:constructor nil))
+                          ((null ctor-lambda) (list :constructor ctor-name))
+                          (t (list :constructor ctor-name ctor-lambda))))
+                       opt))
+                 (cdr spec))))
          (ctor-opts (remove-if-not (lambda (x) (and (consp x) (eq (car x) :constructor))) opts))
          (ctor-nil-p (and ctor-opts
                           (some (lambda (x) (null (cadr x))) ctor-opts)))
@@ -686,19 +720,22 @@ named constructors."
                ((symbolp slot) slot)
                ((consp slot)
                 (let ((nm (car slot))
-                      (init (cadr slot))
+                       (init (cadr slot))
                       (plist (cddr slot)))
                   (list* nm init
                          (loop for (k v) on plist by #'cddr
                                unless (or (eq k :documentation) (eq k :type))
-                                 append (list k v)))))
+                                 append (list (if (eq k :readonly) :read-only k) v)))))
                (t slot)))
             rest))
          (args* (append (list spec*)
                         (when doc* (list doc*))
                         slots*)))
     (declare (cl:ignore name))
-    `(cl:defstruct ,@args*)))
+    `(progn
+       (cl:defstruct ,@args*)
+       ,@(nreverse ctor-doc-forms)
+       ',name)))
 
 (cl:defmacro cl-defgeneric (name args &rest rest)
   "Bring-up subset of cl-generic's `cl-defgeneric'.
@@ -868,7 +905,10 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
 
 (cl:defun put (symbol prop value)
   "ELisp-ish PUT for symbol plists."
-  (setf (get symbol prop) value)
+  ;; CL's (setf (get ...)) prepends new properties; Emacs preserves insertion
+  ;; order (and updates in place) on symbol plists.
+  (setf (symbol-plist symbol)
+        (%plist-put-preserve (symbol-plist symbol) prop value))
   value)
 
 (cl:defvar *elisp-function-properties* (cl:make-hash-table :test 'eq))
