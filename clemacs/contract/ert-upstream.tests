@@ -121,9 +121,16 @@ subr-x-test-if-let*-false
 rx-seq
 rx-or
 rx-any
+rx-char-any
+rx-kleene
+rx-repeat
 
 # seq bring-up (sequence library).
 test-setf-seq-elt
 test-seq-drop
 test-seq-take
 test-seq-map-indexed
+test-seq-drop-while
+test-seq-take-while
+test-seq-filter
+test-seq-remove
