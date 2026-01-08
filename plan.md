@@ -135,7 +135,7 @@ Acceptance criteria (promotion gate)
 - Promote clemacs to `mise run run` only when `run:clemacs` is a usable terminal editor and exits cleanly.
 
 Next actions (high-leverage)
-- Switch the clemacs TTY loop from the bring-up keymap to shipped `current-global-map` by loading a minimal startup set (backquote + `lisp/subr.el`) during TTY startup (default), then optionally advancing to deeper `startup.*.files` via `CLEMACS_TTY_STARTUP_LEVEL`.
+- Switch the clemacs TTY loop from the bring-up keymap to shipped `current-global-map` by loading a curated startup manifest during TTY startup (default `CLEMACS_TTY_STARTUP_LEVEL=smoke`), with an option to keep the minimal bring-up startup (`CLEMACS_TTY_STARTUP_LEVEL=subr`) while debugging.
 - Add minimal keyboard/command-loop stubs needed by shipped ELisp and upstream ERT loads (e.g. `key-parse`, `this-single-command-keys`, event symbol parsing/modifiers), keeping behavior intentionally small but Emacs-shaped.
 
 ## Archive
