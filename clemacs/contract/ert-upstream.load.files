@@ -6,11 +6,18 @@
 # Keep this list monotonic: add entries, don't delete to "get green".
 
 # 2026-01-08: Bring up `subr-x` (string helpers + threading macros).
-lisp/subr-x.el -
+# NOTE(2026-01-08): In this fork, `subr-x.el` lives under `lisp/emacs-lisp/`.
+# Keep the old path commented for archeology.
+# lisp/subr-x.el -
+lisp/emacs-lisp/subr-x.el -
 test/lisp/emacs-lisp/subr-x-tests.el -
 
 # 2026-01-08: Bring up `rx` + `seq` upstream tests.
+lisp/emacs-lisp/regexp-opt.el -
 lisp/emacs-lisp/rx.el -
 test/lisp/emacs-lisp/rx-tests.el -
 lisp/emacs-lisp/seq.el -
 test/lisp/emacs-lisp/seq-tests.el -
+
+# 2026-01-08: Bring up `kbd` parsing tests.
+test/lisp/subr-tests.el -

@@ -96,70 +96,217 @@
                               (cl:subseq s start i))))))
                  (loop for w = (read-word) while w do (push w out)))
                (nreverse out)))
-           (maybe-repetition (word)
-             (let ((star (cl:position #\* word)))
-               (if (and star (> star 0)
-                        (cl:every #'cl:digit-char-p (cl:subseq word 0 star)))
-                   (cl:values (parse-integer (cl:subseq word 0 star) :junk-allowed nil)
-                              (cl:subseq word (1+ star)))
-                   (cl:values 1 word))))
-           (token->event (token)
-             (let* ((tok (cl:string-downcase token))
-                    (named (cl:assoc tok '(("nul" . 0)
-                                           ("ret" . 13)
-                                           ("lfd" . 10)
-                                           ("tab" . 9)
-                                           ("esc" . 27)
-                                           ("spc" . 32)
-                                           ("del" . 127))
-                                     :test #'cl:string=)))
-               (cond
-                (named (cdr named))
-                ((and (cl:search "<" tok) (cl:char= (cl:aref tok (1- (cl:length tok))) #\>))
-                 ;; e.g. "<left>", "C-<left>", "C-M-<return>".
-                 (let* ((lt (cl:position #\< tok))
-                        (prefix (cl:subseq tok 0 lt))
-                        (inner (cl:subseq tok (1+ lt) (1- (cl:length tok))))
-                        (mods (split-hyphen prefix))
-                        (base (cl:string-upcase inner))
-                        (mods* (cl:mapcar #'cl:string-upcase mods))
-                        (name (if mods*
-                                  (concatenate 'string
-                                               (cl:format nil "~{~A-~}" mods*)
-                                               base)
-                                  base)))
-                   (cl:intern name (cl:find-package "ELISP"))))
-                ((>= (cl:length tok) 3)
-                 ;; e.g. "C-x".
-                 (let* ((parts (split-hyphen tok))
-                        (base (car (last parts)))
-                        (mods (butlast parts)))
-                   (cond
-                    ((and (= (cl:length mods) 1) (cl:string= (car mods) "c") (= (cl:length base) 1))
-                     (logand (cl:char-code (cl:aref base 0)) 31))
-                    ((and (= (cl:length mods) 0) (= (cl:length base) 1))
-                     (cl:char-code (cl:aref base 0)))
-                    (t
-                     ;; For non-char / multi-modifier cases, return an event symbol.
-                     (cl:intern (cl:string-upcase tok) (cl:find-package "ELISP"))))))
-                ((= (cl:length tok) 1)
-                 (cl:char-code (cl:aref tok 0)))
-                (t
-                 (error "ELISP:KEY-PARSE unsupported token: ~S" token))))))
-    (cond
-     ((vectorp keys) keys)
-     ((null keys) (cl:make-array 0))
-     ((stringp keys)
-      (let* ((s (%elisp-string->cl-string keys))
-             (words (split-words s))
-             (events nil))
-        (dolist (w words)
-          (multiple-value-bind (times body) (maybe-repetition w)
-            (dotimes (_ times)
-              (push (token->event body) events))))
-        (coerce (nreverse events) 'vector)))
-     (t
-      (error "ELISP:KEY-PARSE expected string or vector, got: ~S" keys)))))
+	           (maybe-repetition (word)
+	             (let ((star (cl:position #\* word)))
+	               (if (and star (> star 0)
+	                        (cl:every #'cl:digit-char-p (cl:subseq word 0 star)))
+	                   (cl:values (parse-integer (cl:subseq word 0 star) :junk-allowed nil)
+	                              (cl:subseq word (1+ star)))
+	                   (cl:values 1 word))))
+	           (named-token-code (tok)
+	             (let ((lc (cl:string-downcase tok)))
+	               (cdr (cl:assoc lc '(("nul" . 0)
+	                                   ("ret" . 13)
+	                                   ("lfd" . 10)
+	                                   ("tab" . 9)
+	                                   ("esc" . 27)
+	                                   ("spc" . 32)
+	                                   ("del" . 127))
+	                             :test #'cl:string=))))
+	           (mod-token->keyword (tok)
+	             (cond
+	              ;; One-letter modifiers are case sensitive for S (shift) vs s (super).
+	              ((or (cl:string= tok "C")
+	                   (cl:string= tok "c")
+	                   (cl:string-equal tok "ctrl")
+	                   (cl:string-equal tok "control"))
+	               :control)
+	              ((or (cl:string= tok "M")
+	                   (cl:string= tok "m")
+	                   (cl:string-equal tok "meta"))
+	               :meta)
+	              ((or (cl:string= tok "S")
+	                   (cl:string-equal tok "shift"))
+	               :shift)
+	              ((or (cl:string= tok "s")
+	                   (cl:string-equal tok "super"))
+	               :super)
+	              ((or (cl:string= tok "H")
+	                   (cl:string= tok "h")
+	                   (cl:string-equal tok "hyper"))
+	               :hyper)
+	              ((or (cl:string= tok "A")
+	                   (cl:string= tok "a")
+	                   (cl:string-equal tok "alt"))
+	               :alt)
+	              (t nil)))
+	           (mod->prefix-token (m)
+	             (case m
+	               (:control "C")
+	               (:meta "M")
+	               (:shift "S")
+	               (:super "s")
+	               (:hyper "H")
+	               (:alt "A")
+	               (otherwise (error "ELISP:KEY-PARSE unknown modifier keyword: ~S" m))))
+	           (caret-control-code (tok)
+	             (when (and (= (cl:length tok) 2) (cl:char= (cl:aref tok 0) #\^))
+	               (let ((ch (cl:aref tok 1)))
+	                 (if (cl:char= ch #\?)
+	                     127
+	                     (logand (cl:char-code ch) #x1f)))))
+	           (octal-escape-code (tok)
+	             (when (and (>= (cl:length tok) 2) (cl:char= (cl:aref tok 0) #\\))
+	               (let ((digits (cl:subseq tok 1)))
+	                 (when (and (<= 1 (cl:length digits) 3)
+	                            (cl:every #'cl:digit-char-p digits)
+	                            (cl:every (lambda (d) (digit-char-p d 8)) digits))
+	                   (parse-integer digits :radix 8 :junk-allowed nil)))))
+	           (apply-char-modifiers (code mods &key (controlify-allowed t))
+	             (let ((bits 0)
+	                   (ctlp nil))
+	               (dolist (m mods)
+	                 (case m
+	                   (:alt (incf bits +char-alt+))
+	                   (:super (incf bits +char-super+))
+	                   (:hyper (incf bits +char-hyper+))
+	                   (:shift (incf bits +char-shift+))
+	                   (:meta (incf bits +char-meta+))
+	                   (:control (setf ctlp t))
+	                   (otherwise (error "ELISP:KEY-PARSE unknown modifier keyword: ~S" m))))
+	               (let ((ctl-code (and ctlp controlify-allowed (%controlify-ascii code))))
+	                 (cond
+	                  ((and ctlp (= code 0))
+	                   (+ bits +char-ctl+))
+	                  (ctl-code
+	                   (+ bits ctl-code))
+	                  (ctlp
+	                   (+ bits +char-ctl+ code))
+	                  (t
+	                   (+ bits code))))))
+	           (mods->event-symbol (mods base-name)
+	             (let* ((prefixes (cl:mapcar #'mod->prefix-token mods))
+	                    (name
+	                      (if prefixes
+	                          (cl:concatenate 'cl:string
+	                                          (cl:format nil "~{~A-~}" prefixes)
+	                                          base-name)
+	                          base-name)))
+	               (cl:intern (cl:string-upcase name) (cl:find-package "ELISP"))))
+	           (token->event (token)
+	             (let* ((len (cl:length token))
+	                    (lt (cl:position #\< token))
+	                    (anglep (and lt (> len 0) (cl:char= (cl:aref token (1- len)) #\>)))
+	                    (mods-parts nil)
+	                    (base-part nil)
+	                    (base-from-named nil)
+	                    (base-from-angle nil))
+	               (cond
+	                ;; Old-style control notation (from key-description).
+	                ((and (not anglep) (null lt))
+	                 (let ((cc (caret-control-code token)))
+	                   (when cc
+	                     (return-from token->event cc)))
+	                 (let ((oc (octal-escape-code token)))
+	                   (when oc
+	                     (return-from token->event oc))))
+	                (t nil))
+
+	               (if anglep
+	                   (let* ((prefix (cl:subseq token 0 lt))
+	                          (inner (cl:subseq token (1+ lt) (1- len)))
+	                          (inner-parts (split-hyphen inner)))
+	                     (setf mods-parts (append (split-hyphen prefix) (butlast inner-parts))
+	                           base-part (car (last inner-parts))
+	                           base-from-angle t))
+	                   (let* ((parts (split-hyphen token)))
+	                     (setf mods-parts (butlast parts)
+	                           base-part (car (last parts)))))
+
+	               (when (or (null base-part) (= (cl:length base-part) 0))
+	                 (error "ELISP:KEY-PARSE invalid token (missing base): ~S" token))
+
+	               (let ((mods nil))
+	                 (dolist (p mods-parts)
+	                   (let ((m (mod-token->keyword p)))
+	                     (when (null m)
+	                       (error "ELISP:KEY-PARSE unknown modifier ~S in token ~S" p token))
+	                     (push m mods)))
+	                 (setf mods (nreverse mods))
+
+	                 (let* ((named (named-token-code base-part))
+	                        (base-is-char nil)
+	                        (base-code nil)
+	                        (controlify-allowed nil))
+	                   (cond
+	                    (named
+	                     (setf base-is-char t
+	                           base-code named
+	                           base-from-named t
+	                           controlify-allowed nil))
+	                    ((= (cl:length base-part) 1)
+	                     (setf base-is-char t
+	                           base-code (cl:char-code (cl:aref base-part 0))
+	                           controlify-allowed t))
+	                    (base-from-angle
+	                     ;; In <> syntax, treat multi-char base names as event symbols.
+	                     (return-from token->event (mods->event-symbol mods base-part)))
+	                    ((null mods)
+	                     ;; Bare multi-char tokens are handled elsewhere (or are named tokens above).
+	                     (error "ELISP:KEY-PARSE unsupported token: ~S" token))
+	                    (t
+	                     ;; Reject modifier forms like "C-xx" and "M-x<TAB>".
+	                     (error "ELISP:KEY-PARSE invalid modified token: ~S" token)))
+
+	                   (when (and base-is-char (not base-from-named) (not base-from-angle))
+	                     (setf controlify-allowed t))
+	                   (when (and base-is-char base-from-angle)
+	                     (setf controlify-allowed nil))
+
+	                   (apply-char-modifiers base-code mods
+	                                         :controlify-allowed (and controlify-allowed (not base-from-named))))))))
+
+	    (cond
+	     ((vectorp keys) keys)
+	     ((null keys) (cl:make-array 0))
+	     ((stringp keys)
+	      (let* ((s (%elisp-string->cl-string keys))
+	             (words (split-words s))
+	             (events nil))
+	        (dolist (w words)
+	          (multiple-value-bind (times body) (maybe-repetition w)
+	            (dotimes (_ times)
+	              (let ((body-lc (cl:string-downcase body)))
+	                ;; For bare key sequences like "foobar" (no spaces), treat the
+	                ;; token as a run of literal characters, unless it is a named
+	                ;; key like "RET" or includes modifiers/<> syntax.
+	                (cond
+	                 ((and (> (cl:length body) 2)
+	                       (cl:char= (cl:aref body 0) #\<)
+	                       (cl:char= (cl:aref body (1- (cl:length body))) #\>)
+	                       (let ((inner (cl:subseq body 1 (1- (cl:length body)))))
+	                         (find-if #'ws-char-p inner)))
+	                  ;; Treat "< right >" as the literal string "<right>".
+	                  ;; We accumulate EVENTS with PUSH (then NREVERSE), so push
+	                  ;; characters in forward order here.
+	                  (push (cl:char-code #\<) events)
+	                  (let ((inner (cl:subseq body 1 (1- (cl:length body)))))
+	                    (loop for ch across inner
+	                          unless (ws-char-p ch) do (push (cl:char-code ch) events)))
+	                  (push (cl:char-code #\>) events))
+	                 ((and (> (cl:length body) 1)
+	                       (null (cl:position #\- body))
+	                       (null (cl:position #\< body))
+	                       (null (named-token-code body-lc))
+	                       (null (caret-control-code body))
+	                       (null (octal-escape-code body)))
+	                  (dotimes (i (cl:length body))
+	                    (push (cl:char-code (cl:aref body i)) events)))
+	                 (t
+	                  (push (token->event body) events)))))))
+	        (coerce (nreverse events) 'vector)))
+	     (t
+	      (error "ELISP:KEY-PARSE expected string or vector, got: ~S" keys)))))
 
 (cl:defun key-binding (keys &optional accept-default _no-remap _position)
   "Bring-up subset of ELisp `key-binding'."

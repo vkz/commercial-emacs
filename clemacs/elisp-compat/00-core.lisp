@@ -6,7 +6,7 @@
 ;; `with-output-to-string' is also a CL macro; shadow it so ELisp code resolves
 ;; to our compatibility macro instead of tripping SBCL's package lock.
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (shadow '(with-output-to-string macroexpand macroexpand-1)))
+  (shadow '(with-output-to-string macroexpand macroexpand-1 elt)))
 
 ;; Upstream ELisp uses declaration specifiers that CL implementations don't know
 ;; about.  Declare them so SBCL doesn't spam style warnings during bring-up.
@@ -105,6 +105,36 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
             (setf (aref out i) (char-code (char name i))))
           out)
         name)))
+
+(cl:defun elt (sequence n)
+  "ELisp-ish `elt' for lists/vectors/strings.
+
+Unlike CL:ELT, indexing a string returns an integer character code."
+  (unless (integerp n)
+    (signal 'wrong-type-argument (list 'integerp n)))
+  (when (minusp n)
+    (signal 'args-out-of-range (list sequence n)))
+  (cond
+   ((unibyte-string-p sequence) (aref sequence n))
+   ((cl:stringp sequence) (%elisp-char-code (char sequence n)))
+   (t (cl:elt sequence n))))
+
+(cl:defun take (n list)
+  "Return a list of the first N elements of LIST.
+
+If N is zero or negative, return nil.  Always returns a fresh list."
+  (unless (integerp n)
+    (signal 'wrong-type-argument (list 'integerp n)))
+  (unless (listp list)
+    (signal 'wrong-type-argument (list 'listp list)))
+  (let ((n (max n 0))
+        (out nil)
+        (xs list))
+    (loop while (and (> n 0) (consp xs)) do
+      (push (car xs) out)
+      (setf xs (cdr xs))
+      (decf n))
+    (nreverse out)))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   ;; Some upstream ELisp (notably regexp-opt.el) uses `string-lessp'.  If we

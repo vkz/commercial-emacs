@@ -15,15 +15,21 @@
         (need-multibyte nil)
         (out-intervals nil)
         (out-len 0))
-    (labels ((emit-code (code)
-               (vector-push-extend code codes)
-               (incf out-len)
-               (when (or (%raw-byte-char-code-p code) (>= code 128))
-                 (setf need-multibyte t)))
-             (emit-string-intervals (s start)
-               (let ((intervals (elisp::%string-text-properties s)))
-                 (when intervals
-                   (setf out-intervals
+	    (labels ((emit-code (code)
+	               (vector-push-extend code codes)
+	               (incf out-len)
+	               (when (or (%raw-byte-char-code-p code) (>= code 128))
+	                 (setf need-multibyte t)))
+	             (emit-charish (x)
+	               (cond
+	                ((integerp x) (emit-code x))
+	                ((cl:characterp x) (emit-code (char-code x)))
+	                (t
+	                 (error "ELISP:CONCAT expected character code, got: %S" x))))
+	             (emit-string-intervals (s start)
+	               (let ((intervals (elisp::%string-text-properties s)))
+	                 (when intervals
+	                   (setf out-intervals
                          (nconc out-intervals
                                 (loop for iv in intervals
                                       for iv-s = (elisp::text-prop-interval-start iv)
@@ -39,19 +45,30 @@
                  (dotimes (i (length s))
                    (emit-code (aref s i))))
                 (t
-                 (dotimes (i (length s))
-                   (emit-code (%elisp-char-code (char s i)))))))
-             (emit-object (o)
-               ;; Force multibyte for non-string objects to avoid accidental
-               ;; unibyte/encoding surprises during bring-up.
-               (emit-string (string-to-multibyte (princ-to-string o)))))
-      (dolist (p parts)
-        (typecase p
-          (null nil)
-          ((or cl:string unibyte-string) (emit-string p))
-          (character (emit-code (char-code p)))
-          (integer (emit-code p))
-          (t (emit-object p))))
+	                 (dotimes (i (length s))
+	                   (emit-code (%elisp-char-code (char s i)))))))
+	             (emit-sequence (seq)
+	               (cond
+	                ((vectorp seq)
+	                 (dotimes (i (length seq))
+	                   (emit-charish (aref seq i))))
+	                ((consp seq)
+	                 (dolist (x seq) (emit-charish x)))
+	                (t
+	                 (error "ELISP:CONCAT expected list or vector, got: %S" seq))))
+	             (emit-object (o)
+	               ;; Force multibyte for non-string objects to avoid accidental
+	               ;; unibyte/encoding surprises during bring-up.
+	               (emit-string (string-to-multibyte (princ-to-string o)))))
+	      (dolist (p parts)
+	        (typecase p
+	          (null nil)
+	          ((or cl:string unibyte-string) (emit-string p))
+	          (character (emit-code (char-code p)))
+	          (integer (emit-code p))
+	          (vector (emit-sequence p))
+	          (cons (emit-sequence p))
+	          (t (emit-object p))))
       (if (not need-multibyte)
           (let ((out (%make-unibyte-string (length codes))))
             (dotimes (i (length codes))
@@ -835,11 +852,11 @@ START/END are 1-based buffer positions."
     (string-capitalize s))))
 
 (cl:defun substring (s from &optional to)
-  "Bring-up subset of ELisp `substring' for strings.
+  "Bring-up subset of ELisp `substring' for strings and vectors.
 
 Supports negative indices and TO = nil (meaning end of string)."
-  (unless (stringp s)
-    (error "ELISP:SUBSTRING expects a string, got: ~S" s))
+  (unless (or (stringp s) (vectorp s))
+    (error "ELISP:SUBSTRING expects a string or vector, got: ~S" s))
   (unless (integerp from)
     (error "ELISP:SUBSTRING expects integer FROM, got: ~S" from))
   (let* ((n (length s))
@@ -851,20 +868,21 @@ Supports negative indices and TO = nil (meaning end of string)."
     (when (or (< start 0) (> start n) (< end 0) (> end n) (< end start))
       (signal 'args-out-of-range (list s from to)))
     (let ((out (subseq s start end)))
-      (let ((intervals (elisp::%string-text-properties s)))
-        (when intervals
-          (let ((out-intervals nil))
-            (dolist (iv intervals)
-              (let* ((iv-s (elisp::text-prop-interval-start iv))
-                     (iv-e (elisp::text-prop-interval-end iv))
-                     (s* (max start iv-s))
-                     (e* (min end iv-e)))
-                (when (< s* e*)
-                  (push (elisp::make-text-prop-interval
-                         :start (- s* start)
-                         :end (- e* start)
-                         :plist (elisp::text-prop-interval-plist iv))
-                        out-intervals))))
-            (when out-intervals
-              (elisp::%set-string-text-properties out (nreverse out-intervals))))))
+      (when (stringp s)
+        (let ((intervals (elisp::%string-text-properties s)))
+          (when intervals
+            (let ((out-intervals nil))
+              (dolist (iv intervals)
+                (let* ((iv-s (elisp::text-prop-interval-start iv))
+                       (iv-e (elisp::text-prop-interval-end iv))
+                       (s* (max start iv-s))
+                       (e* (min end iv-e)))
+                  (when (< s* e*)
+                    (push (elisp::make-text-prop-interval
+                           :start (- s* start)
+                           :end (- e* start)
+                           :plist (elisp::text-prop-interval-plist iv))
+                          out-intervals))))
+              (when out-intervals
+                (elisp::%set-string-text-properties out (nreverse out-intervals)))))))
       out)))

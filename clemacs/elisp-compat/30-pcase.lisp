@@ -12,6 +12,39 @@
 ;; point these stubs should become unused/overridden.
 ;; ---------------------------------------------------------------------------
 
+(cl:defvar *pcase--pattern-macroexpanders*
+  (cl:make-hash-table :test #'eq))
+
+(cl:defun %pcase--get-pattern-macroexpander (sym)
+  (gethash sym *pcase--pattern-macroexpanders*))
+
+(cl:defmacro pcase-defmacro (name args &rest body)
+  "Bring-up subset of ELisp `pcase-defmacro'.
+
+This defines a pattern-macro expander for patterns of the form (NAME ...).
+
+We intentionally do not attach the expander via symbol properties yet; our
+current `pcase' implementation consults `*pcase--pattern-macroexpanders*'
+directly."
+  (let ((doc-form
+          (and body
+               (or (cl:stringp (car body)) (cl:vectorp (car body)))
+               (car body)))
+        (decl (and body (consp (car body)) (eq (caar body) 'declare) (car body))))
+    (when doc-form (setf body (cdr body)))
+    (when decl (setf body (cdr body)))
+    (let* ((elisp-pkg (cl:find-package "ELISP"))
+           (fsym (cl:intern (cl:format nil "~A--PCASE-MACROEXPANDER"
+                                       (cl:symbol-name name))
+                            elisp-pkg))
+           (doc-string (and doc-form (cl:stringp doc-form) doc-form)))
+      `(eval-when (:compile-toplevel :load-toplevel :execute)
+         (cl:defun ,fsym ,args
+           ,@(when doc-string (list doc-string))
+           ,@body)
+         (setf (gethash ',name *pcase--pattern-macroexpanders*) #',fsym)
+         ',name))))
+
 (cl:defun %pcase--dontcare-p (pat)
   (and (symbolp pat) (or (eq pat '_) (eq pat t) (eq pat 'pcase--dontcare))))
 
@@ -126,7 +159,46 @@ Returns (values LAMBDA-LIST CHECKS SUBPATTERNS BINDINGS), where:
       (let ((ll (gen-elt tmpl)))
         (cl:values ll (nreverse checks) (nreverse subpatterns) (nreverse bindings))))))
 
+(cl:defun %pcase--fun-placeholder-p (x)
+  (and (symbolp x) (string= (symbol-name x) "_")))
+
+(cl:defun %pcase--elisp-keyword-p (sym)
+  "Return non-nil if SYM should be treated as an ELisp keyword constant.
+
+In ELisp, keywords are self-evaluating symbols whose names start with \":\".
+Upstream `pcase' patterns treat those as constants (not variable bindings)."
+  (and (symbolp sym)
+       (let ((name (symbol-name sym)))
+         (and (cl:plusp (length name))
+              (cond
+               ((cl:stringp name)
+                (char= (char name 0) #\:))
+               ((or (vectorp name) (unibyte-string-p name))
+                (= (aref name 0) (char-code #\:)))
+               (t nil))))))
+
+(cl:defun %pcase--emit-fun-call (fun val)
+  "Return code that calls FUN with VAL inserted per `pcase' rules."
+  (cond
+   ((symbolp fun) `(,fun ,val))
+   ((and (consp fun) (eq (car fun) 'lambda))
+    `(funcall (function ,fun) ,val))
+   ((and (consp fun) (symbolp (car fun)))
+    (let* ((f (car fun))
+           (args (cdr fun))
+           (pos (position-if #'%pcase--fun-placeholder-p args)))
+      (if pos
+          `(,f ,@(subseq args 0 pos) ,val ,@(subseq args (1+ pos)))
+        `(,f ,@args ,val))))
+   (t
+    (cl:error "pcase: unsupported FUN in pred/app: ~S" fun))))
+
 (cl:defun %pcase--emit-match--emit (pat val ft fv k)
+  (when (and (consp pat) (symbolp (car pat)))
+    (let ((exp (%pcase--get-pattern-macroexpander (car pat))))
+      (when exp
+        (return-from %pcase--emit-match--emit
+          (%pcase--emit-match--emit (apply exp (cdr pat)) val ft fv k)))))
   (cond
    ((%pcase--dontcare-p pat) k)
    ((%pcase--bq-form-p pat)
@@ -178,10 +250,17 @@ Returns (values LAMBDA-LIST CHECKS SUBPATTERNS BINDINGS), where:
        ((symbolp pred)
         `(if (,pred ,val) ,k (return-from ,ft ,fv)))
        ((and (consp pred) (eq (car pred) 'not)
-             (consp (cdr pred)) (symbolp (cadr pred)) (null (cddr pred)))
-        `(if (not (,(cadr pred) ,val)) ,k (return-from ,ft ,fv)))
+             (consp (cdr pred)) (null (cddr pred)))
+        (let ((inner (cadr pred)))
+          `(if (not ,(%pcase--emit-fun-call inner val))
+               ,k
+               (return-from ,ft ,fv))))
        (t
-        (cl:error "pcase: unsupported (pred ~S) pattern" pred)))))
+        `(if ,(%pcase--emit-fun-call pred val) ,k (return-from ,ft ,fv))))))
+   ((and (consp pat) (eq (car pat) 'app) (= (length pat) 3))
+    (let ((tmp (gensym "PCASE-APP-")))
+      `(let ((,tmp ,(%pcase--emit-fun-call (cadr pat) val)))
+         ,(%pcase--emit-match--emit (caddr pat) tmp ft fv k))))
    ((and (consp pat) (eq (car pat) 'let) (= (length pat) 3))
     (let ((tmp (gensym "PCASE-LET-")))
       `(let ((,tmp ,(caddr pat)))
@@ -191,8 +270,9 @@ Returns (values LAMBDA-LIST CHECKS SUBPATTERNS BINDINGS), where:
    ((or (integerp pat) (cl:stringp pat))
     `(if (elisp:equal ,val ,pat) ,k (return-from ,ft ,fv)))
    ((and (symbolp pat)
-         (eq (symbol-package pat) (find-package "KEYWORD")))
-    `(if (eql ,val ,pat) ,k (return-from ,ft ,fv)))
+         (or (eq (symbol-package pat) (find-package "KEYWORD"))
+             (%pcase--elisp-keyword-p pat)))
+    `(if (eq ,val ',pat) ,k (return-from ,ft ,fv)))
    ((null pat)
     `(if (null ,val) ,k (return-from ,ft ,fv)))
    ((and (symbolp pat) (not (eq pat t)))

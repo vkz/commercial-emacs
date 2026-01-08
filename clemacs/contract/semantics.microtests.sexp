@@ -64,6 +64,21 @@
   :expected "24"
   :emacs :match)
 
+ (:name "reader-symbol-question-mark-constituent"
+  :expr "(symbol-name 'first?)"
+  :expected "\"first?\""
+  :emacs :match)
+
+ (:name "pcase-pred-fun-form-appends-expval"
+  :expr "(pcase \"abc\" ((pred (string-match \"a\")) t) (_ nil))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "reader-struct-literal-prints-as-#s"
+  :expr "(prin1-to-string #s(e (f [g])))"
+  :expected "\"#s(e (f [g]))\""
+  :emacs :match)
+
  (:name "text-props-text-property-default-nonsticky-boundp"
   :expr "(boundp 'text-property-default-nonsticky)"
   :expected "t"
@@ -816,5 +831,20 @@
  (:name "overlays-delete-clears-buffer-and-start"
   :expr "(with-temp-buffer (insert \"abc\") (let ((ov (make-overlay 1 2))) (delete-overlay ov) (and (null (overlay-buffer ov)) (null (overlay-start ov)))))"
   :expected "t"
+  :emacs :match)
+
+ (:name "mapconcat-default-separator-nil"
+  :expr "(mapconcat #'identity '(\"a\" \"b\"))"
+  :expected "\"ab\""
+  :emacs :match)
+
+ (:name "regexp-quote-rbracket"
+  :expr "(regexp-quote \"]\")"
+  :expected "\"]\""
+  :emacs :match)
+
+ (:name "pcase-keyword-constant"
+  :expr "(pcase 'x (:foo 'bad) (_ 'ok))"
+  :expected "ok"
   :emacs :match)
 )

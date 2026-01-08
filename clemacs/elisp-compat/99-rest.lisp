@@ -27,8 +27,22 @@
 
 (cl:defun aset (array idx value)
   "ELisp-ish ASET."
-  (setf (aref array idx) value)
-  value)
+  (cond
+   ((unibyte-string-p array)
+    (unless (integerp value)
+      (error "ELISP:ASET expects character code for unibyte string, got: %S" value))
+    (unless (and (integerp value) (<= 0 value 255))
+      (error "ELISP:ASET unibyte string code out of range: %S" value))
+    (setf (aref array idx) value)
+    value)
+   ((cl:stringp array)
+    (unless (integerp value)
+      (error "ELISP:ASET expects character code for string, got: %S" value))
+    (setf (char array idx) (%elisp-code->char value))
+    value)
+   (t
+    (setf (aref array idx) value)
+    value)))
 
 (cl:defun use-global-map (keymap)
   "Extremely small stub for ELisp `use-global-map'."

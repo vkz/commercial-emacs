@@ -49,12 +49,18 @@
 (defun %elisp-eval-1 (string)
   (let ((*package* (find-package "ELISP"))
         (*readtable* (elisp::%ensure-elisp-readtable)))
-    (elisp:eval (read-from-string string))))
+    (multiple-value-bind (sanitized _insertions)
+        (elisp::%sanitize-elisp-source/colon-tokens string)
+      (declare (ignore _insertions))
+      (elisp:eval (read-from-string sanitized)))))
 
 (defun %elisp-read-1 (string)
   (let ((*package* (find-package "ELISP"))
         (*readtable* (elisp::%ensure-elisp-readtable)))
-    (read-from-string string)))
+    (multiple-value-bind (sanitized _insertions)
+        (elisp::%sanitize-elisp-source/colon-tokens string)
+      (declare (ignore _insertions))
+      (read-from-string sanitized))))
 
 (fiveam:test substrate-basics
   (let ((version (clemacs:substrate-version))

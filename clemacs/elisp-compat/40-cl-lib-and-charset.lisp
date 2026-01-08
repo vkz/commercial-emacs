@@ -193,6 +193,10 @@ where TARGET evaluates to a callable object."
   "Bring-up subset of cl-lib's `cl-adjoin'."
   (apply #'cl:adjoin item list keys))
 
+(cl:defun cl-reduce (function sequence &rest keys)
+  "Bring-up subset of cl-lib's `cl-reduce'."
+  (apply #'cl:reduce function sequence keys))
+
 (cl:defmacro cl-loop (&rest clauses)
   "Minimal subset of cl-lib's `cl-loop'."
   (labels ((rewrite-by (x)

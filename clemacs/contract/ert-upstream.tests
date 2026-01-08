@@ -134,3 +134,6 @@ test-seq-drop-while
 test-seq-take-while
 test-seq-filter
 test-seq-remove
+
+# `kbd` / key-parse bring-up (subr-tests).
+subr-test-kbd

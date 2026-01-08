@@ -637,8 +637,20 @@ Binds VAR (when non-nil) to an ELisp-style error datum:
       `(let ((,out
               (catch ',tag
                 (cl:handler-bind
-                    ((elisp-signal
+                   ((elisp-signal
                        (lambda (,e)
+                         (let ((mode (uiop:getenv "CLEMACS_DEBUG_CONDITION_CASE")))
+                           (when (and mode
+                                      (or (string= mode "1")
+                                          (string= mode "all")
+                                          (string= mode "elisp")))
+                             (cl:format *error-output*
+                                        "~&[clemacs] condition-case caught ELisp signal: ~S ~S~%"
+                                        (elisp-signal-symbol ,e)
+                                        (elisp-signal-data ,e))
+                             #+sbcl
+                             (sb-debug:print-backtrace :stream *error-output* :count 80)
+                             (finish-output *error-output*)))
                          (throw ',tag
                            (list :err
                                  (cons (elisp-signal-symbol ,e)
@@ -646,13 +658,17 @@ Binds VAR (when non-nil) to an ELisp-style error datum:
                      (cl:error
                        (lambda (,e)
                          (unless (typep ,e 'elisp-signal)
-                           (when (uiop:getenv "CLEMACS_DEBUG_CONDITION_CASE")
-                             (cl:format *error-output*
-                                     "~&[clemacs] condition-case caught CL error: ~A (~A)~%"
-                                     ,e (cl:type-of ,e))
-                             #+sbcl
-                             (sb-debug:print-backtrace :stream *error-output* :count 80)
-                             (finish-output *error-output*))
+                           (let ((mode (uiop:getenv "CLEMACS_DEBUG_CONDITION_CASE")))
+                             (when (and mode
+                                        (or (string= mode "1")
+                                            (string= mode "all")
+                                            (string= mode "cl")))
+                               (cl:format *error-output*
+                                          "~&[clemacs] condition-case caught CL error: ~A (~A)~%"
+                                          ,e (cl:type-of ,e))
+                               #+sbcl
+                               (sb-debug:print-backtrace :stream *error-output* :count 80)
+                               (finish-output *error-output*)))
                            (throw ',tag
                              (list :err
                                    (cond

@@ -293,7 +293,8 @@ This is used for ELisp `looking-at', which must not search forward past point."
                (vector-push-extend code codes)))
       (loop for ch across s do
         ;; Match Emacs: do NOT escape `|', `(', `)', `{', or `}'.
-        (when (find ch "\\.[]*+?^$" :test #'char=)
+        ;; Emacs does not escape `]` (it's only special inside [...] classes).
+        (when (find ch "\\.[*+?^$[" :test #'char=)
           (emit (char-code #\\)))
         (emit (%elisp-char-code ch)))
       (if want-unibyte
@@ -314,7 +315,7 @@ This is used for ELisp `looking-at', which must not search forward past point."
   (let ((s (%elisp-string->cl-string s)))
     (cl:with-output-to-string (out)
       (loop for ch across s do
-        (when (find ch "\\.[]*+?^$" :test #'char=)
+        (when (find ch "\\.[*+?^$[" :test #'char=)
           (write-char #\\ out))
         (write-char ch out)))))
 
@@ -389,17 +390,6 @@ This is used for ELisp `looking-at', which must not search forward past point."
                   ;; One-or-more.
                   ((op= op "+")
                    (cond
-                    ;; Reader quirk: inside symbols, ELisp allows `+?' (used by
-                    ;; `rx'), but our current reader treats `?' as a character
-                    ;; literal macro-char and splits `+?' into `+' and a char
-                    ;; object. In `ert-x.el` this yields forms like (+ 32 PAT).
-                    ;; Treat that as `+?' for bring-up.
-                    ((and (= (length args) 2)
-                          (integerp (car args)))
-                     (concatenate 'cl:string
-                                  (group (apply #'concatenate 'cl:string
-                                                (mapcar #'emit (cdr args))))
-                                  "+?"))
                     ((null args)
                      (error "ELISP:rx (+ ...) expects args, got: %S" x))
                     (t
@@ -631,18 +621,26 @@ This is only intended to be readable by our ELisp `read-from-string'."
                   (t
                    (cl:error "ELISP:PRIN1-TO-STRING expected string, got: ~S"
                              (type-of s)))))))
-           (emit (x)
-             (cond
-              ((null x) "nil")
-              ((eq x t) "t")
-              ((symbolp x) (sym-name x))
-              ((integerp x) (cl:princ-to-string x))
-              ((characterp x) (emit-string (string x)))
-              ((or (unibyte-string-p x) (cl:stringp x)) (emit-string x))
-              ((and (vectorp x) (not (stringp x)))
-               (cl:with-output-to-string (out)
-                 (write-char #\[ out)
-                 (dotimes (i (length x))
+	           (emit (x)
+	             (cond
+	              ((null x) "nil")
+	              ((eq x t) "t")
+	              ((symbolp x) (sym-name x))
+	              ((integerp x) (cl:princ-to-string x))
+	              ((characterp x) (emit-string (string x)))
+	              ((or (unibyte-string-p x) (cl:stringp x)) (emit-string x))
+	              ((elisp-struct-literal-p x)
+	               (cl:with-output-to-string (out)
+	                 (write-string "#s(" out)
+	                 (write-string (emit (elisp-struct-literal-name x)) out)
+	                 (dolist (f (elisp-struct-literal-fields x))
+	                   (write-char #\Space out)
+	                   (write-string (emit f) out))
+	                 (write-char #\) out)))
+	              ((and (vectorp x) (not (stringp x)))
+	               (cl:with-output-to-string (out)
+	                 (write-char #\[ out)
+	                 (dotimes (i (length x))
                    (when (> i 0) (write-char #\Space out))
                    (write-string (emit (aref x i)) out))
                  (write-char #\] out)))
@@ -868,14 +866,26 @@ This is sufficient for `lisp/emacs-lisp/backquote.el', which uses
 
 In Emacs, `mapcar' accepts lists and sequences (vectors and strings), and
 terminates at the shortest sequence."
-  (labels ((init (seq)
+  (let ((debugp (and (uiop:getenv "CLEMACS_DEBUG_MAPCAR") t)))
+    (labels ((init (seq)
              (cond
               ((null seq) (list :list nil))
               ((consp seq) (list :list seq))
               ((vectorp seq) (list :vector seq 0 (length seq)))
               ((unibyte-string-p seq) (list :unibyte seq 0 (length seq)))
               ((cl:stringp seq) (list :string seq 0 (length seq)))
-              (t (error "ELISP:MAPCAR unsupported sequence: ~S" (type-of seq)))))
+               (t
+                (when debugp
+                 (cl:format *error-output*
+                            "[clemacs] mapcar: unsupported sequence: ~S~%"
+                            seq)
+                 (finish-output *error-output*)
+                 #+sbcl
+                 (cl:ignore-errors
+                   (sb-debug:print-backtrace :stream *error-output* :count 80))
+                 (finish-output *error-output*))
+               (error "ELISP:MAPCAR unsupported sequence type: %S"
+                      (type-of seq)))))
            (donep (st)
              (ecase (first st)
                (:list (null (second st)))
@@ -891,20 +901,24 @@ terminates at the shortest sequence."
                (:list (setf (second st) (cdr (second st))))
                ((:vector :unibyte :string) (incf (third st))))
              st))
-    (let ((states (cl:mapcar #'init sequences))
-          (out nil))
-      (loop while (and states (not (cl:some #'donep states))) do
-        (push (cl:apply function (cl:mapcar #'elem states)) out)
-        (dolist (st states)
-          (advance st)))
-      (nreverse out))))
+      (let ((states (cl:mapcar #'init sequences))
+            (out nil))
+        (loop while (and states (not (cl:some #'donep states))) do
+          (push (cl:apply function (cl:mapcar #'elem states)) out)
+          (dolist (st states)
+            (advance st)))
+        (nreverse out)))))
 
-(cl:defun mapconcat (function sequence separator)
+(cl:defun mapconcat (function sequence &optional separator)
   "Bring-up subset of ELisp `mapconcat'.
 
 Supports lists, vectors, and strings (including unibyte strings)."
-  (unless (stringp separator)
-    (error "ELISP:MAPCONCAT expects string SEPARATOR, got: ~S" separator))
+  ;; In Emacs, SEPARATOR is optional; nil means the empty string.
+  ;;
+  ;; Function results are expected to be "a sequence of characters":
+  ;; strings, vectors, or lists of valid character codes; nil means empty.
+  (unless (or (null separator) (stringp separator) (vectorp separator) (consp separator))
+    (error "ELISP:MAPCONCAT unsupported SEPARATOR: ~S" (type-of separator)))
   (let* ((len
            (cond
             ((null sequence) 0)
@@ -918,19 +932,24 @@ Supports lists, vectors, and strings (including unibyte strings)."
                (cond
                 ((consp sequence) (nth i sequence))
                 ((null sequence) (error "ELISP:MAPCONCAT internal bug (elt-at nil)"))
-                (t (aref sequence i)))))
+                ((unibyte-string-p sequence) (aref sequence i))
+                ((cl:stringp sequence) (%elisp-char-code (char sequence i)))
+                (t (aref sequence i))))
+             (charseqp (x)
+               (or (null x) (stringp x) (vectorp x) (consp x))))
       (let ((parts nil)
             (first t))
         (loop for i from start* below end* do
           (let ((s (funcall function (elt-at i))))
-            (unless (stringp s)
-              (error "ELISP:MAPCONCAT function must return string, got: ~S" s))
+            (unless (charseqp s)
+              (error "ELISP:MAPCONCAT function must return char sequence, got: ~S" (type-of s)))
             (if first
                 (progn
                   (push s parts)
                   (setf first nil))
                 (progn
-                  (push separator parts)
+                  (when separator
+                    (push separator parts))
                   (push s parts)))))
         (apply #'concat (nreverse parts))))))
 

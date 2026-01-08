@@ -225,6 +225,11 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
   (end 0 :type integer)
   (plist nil))
 
+(defstruct elisp-struct-literal
+  "A reader/printer roundtrippable representation of Emacs `#s(...)' literals."
+  (name nil :type symbol)
+  (fields nil))
+
 (cl:defvar *string-text-properties*
   (cl:make-hash-table :test 'eq))
 
@@ -276,6 +281,7 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
       (#\r (char-code #\Return))
       (#\s (char-code #\Space))
       (#\b 8)
+      (#\d 127)
       (#\f 12)
       (#\a 7)
       (#\e 27)
@@ -445,6 +451,19 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
         ;; uses (| ...)). In CL, `|' is a symbol-escape delimiter, so override
         ;; it so the ELisp reader can consume upstream forms unchanged.
         (set-syntax-from-char #\| #\A rt)
+        ;; Emacs Lisp supports `#s(NAME ...)` object literals (primarily from
+        ;; cl-defstruct and printer roundtripping). In CL, `#s` reads a struct
+        ;; instance, which breaks on unknown structure types while loading
+        ;; upstream ELisp tests. Treat it as an opaque self-evaluating object
+        ;; with a stable printed representation.
+        (flet ((read-struct-literal (stream subchar arg)
+                 (declare (cl:ignore subchar arg))
+                 (let ((form (read stream t nil t)))
+                   (unless (and (consp form) (symbolp (car form)))
+                     (cl:error "ELISP: invalid #s literal: ~S" form))
+                   (make-elisp-struct-literal :name (car form) :fields (cdr form)))))
+          (set-dispatch-macro-character #\# #\s #'read-struct-literal rt)
+          (set-dispatch-macro-character #\# #\S #'read-struct-literal rt))
         (set-macro-character
          #\"
          (lambda (stream char)
@@ -524,7 +543,9 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
                          (#\n (push-byte (char-code #\Newline)))
                          (#\t (push-byte (char-code #\Tab)))
                          (#\r (push-byte (char-code #\Return)))
+                         (#\s (push-byte (char-code #\Space)))
                          (#\b (push-byte 8))
+                         (#\d (push-byte 127))
                          (#\f (push-byte 12))
                          (#\a (push-byte 7))
                          (#\e (push-byte 27))
@@ -548,8 +569,18 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
                                    (ctl-code
                                      (if (= base-code (char-code #\?))
                                          127
-                                         (cl:logand base-code #x1f))))
+                                       (cl:logand base-code #x1f))))
                               (push-byte ctl-code))))
+                         (#\^
+                          (let ((next (read-char stream nil nil t)))
+                            (when (null next)
+                              (cl:error "EOF in \\^ string escape"))
+                            (cond
+                             ((char= next #\?) (push-byte 127))
+                             (t
+                              (let* ((code (char-code next))
+                                     (ctl (%controlify-ascii code)))
+                                (push-byte (or ctl (cl:logand code #x1f))))))))
                          (#\\ (push-byte (char-code #\\)))
                          (#\" (push-byte (char-code #\")))
                          (#\Newline nil) ; line continuation
@@ -660,7 +691,8 @@ We currently preserve:
   (e.g. `cl:foo`, `sb-mop:bar`)."
   (unless (cl:stringp s)
     (cl:error "ELISP: expected CL string, got: ~S" (cl:type-of s)))
-  (let ((insertions nil))
+  (let* ((len (length s))
+         (insertions nil))
     (labels ((delim-p (ch)
                (or (null ch)
                    (cl:member ch '(#\Space #\Tab #\Newline #\Return
@@ -670,9 +702,77 @@ We currently preserve:
                     (cl:< token-start colon-index)
                     (cl:member (string-upcase (subseq s token-start colon-index))
                                '("CL" "SB-MOP")
-                               :test #'cl:string=))))
-      (let ((len (length s))
-            (out-pos 0)
+                               :test #'cl:string=)))
+             (%scan-elisp-char-literal-end (start)
+               "Given START at a '?' character, return the end index (inclusive).
+
+	This is used only to keep the sanitizer's string/comment state machine aligned
+	with Emacs Lisp, where `?` introduces a character literal token.  In
+	particular, we must not treat `?\\\"` as starting a string."
+               (let ((i (1+ start)))
+                 (when (>= i len)
+                   (return-from %scan-elisp-char-literal-end start))
+                 (let ((ch (char s i)))
+                   ;; Simple char literal: ?a, ?" etc.
+                   (unless (char= ch #\\)
+                     (return-from %scan-elisp-char-literal-end i))
+
+                   ;; Escaped char literal and/or modifiers: ?\C-a, ?\^?, ?\xNN, ...
+                   (incf i) ; consume '\'
+                   (when (>= i len)
+                     (return-from %scan-elisp-char-literal-end (1- i)))
+
+                   (labels ((peek () (and (cl:< i len) (char s i)))
+                            (consume () (prog1 (peek) (incf i)))
+                            (hex-digit-p (c) (and c (digit-char-p c 16)))
+                            (oct-digit-p (c) (and c (digit-char-p c 8)))
+                            (consume-fixed-hex (n)
+                              (dotimes (_ n)
+                                (when (cl:< i len) (incf i))))
+                            (consume-hex-1+ ()
+                              (when (hex-digit-p (peek)) (incf i))
+                              (loop while (hex-digit-p (peek)) do (incf i)))
+                            (consume-octal-1+ ()
+                              (when (oct-digit-p (peek)) (incf i))
+                              (loop repeat 2 while (oct-digit-p (peek)) do (incf i)))
+                            (consume-escape ()
+                              (let ((e (consume)))
+                                (when (null e) (return-from consume-escape))
+                                (case e
+                                  ((#\n #\t #\r #\s #\b #\f #\a #\e #\\ #\") nil)
+                                  (#\^ (when (cl:< i len) (incf i)))
+                                  (#\x (consume-hex-1+))
+                                  (#\u (consume-fixed-hex 4))
+                                  (#\U (consume-fixed-hex 8))
+                                  (otherwise
+                                   (when (digit-char-p e 8)
+                                     (consume-octal-1+)))))))
+                     ;; Modifier loop: \C- ... possibly repeated (sometimes with
+                     ;; an extra '\' between modifiers).
+                     (loop
+                       (let* ((m (peek))
+                              (dash (and (cl:< (1+ i) len) (char s (1+ i)))))
+                         (if (and m dash (char= dash #\-) (find m "ACHMsSC" :test #'char=))
+                             (progn
+                               (incf i 2) ; consume "<mod>-"
+                               (when (and (cl:< i len) (char= (peek) #\\))
+                                 (incf i)) ; consume '\' and continue modifiers
+                               (when (>= i len)
+                                 (return-from %scan-elisp-char-literal-end (1- i))))
+                           (return))))
+
+                     ;; Base character: either an escape or a single char.
+                     (when (>= i len)
+                       (return-from %scan-elisp-char-literal-end (1- i)))
+                     (if (char= (peek) #\\)
+                         (progn
+                           (incf i) ; consume '\'
+                           (consume-escape)
+                           (return-from %scan-elisp-char-literal-end (max start (1- i))))
+                       (progn
+                         (incf i)
+                         (return-from %scan-elisp-char-literal-end (1- i)))))))))
+      (let ((out-pos 0)
             (in-string nil)
             (escape nil)
             (in-comment nil)
@@ -701,46 +801,67 @@ We currently preserve:
                    (cond
                     (delimp (setf token-start nil))
                     ((null token-start) (setf token-start i))))
-                 (cond
-                  ((char= ch #\;)
-                   (setf in-comment t)
-                   (write-char ch out)
-                   (cl:incf out-pos))
-                  ((char= ch #\")
-                   (setf in-string t)
-                   (write-char ch out)
-                   (cl:incf out-pos))
-                  ((char= ch #\:)
-                   (let* ((prev (and (cl:> i 0) (char s (cl:1- i))))
-                          (next (and (cl:< i (cl:1- len)) (char s (cl:1+ i))))
-                          ;; Preserve CL keyword syntax like `:foo' for now.
-                          (keywordp (and (eql token-start i)
-                                         next
-                                         (not (delim-p next))))
-                          ;; Preserve `#:' dispatch syntax (uninterned symbol).
-                          (dispatch-uninternedp
-                            (and token-start
-                                 (cl:= i (cl:1+ token-start))
-                                 (char= (char s token-start) #\#)))
-                          ;; Preserve CL package syntax in our `clemacs/ported/`
-                          ;; sources (e.g. `cl:defclass`, `sb-mop:...`).
-                          (allowed-package-colonp
-                            (and next
-                                 (not (delim-p next))
-                                 (%allowed-package-prefix-p token-start i)))
-                          (already-escapedp (and prev (char= prev #\\))))
-                     (if (or already-escapedp keywordp dispatch-uninternedp allowed-package-colonp)
+
+                 (cl:block handled
+                   (when (and (char= ch #\?) (eql token-start i))
+                     (let* ((start i)
+                            (end (%scan-elisp-char-literal-end start))
+                            (seg (subseq s start (1+ end))))
+                       (write-string seg out)
+                       (cl:incf out-pos (length seg))
+                       (setf token-start nil)
+                       (setf i end))
+                     (return-from handled))
+
+                   (cond
+                    ((char= ch #\;)
+                     (setf in-comment t)
+                     (write-char ch out)
+                     (cl:incf out-pos))
+                    ((char= ch #\")
+                     (setf in-string t)
+                     (write-char ch out)
+                     (cl:incf out-pos))
+                    ((char= ch #\?)
+                     (let* ((prev (and (cl:> i 0) (char s (cl:1- i))))
+                            (already-escapedp (and prev (char= prev #\\)))
+                            (token-internalp (and token-start (cl:< token-start i))))
+                       (if (or already-escapedp (not token-internalp))
+                           (progn
+                             (write-char ch out)
+                             (cl:incf out-pos))
                          (progn
-                           (write-char ch out)
-                           (cl:incf out-pos))
-                       (progn
-                         (cl:push out-pos insertions)
-                         (write-char #\\ out)
-                         (write-char #\: out)
-                         (cl:incf out-pos 2)))))
-                  (t
-                   (write-char ch out)
-                   (cl:incf out-pos))))))))
+                           (cl:push out-pos insertions)
+                           (write-char #\\ out)
+                           (write-char #\? out)
+                           (cl:incf out-pos 2)))))
+                    ((char= ch #\:)
+                     (let* ((prev (and (cl:> i 0) (char s (cl:1- i))))
+                            (next (and (cl:< i (cl:1- len)) (char s (cl:1+ i))))
+                            (keywordp (and (eql token-start i)
+                                           next
+                                           (not (delim-p next))))
+                            (dispatch-uninternedp
+                              (and token-start
+                                   (cl:= i (cl:1+ token-start))
+                                   (char= (char s token-start) #\#)))
+                            (allowed-package-colonp
+                              (and next
+                                   (not (delim-p next))
+                                   (%allowed-package-prefix-p token-start i)))
+                            (already-escapedp (and prev (char= prev #\\))))
+                       (if (or already-escapedp keywordp dispatch-uninternedp allowed-package-colonp)
+                           (progn
+                             (write-char ch out)
+                             (cl:incf out-pos))
+                         (progn
+                           (cl:push out-pos insertions)
+                           (write-char #\\ out)
+                           (write-char #\: out)
+                           (cl:incf out-pos 2)))))
+                    (t
+                     (write-char ch out)
+                     (cl:incf out-pos)))))))))
          (nreverse insertions))))))
 
 (cl:declaim

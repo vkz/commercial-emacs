@@ -24,6 +24,15 @@
         (try 'elisp::ert-test-failed-condition result)
         (try 'elisp::ert-test-skipped-condition result))))
 
+(defun %maybe-upstream-ert-backtrace (result)
+  (labels ((try (fn &rest args)
+             (when (fboundp fn)
+               (handler-case
+                   (apply fn args)
+                 (error () nil)))))
+    (or (try 'elisp::ert-test-result-with-condition-backtrace result)
+        nil)))
+
 (defun list-upstream-ert-test-names (&key (stream *standard-output*))
   "Return the list of upstream ERT tests currently registered under clemacs.
 
@@ -137,14 +146,20 @@ This is an incremental bring-up gate: we run named tests via upstream
                    (expected-fail (member name known-fail :test #'string=)))
               (cond
                ((and expected-fail ok)
-                (incf xpass)
+               (incf xpass)
                 (format stream "XPASS ~A~%" name)
                 (when debugp
+                  (let ((bt (%maybe-upstream-ert-backtrace result)))
+                    (when bt
+                      (format stream "      backtrace:~%      ~S~%" bt)))
                   (format stream "      ~S~%" (%maybe-upstream-ert-condition result))))
                ((and expected-fail (not ok))
                 (incf xfail)
                 (format stream "XFAIL ~A~%" name)
                 (when debugp
+                  (let ((bt (%maybe-upstream-ert-backtrace result)))
+                    (when bt
+                      (format stream "      backtrace:~%      ~S~%" bt)))
                   (format stream "      ~S~%" (%maybe-upstream-ert-condition result))))
                (ok
                 (format stream "ok   ~A~%" name))
@@ -152,6 +167,9 @@ This is an incremental bring-up gate: we run named tests via upstream
                 (incf failed)
                 (format stream "FAIL ~A~%" name)
                 (when debugp
+                  (let ((bt (%maybe-upstream-ert-backtrace result)))
+                    (when bt
+                      (format stream "      backtrace:~%      ~S~%" bt)))
                   (format stream "      ~S~%" (%maybe-upstream-ert-condition result)))))))
         (error (e)
           (if (member name known-fail :test #'string=)
