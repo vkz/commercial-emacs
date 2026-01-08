@@ -137,14 +137,23 @@ Returns (values LAMBDA-LIST CHECKS SUBPATTERNS BINDINGS), where:
         (dolist (sp (reverse subpatterns))
           (destructuring-bind (var subpat) sp
             (setf k (%pcase--emit-match--emit subpat var ft fv k))))
-        `(let ((,tmp ,val))
-           (handler-case
-               (destructuring-bind ,ll ,tmp
-                 (unless (and ,@checks)
-                   (return-from ,ft ,fv))
-                 ,k)
-             (cl:error ()
-               (return-from ,ft ,fv)))))))
+        ;; `destructuring-bind' requires a list-ish lambda list.  For atomic
+        ;; backquote templates like `t or `,x, %PCASE--TEMPLATE->LAMBDA-LIST
+        ;; returns a single symbol binding; treat that as "bind whole value".
+        (if (symbolp ll)
+            `(let* ((,tmp ,val)
+                    (,ll ,tmp))
+               (unless (and ,@checks)
+                 (return-from ,ft ,fv))
+               ,k)
+            `(let ((,tmp ,val))
+               (handler-case
+                   (destructuring-bind ,ll ,tmp
+                     (unless (and ,@checks)
+                       (return-from ,ft ,fv))
+                     ,k)
+                 (cl:error ()
+                   (return-from ,ft ,fv))))))))
    ((and (consp pat) (eq (car pat) 'or))
     (let ((or-done (gensym "PCASE-OR-")))
       `(block ,or-done

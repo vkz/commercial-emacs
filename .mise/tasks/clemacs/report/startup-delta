@@ -103,12 +103,26 @@ text = pdump.read_text(encoding="utf-8")
 # Match forms like: (load "foo") or (load "foo" t)
 loads = re.findall(r'\(load\s+"([^"]+)"', text)
 
-pdump_paths = []
+pdump_paths_all = []
 for name in loads:
-    pdump_paths.append(resolve_pdump_load(name))
+    pdump_paths_all.append(resolve_pdump_load(name))
 
-missing = [p for p in pdump_paths if p not in startup_set]
-present = [p for p in pdump_paths if p in startup_set]
+missing_in_repo = [p for p in pdump_paths_all if not (project_root / p).exists()]
+existing = [p for p in pdump_paths_all if (project_root / p).exists()]
+
+def ordered_unique(items):
+    seen = set()
+    out = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+existing_unique = ordered_unique(existing)
+missing_unique = [p for p in existing_unique if p not in startup_set]
+present_unique = [p for p in existing_unique if p in startup_set]
 
 out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -129,13 +143,18 @@ lines.append(f"- pdump source: `{pdump}`")
 lines.append(f"- startup manifest: `{manifest_path}`")
 lines.append("")
 lines.append("## Summary")
-lines.append(f"- pdump load entries: {len(pdump_paths)} (includes duplicates)")
+lines.append(f"- pdump load entries: {len(pdump_paths_all)} (includes duplicates)")
+lines.append(f"- pdump unique existing entries: {len(existing_unique)}")
+lines.append(f"- pdump entries missing in repo: {len(set(missing_in_repo))}")
 lines.append(f"- startup entries: {len(startup)}")
-lines.append(f"- present in startup: {len(present)}")
-lines.append(f"- missing from startup: {len(missing)}")
+lines.append(f"- present in startup: {len(present_unique)}")
+lines.append(f"- missing from startup: {len(missing_unique)}")
 lines.append("")
 lines.append("## Next candidates (pdump entries missing from startup)")
-lines.extend(md_list(missing, limit=40))
+lines.extend(md_list(missing_unique, limit=40))
+lines.append("")
+lines.append("## Pdump entries missing in repo")
+lines.extend(md_list(ordered_unique(missing_in_repo), limit=40))
 lines.append("")
 
 report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

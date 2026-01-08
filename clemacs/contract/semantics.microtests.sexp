@@ -109,6 +109,11 @@
   :expected "t"
   :emacs nil)
 
+ (:name "mule-register-input-method-updates-input-method-alist"
+  :expr "(progn (setq input-method-alist nil) (register-input-method 'foo 'bar 'quail-use-package \"T\" \"D\" 'x) (register-input-method \"foo\" \"bar\" 'quail-use-package \"T2\" \"D2\") input-method-alist)"
+  :expected "((\"foo\" \"bar\" quail-use-package \"T2\" \"D2\"))"
+  :emacs :match)
+
  (:name "macros-eval-when-compile-evaluates-body"
   :expr "(progn (setq clemacs--tmp-ewc 0) (eval-when-compile (setq clemacs--tmp-ewc 1)) clemacs--tmp-ewc)"
   :expected "1"

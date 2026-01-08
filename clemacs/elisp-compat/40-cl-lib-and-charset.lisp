@@ -1032,3 +1032,25 @@ We currently represent charsets as symbols with properties."
   (loop for (k v) on plist by (cl:function cl:cddr) do
     (put name k v))
   name)
+
+(defvar input-method-alist nil
+  "Alist of input method names vs how to use them.
+Each element has the form:
+  (INPUT-METHOD LANGUAGE-ENV ACTIVATE-FUNC TITLE DESCRIPTION ARGS...)")
+
+(cl:defun register-input-method (input-method lang-env &rest args)
+  "Register INPUT-METHOD as an input method for language environment LANG-ENV.
+
+Bring-up implementation, matching Emacs's mule-cmds.el semantics."
+  (let* ((lang-env (if (symbolp lang-env) (symbol-name lang-env) lang-env))
+         (input-method (if (symbolp input-method)
+                           (symbol-name input-method)
+                           input-method))
+         (info (cons lang-env args))
+         (slot (assoc input-method input-method-alist)))
+    (if slot
+        (setcdr slot info)
+        (progn
+          (setf slot (cons input-method info))
+          (setf input-method-alist (cons slot input-method-alist))))
+    input-method-alist))

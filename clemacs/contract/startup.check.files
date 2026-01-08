@@ -157,10 +157,11 @@ lisp/electric.el 1
 lisp/paren.el 1
 lisp/emacs-lisp/shorthands.el 1
 
-# pdump: eldoc, cconv, cus-start, iso-transl, rmc.
+# pdump: eldoc, cconv, cus-start, tooltip, iso-transl, rmc.
 lisp/emacs-lisp/eldoc.el 1
 lisp/emacs-lisp/cconv.el 1
 lisp/cus-start.el 1
+lisp/tooltip.el -
 lisp/international/iso-transl.el 1
 lisp/emacs-lisp/rmc.el 1
 
@@ -175,3 +176,6 @@ lisp/term/internal.el 50
 
 # pdump: ucs-normalize.
 lisp/international/ucs-normalize.el 1
+
+# pdump: leim-list (noerror upstream).
+lisp/leim/leim-list.el -
