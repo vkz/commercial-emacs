@@ -26,6 +26,7 @@
 (cl:defvar emacs-basic-display nil)
 (cl:defvar fill-prefix nil)
 (cl:defvar last-command nil)
+(cl:defvar pre-redisplay-function 'ignore)
 (cl:defvar overlay-arrow-variable-list nil)
 (cl:defvar standard-display-table nil)
 (cl:defvar buffer-display-table nil)

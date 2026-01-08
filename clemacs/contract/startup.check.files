@@ -82,10 +82,10 @@ lisp/composite.el 1
 lisp/indent.el -
 
 # pdump: cl-generic.
-lisp/emacs-lisp/cl-generic.el 200
+lisp/emacs-lisp/cl-generic.el -
 
 # pdump: simple.
-lisp/simple.el 147
+lisp/simple.el -
 
 # pdump: nadvice.
 lisp/emacs-lisp/nadvice.el 2

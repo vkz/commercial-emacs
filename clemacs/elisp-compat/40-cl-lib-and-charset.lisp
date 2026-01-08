@@ -270,14 +270,6 @@ where TARGET evaluates to a callable object."
    (t
     (typep object type))))
 
-(cl:defun %clemacs--oclosure--class-p (_object)
-  ;; Bring-up stub: clemacs does not model `oclosure-define' class objects yet.
-  (declare (cl:ignore _object))
-  nil)
-
-(cl:deftype oclosure--class ()
-  `(cl:satisfies %clemacs--oclosure--class-p))
-
 (cl:defmacro cl-check-type (form type &optional _string)
   "Bring-up subset of cl-lib's `cl-check-type'."
   (declare (cl:ignore _string))

@@ -14,6 +14,8 @@
 
 (cl:defvar abbrev-map (make-sparse-keymap))
 
+(cl:defvar function-key-map (make-sparse-keymap))
+
 (cl:defun make-vector (length init)
   "ELisp-ish MAKE-VECTOR."
   (make-array length :initial-element init))
@@ -738,6 +740,11 @@ functions.  For now, delegate to `autoload` and return SYMBOL."
 
 Used by `loaddefs.el` to record Customize load dependencies."
   (declare (cl:ignore _symbol _file))
+  nil)
+
+(cl:defun custom-add-option (_hook _function &rest _args)
+  "Bring-up stub for ELisp `custom-add-option'."
+  (declare (cl:ignore _hook _function _args))
   nil)
 
 (cl:defun symbol-file (symbol &optional type)
