@@ -57,6 +57,10 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
 - 2026-01-07: added `clemacs:loop:elisp-core` (one-command high-signal loop) and extended the playbook for non-loader failures.
 - 2026-01-07: split `clemacs/elisp-compat.lisp` into `clemacs/elisp-compat/*.lisp` modules (thin REPL loader retained); updated loader/compat shims and advanced `startup.check.files` (see `plans/plan-archive-2026-01-07.md`).
 - 2026-01-07: raised `startup.check.files` caps for deeper TTY startup loads (`lisp/files.el` 250, `lisp/ls-lisp.el` 600, `lisp/disp-table.el` 800) and unblocked file/path helpers needed by early `lisp/files.el` + `lisp/loaddefs.el`.
+- 2026-01-08: brought up more upstream ERT under clemacs (rx/seq) via `clemacs/contract/ert-upstream.load.files` + promoted a small must-pass slice in `clemacs/contract/ert-upstream.tests`.
+- 2026-01-08: added `clemacs:test:ert-upstream-one` support for `ert-upstream.load.files` so newly-loaded upstream tests can be triaged individually.
+- 2026-01-08: started “real editor core” command routing in `clemacs/tty.lisp` (minimal ELisp-style command loop: keymaps + `read-key-sequence` + `key-binding` + `command-execute`) with bring-up stubs in `clemacs/elisp-compat/55-command-loop.lisp`.
+- 2026-01-08: aligned keymap semantics so `keymapp` treats symbols with function-cell keymaps as keymaps; added a focused microtest in `clemacs/contract/semantics.microtests.sexp`.
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 
@@ -101,6 +105,7 @@ Gate
 Next actions
 - Expand `clemacs/contract/ert-upstream.tests` monotonically (keep the suite green; use ERT promotions opportunistically when they unblock startup work).
 - Keep `clemacs/contract/ert-upstream.known-fail.tests` dated and explicit (XPASS is a gate failure).
+- Promote a few more rx/seq tests (monotonic), then begin loading/promoting the first keyboard/keymap-related upstream tests once the command-loop/keyboard stubs exist.
 
 ### Milestone B1-12: inventory closure for `startup.check`
 
@@ -126,6 +131,10 @@ Deliverables
 
 Acceptance criteria (promotion gate)
 - Promote clemacs to `mise run run` only when `run:clemacs` is a usable terminal editor and exits cleanly.
+
+Next actions (high-leverage)
+- Switch the clemacs TTY loop from the bring-up keymap to shipped `current-global-map` by loading `startup.editor-core.files` during TTY startup (so `lisp/subr.el` establishes `global-map`/prefixes).
+- Add minimal keyboard/command-loop stubs needed by shipped ELisp and upstream ERT loads (e.g. `key-parse`, `this-single-command-keys`, event symbol parsing/modifiers), keeping behavior intentionally small but Emacs-shaped.
 
 ## Archive
 
