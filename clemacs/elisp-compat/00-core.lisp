@@ -433,6 +433,12 @@ and evaluate the (already CL-shaped) FORM."
           (to (cdr range)))
       (when (> from to)
         (error "ELISP:SET-CHAR-TABLE-RANGE bad range: ~S" range))
+      ;; clemacs currently models char-tables as fixed-size vectors of
+      ;; +CHAR-TABLE-SIZE+ entries.  Clamp Emacs's broader Unicode ranges.
+      (when (>= from +char-table-size+)
+        (return-from set-char-table-range value))
+      (when (>= to +char-table-size+)
+        (setf to (1- +char-table-size+)))
       (loop for i from from to to do
         (%char-table-set table i value))
       value))

@@ -1,14 +1,19 @@
 (in-package #:elisp)
 
 
-(cl:defun make-keymap ()
-  "Extremely small stub for ELisp `make-keymap'."
-  (make-elisp-keymap))
+(cl:defun make-keymap (&optional _name)
+  "Bring-up subset of ELisp `make-keymap'."
+  (declare (cl:ignore _name))
+  ;; Return an Emacs-shaped keymap list so libraries that poke at keymap
+  ;; internals (e.g. `isearch.el`) can load.  We keep a backing `elisp-keymap'
+  ;; object in the 3rd cell for our compatibility `define-key'/`lookup-key'
+  ;; implementations.
+  (list 'keymap (make-char-table 'keymap nil) (make-elisp-keymap)))
 
 (cl:defun make-sparse-keymap (&optional _name)
-  "Extremely small stub for ELisp `make-sparse-keymap'."
+  "Bring-up subset of ELisp `make-sparse-keymap'."
   (declare (cl:ignore _name))
-  (make-elisp-keymap))
+  (list 'keymap nil (make-elisp-keymap)))
 
 (cl:defvar ctl-x-r-map (make-sparse-keymap))
 
@@ -78,37 +83,163 @@ This appears early in `lisp/emacs-lisp/cl-generic.el`; ignore it for bring-up."
   (declare (cl:ignore _args))
   nil)
 
-(cl:defmacro oclosure-define (type-and-slots &rest _rest)
+(cl:defvar *oclosure-defined-slots* (cl:make-hash-table :test 'eq))
+
+(cl:defmacro oclosure-define (type-and-options &rest rest)
   "Bring-up subset of ELisp `oclosure-define'.
 
-clemacs provides a small SBCL-oriented port of upstream `oclosure.el` under
-`clemacs/ported/...`, but that port doesn't include the macro layer used by
-`cl-generic.el`.  Provide just enough here to unblock `cl-generic`."
-  (declare (cl:ignore _rest))
-  (let* ((type (cond
-                ((symbolp type-and-slots) type-and-slots)
-                ((and (consp type-and-slots) (symbolp (car type-and-slots))) (car type-and-slots))
-                (t nil)))
-         (slots (and (consp type-and-slots) (cdr type-and-slots))))
-    (when (or (null type) (not (null slots)))
-      (cl:error "ELISP:OCLOSURE-DEFINE unsupported: ~S" type-and-slots))
-    `(progn
-       (cl:defclass ,type (oclosure) ()
-         #+sbcl (:metaclass sb-mop:funcallable-standard-class))
-       ',type)))
+This provides enough of the macro layer to load `lisp/emacs-lisp/nadvice.el`
+and other early startup files that define lightweight oclosure types."
+  (let* ((type
+          (cond
+           ((cl:symbolp type-and-options) type-and-options)
+           ((and (cl:consp type-and-options) (cl:symbolp (car type-and-options)))
+            (car type-and-options))
+           (t nil)))
+         (options
+          (cond
+           ((cl:symbolp type-and-options) nil)
+           ((cl:consp type-and-options) (cdr type-and-options))
+           (t nil)))
+         (doc (and rest (stringp (car rest)) (pop rest)))
+         (doc* (and doc (if (cl:stringp doc) doc (%elisp-string->cl-string doc))))
+         (slots rest)
+         (predicate-name nil)
+         (copiers nil))
+    (when (null type)
+      (cl:error "ELISP:OCLOSURE-DEFINE unsupported: ~S" type-and-options))
+    (dolist (opt options)
+      (cond
+       ((and (cl:consp opt) (cl:eq (car opt) :predicate))
+        (setf predicate-name (cadr opt)))
+       ((and (cl:consp opt) (cl:eq (car opt) :copier))
+        ;; (:copier name (slot...))
+        (push (list (cadr opt) (caddr opt)) copiers))
+       (t
+        (cl:error "ELISP:OCLOSURE-DEFINE unsupported option: ~S" opt))))
+
+    ;; Make slot names available to later `oclosure-lambda` macroexpansion in
+    ;; the same compilation unit (notably in `nadvice.el` eval-when-compile).
+    (setf (cl:gethash type *oclosure-defined-slots*) slots)
+
+    (let* ((type-name (cl:symbol-name type))
+           (type-pkg (or (cl:symbol-package type) (cl:find-package :elisp)))
+           (slot-defs
+            (mapcar
+             (lambda (slot)
+               (unless (cl:symbolp slot)
+                 (cl:error "ELISP:OCLOSURE-DEFINE slot must be symbol, got: ~S" slot))
+               (let* ((kw (cl:intern (cl:symbol-name slot) :keyword))
+                      (acc (cl:intern
+                            (cl:format nil "~A--~A" type-name (cl:symbol-name slot))
+                            type-pkg)))
+                 `(,slot :initarg ,kw :initform nil :accessor ,acc)))
+             slots))
+           (copier-defs
+            (mapcar
+             (lambda (spec)
+               (cl:destructuring-bind (copier-name copier-slots) spec
+                 (unless (cl:symbolp copier-name)
+                   (cl:error "ELISP:OCLOSURE-DEFINE copier name must be symbol, got: ~S"
+                             copier-name))
+                 (unless (cl:listp copier-slots)
+                   (cl:error "ELISP:OCLOSURE-DEFINE copier slot list must be list, got: ~S"
+                             copier-slots))
+                 (let* ((args (mapcar (lambda (s)
+                                        (unless (cl:symbolp s)
+                                          (cl:error "ELISP:OCLOSURE-DEFINE copier slot must be symbol, got: ~S"
+                                                    s))
+                                        s)
+                                      copier-slots))
+                        (slot->arg (let ((it (cl:make-hash-table :test 'eq)))
+                                     (dolist (s copier-slots)
+                                       (setf (cl:gethash s it) s))
+                                     it))
+                        (initargs
+                         (mapcan
+                          (lambda (slot)
+                            (let* ((kw (cl:intern (cl:symbol-name slot) :keyword))
+                                   (acc (cl:intern
+                                         (cl:format nil "~A--~A" type-name (cl:symbol-name slot))
+                                         type-pkg))
+                                   (val (if (cl:gethash slot slot->arg)
+                                            slot
+                                            `(,acc proto))))
+                              (list kw val)))
+                          slots)))
+                  `(cl:defun ,copier-name (proto ,@args)
+                      (make-instance ',type
+                                     :oclosure-type ',type
+                                     :call (%oclosure-call proto)
+                                     ,@initargs)))))
+             copiers)))
+      `(progn
+         (eval-when (:compile-toplevel :load-toplevel :execute)
+           (setf (cl:gethash ',type *oclosure-defined-slots*) ',slots))
+         (cl:defclass ,type (oclosure)
+           ,slot-defs
+           #+sbcl (:metaclass sb-mop:funcallable-standard-class)
+           ,@(when doc* `((:documentation ,doc*))))
+         (eval-when (:load-toplevel :execute)
+           (when (and (cl:fboundp 'cl--find-class)
+                      (cl:fboundp 'oclosure--class-make)
+                      (cl:fboundp 'cl--make-slot-descriptor))
+             (cl:labels ((allparents (name parent)
+                          (if (and parent (cl:fboundp 'cl--class-allparents))
+                              (cons name (cl--class-allparents parent))
+                              (list name))))
+               (let ((parent (cl:ignore-errors (cl--find-class 'oclosure))))
+                 (when parent
+                   (let ((slotdescs (cl:make-array ,(cl:length slots) :initial-element nil)))
+                     (cl:dotimes (i ,(cl:length slots))
+                       (setf (cl:aref slotdescs i)
+                             (cl--make-slot-descriptor (cl:nth i ',slots))))
+                     (setf (cl--find-class ',type)
+                           (oclosure--class-make
+                            ',type
+                            ,doc*
+                            slotdescs
+                            (list parent)
+                            (allparents ',type parent)))))))))
+         ,@(when predicate-name
+             `((cl:defun ,predicate-name (obj)
+                 (typep obj ',type))))
+         ,@copier-defs
+         ',type))))
 
 (cl:defmacro oclosure-lambda (type-and-slots args &rest body)
   "Bring-up subset of ELisp `oclosure-lambda'."
   (declare (indent 2))
   (let* ((type (cond
-                ((symbolp type-and-slots) type-and-slots)
-                ((and (consp type-and-slots) (symbolp (car type-and-slots))) (car type-and-slots))
-                (t nil))))
+                ((cl:symbolp type-and-slots) type-and-slots)
+                ((and (cl:consp type-and-slots) (cl:symbolp (car type-and-slots)))
+                 (car type-and-slots))
+                (t nil)))
+         (inits (and (cl:consp type-and-slots) (cdr type-and-slots))))
     (when (null type)
       (cl:error "ELISP:OCLOSURE-LAMBDA unsupported type: ~S" type-and-slots))
-    `(make-instance ',type
-                    :oclosure-type ',type
-                    :call (lambda ,args ,@body))))
+    (let* ((known-slots (cl:gethash type *oclosure-defined-slots*))
+           (init-slots (mapcar #'cl:car inits))
+           (slot-names (remove-duplicates (append known-slots init-slots) :test #'cl:eq))
+           (self (cl:gensym "SELF"))
+           (initargs
+            (mapcan
+             (lambda (pair)
+               (unless (and (cl:consp pair) (cl:symbolp (cl:car pair)) (cl:consp (cl:cdr pair))
+                            (null (cddr pair)))
+                 (cl:error "ELISP:OCLOSURE-LAMBDA bad slot init: ~S" pair))
+               (let ((slot (cl:car pair))
+                     (value (cadr pair)))
+                 (list (cl:intern (cl:symbol-name slot) :keyword) value)))
+             inits))
+           (slot-bindings
+            (mapcar (lambda (slot) `(,slot (cl:slot-value ,self ',slot))) slot-names)))
+      `(make-instance ',type
+                      :oclosure-type ',type
+                      ,@initargs
+                      :call (lambda (,self ,@args)
+                              (let ,slot-bindings
+                                ,@body))))))
 
 ;; `cl-generic.el` refers to `cl--generic-isnot-nnm-p' during bootstrap before
 ;; its own definition later in the file.  Provide a conservative bring-up stub:
@@ -545,6 +676,10 @@ vector of character codes, or nil."
           (setf flags (logior flags +syntax-flag-prefix+))))
       (cons (logior code flags) matching))))
 
+(cl:defun string-to-syntax (syntax)
+  "Bring-up subset of ELisp `string-to-syntax'."
+  (%syntax-entry-from-spec syntax))
+
 (cl:defun modify-syntax-entry (ch syntax &optional table)
   "Set the syntax entry for CH in TABLE according to SYNTAX.
 
@@ -968,13 +1103,34 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
   "ELisp-ish WHILE."
   `(loop while ,test do (progn ,@body)))
 
-(cl:defun plist-get (plist prop)
-  (getf plist prop))
+(cl:defmacro with-no-warnings (&body body)
+  "Bring-up subset of ELisp `with-no-warnings'."
+  `(progn ,@body))
 
-(cl:defun plist-put (plist prop value)
-  (let ((p plist))
-    (setf (getf p prop) value)
-    p))
+(cl:defun plist-get (plist prop &optional predicate)
+  "Bring-up subset of ELisp `plist-get'.
+
+When PREDICATE is non-nil, use it to compare property keys (Emacs 29+)."
+  (let ((pred (or predicate #'eq))
+        (p plist))
+    (loop while (consp p) do
+      (when (funcall pred (car p) prop)
+        (return (cadr p)))
+      (setf p (cddr p))
+      finally (return nil))))
+
+(cl:defun plist-put (plist prop value &optional predicate)
+  "Bring-up subset of ELisp `plist-put'.
+
+When PREDICATE is non-nil, use it to compare property keys (Emacs 29+)."
+  (let ((pred (or predicate #'eq))
+        (p plist))
+    (loop while (consp p) do
+      (when (funcall pred (car p) prop)
+        (setf (cadr p) value)
+        (return-from plist-put plist))
+      (setf p (cddr p)))
+    (list* prop value plist)))
 
 (cl:defun plist-member (plist prop)
   "Bring-up subset of ELisp `plist-member'."

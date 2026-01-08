@@ -4,6 +4,18 @@
   (table (cl:make-hash-table :test 'cl:equal))
   (parent nil))
 
+(cl:defun %keymap-backend (keymap)
+  (cond
+   ((typep keymap 'elisp-keymap) keymap)
+   ((and (symbolp keymap) (cl:boundp keymap))
+    (%keymap-backend (symbol-value keymap)))
+   ((and (consp keymap) (eq (car keymap) 'keymap)
+         (consp (cddr keymap))
+         (typep (caddr keymap) 'elisp-keymap))
+    (caddr keymap))
+   (t
+    (error "ELISP: expected keymap, got: ~S" keymap))))
+
 (cl:defun keymapp (object)
   "Bring-up subset of ELisp `keymapp'."
   (let ((km (if (and (symbolp object) (cl:boundp object))
@@ -14,42 +26,31 @@
 
 (cl:defun keymap-parent (keymap)
   "Bring-up subset of ELisp `keymap-parent'."
-  (let ((km (if (and (symbolp keymap) (cl:boundp keymap))
-                (symbol-value keymap)
-                keymap)))
-    (unless (typep km 'elisp-keymap)
-      (error "ELISP:KEYMAP-PARENT expected a keymap, got: ~S" keymap))
-    (elisp-keymap-parent km)))
+  (elisp-keymap-parent (%keymap-backend keymap)))
 
 (cl:defun set-keymap-parent (keymap parent)
   "Extremely small stub for ELisp `set-keymap-parent'."
-  (let ((km (if (and (symbolp keymap) (cl:boundp keymap))
-                (symbol-value keymap)
-                keymap))
+  (let ((km (%keymap-backend keymap))
         (parent* (if (and (symbolp parent) (cl:boundp parent))
                      (symbol-value parent)
                      parent)))
-    (unless (typep km 'elisp-keymap)
-      (error "ELISP:SET-KEYMAP-PARENT expected a keymap, got: ~S" keymap))
     (when (and parent* (not (keymapp parent*)))
       (error "ELISP:SET-KEYMAP-PARENT expected a keymap parent, got: ~S" parent))
     (setf (elisp-keymap-parent km) parent*)
-    km))
+    keymap))
 
 (cl:defun copy-keymap (keymap)
   "Bring-up subset of ELisp `copy-keymap'."
-  (let ((km (if (and (symbolp keymap) (cl:boundp keymap))
-                (symbol-value keymap)
-                keymap)))
-    (unless (typep km 'elisp-keymap)
-      (error "ELISP:COPY-KEYMAP expected a keymap, got: ~S" keymap))
-    (let ((out (make-elisp-keymap)))
-      (setf (elisp-keymap-parent out) (elisp-keymap-parent km))
-      (maphash
-       (lambda (k v)
-         (setf (gethash k (elisp-keymap-table out)) v))
-       (elisp-keymap-table km))
-      out)))
+  (let* ((km (%keymap-backend keymap))
+         (out (make-elisp-keymap)))
+    (setf (elisp-keymap-parent out) (elisp-keymap-parent km))
+    (maphash
+     (lambda (k v)
+       (setf (gethash k (elisp-keymap-table out)) v))
+     (elisp-keymap-table km))
+    (if (and (consp keymap) (eq (car keymap) 'keymap))
+        (list 'keymap (cadr keymap) out)
+        out)))
 
 (cl:defun make-composed-keymap (maps &optional parent)
   "Bring-up subset of ELisp `make-composed-keymap'."
@@ -78,7 +79,7 @@
          (elisp-keymap-table m))))
     (when parent*
       (set-keymap-parent out parent*))
-    out))
+    (list 'keymap nil out)))
 
 (defparameter system-type 'darwin)
 (cl:defun system-name ()
@@ -182,6 +183,7 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
 (defparameter minibuffer-local-map (make-elisp-keymap))
 (cl:defvar local-map nil)
 (cl:defvar local-function-key-map (make-elisp-keymap))
+(cl:defvar search-map (list 'keymap nil (make-elisp-keymap)))
 (defparameter find-function-space-re "")
 (cl:defvar find-function-regexp-alist nil)
 (defparameter buffer-file-name nil)
@@ -193,6 +195,8 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
 (cl:defvar describe-symbol-backends nil)
 (cl:defvar minor-mode-alist nil)
 (cl:defvar help-char 8)
+(cl:defvar meta-prefix-char 27)
+(cl:defvar minibuffer-prompt-properties nil)
 (cl:defvar font-lock-mode nil)
 (cl:defvar font-lock-function nil)
 
@@ -210,11 +214,22 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
   (get-buffer-create "*Help*")
   "*Help*")
 
+(cl:defmacro make-help-screen (name &rest _args)
+  "Bring-up stub for ELisp `make-help-screen'.
+
+This macro normally defines interactive help helpers.  For clemacs bring-up,
+define NAME as a no-op function and ignore the rest of the form so its
+arguments are not evaluated."
+  (declare (cl:ignore _args))
+  `(cl:defun ,name (&rest _ignored)
+     (declare (cl:ignore _ignored))
+     nil))
+
 (cl:defmacro with-help-window (buffer-name &body body)
   "Bring-up subset of ELisp `with-help-window'."
   (let ((buf (cl:gensym "HELP-BUF-")))
     `(let ((,buf ,buffer-name))
-       (display-buffer ,buf)
+      (display-buffer ,buf)
        (with-current-buffer ,buf
          (let ((inhibit-read-only t))
            (erase-buffer))

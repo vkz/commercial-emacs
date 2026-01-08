@@ -998,12 +998,16 @@ Supports the common pattern of a self-referential closure (used by ERT)."
    ((and (symbolp keymap) (cl:boundp keymap))
     (%keymap-resolve (symbol-value keymap)))
    ((and (consp keymap) (eq (car keymap) 'keymap))
-    (let ((km (make-elisp-keymap)))
-      (dolist (cell (cdr keymap) km)
-        (when (consp cell)
-          (let ((k (car cell))
-                (v (cdr cell)))
-            (ignore-errors (define-key km k v)))))))
+    (cond
+     ((and (consp (cddr keymap)) (typep (caddr keymap) 'elisp-keymap))
+      (caddr keymap))
+     (t
+      (let ((km (make-elisp-keymap)))
+        (dolist (cell (cdr keymap) km)
+          (when (consp cell)
+            (let ((k (car cell))
+                  (v (cdr cell)))
+              (ignore-errors (define-key km k v)))))))))
    (t (error "ELISP: expected keymap, got: ~S" keymap))))
 
 (cl:defun %keymap-get1 (keymap event)

@@ -281,6 +281,16 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
       (#\e 27)
       (#\\ (char-code #\\))
       (#\" (char-code #\"))
+      (#\^
+       (let ((next (read-char stream nil nil t)))
+         (when (null next)
+           (cl:error "EOF in ?\\^ escape"))
+         (cond
+          ((char= next #\?) 127)
+          (t
+           (let* ((code (char-code next))
+                  (ctl (%controlify-ascii code)))
+             (or ctl (logand code #x1f)))))))
       (#\x (read-hex))
       (otherwise
        (cond

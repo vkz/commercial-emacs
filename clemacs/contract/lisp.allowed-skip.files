@@ -8,8 +8,9 @@
 lisp/international/cp51932.el
 lisp/international/eucjp-ms.el
 
-# 2026-01-05: Depends on full `oclosure' (closure/bytecode machinery not modeled yet).
-lisp/emacs-lisp/nadvice.el
+# 2026-01-08: Start bringing up nadvice under startup manifests (see
+# startup.*.files max-forms checkpoints); keep this list for intentionally
+# out-of-scope files only.
 
 # 2026-01-07: Too compile-time heavy when loaded as source (eval-when-compile),
 # and currently depends on full translation tables + Unicode charprop/translate.

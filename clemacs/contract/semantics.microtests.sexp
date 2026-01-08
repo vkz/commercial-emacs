@@ -49,6 +49,16 @@
   :expected "65"
   :emacs :match)
 
+ (:name "reader-char-literal-space"
+  :expr "?\\s"
+  :expected "32"
+  :emacs :match)
+
+ (:name "reader-char-literal-control-del"
+  :expr "?\\^?"
+  :expected "127"
+  :emacs :match)
+
  (:name "text-props-text-property-default-nonsticky-boundp"
   :expr "(boundp 'text-property-default-nonsticky)"
   :expected "t"

@@ -61,7 +61,11 @@
     (:metaclass sb-mop:funcallable-standard-class))
 
   (cl:defmethod initialize-instance :after ((o oclosure) &key)
-    (sb-mop:set-funcallable-instance-function o (%oclosure-call o))))
+    (let ((call (%oclosure-call o)))
+      (sb-mop:set-funcallable-instance-function
+       o
+       (lambda (&rest args)
+         (apply call o args))))))
 
 #-sbcl
 (progn
@@ -98,7 +102,8 @@ IF can be an ELisp form to be interpreted or a function of no arguments."
                  :oclosure-type 'cconv--interactive-helper
                  :fun fun
                  :if if
-                 :call (lambda (&rest args)
+                 :call (lambda (_self &rest args)
+                         (declare (ignore _self))
                          (apply #'funcall fun args))))
 
 (eval-when (:load-toplevel :execute)

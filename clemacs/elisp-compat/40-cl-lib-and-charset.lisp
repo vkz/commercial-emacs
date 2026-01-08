@@ -547,6 +547,10 @@ type specifiers (e.g. `oclosure.el`) can load without needing the full cl-lib
 macro suite."
   `(cl:deftype ,name ,args ,@body))
 
+(cl:defmacro cl-callf (fun place &rest args)
+  "Bring-up subset of cl-lib's `cl-callf'."
+  `(setf ,place (funcall ,fun ,place ,@args)))
+
 (cl:defmacro cl-defstruct (&rest args)
   "Minimal subset of cl-lib's `cl-defstruct'.
 

@@ -49,6 +49,9 @@ lisp/emacs-lisp/oclosure.el -
 lisp/emacs-lisp/cl-seq.el 10
 lisp/emacs-lisp/seq.el 10
 
+# bring-up: map.el (often required by core libs; load explicitly).
+lisp/emacs-lisp/map.el 50
+
 # pdump: obarray, abbrev, help, mule-util, case-table.
 lisp/obarray.el 10
 lisp/abbrev.el 10
@@ -86,10 +89,10 @@ lisp/emacs-lisp/cl-generic.el -
 lisp/simple.el -
 
 # pdump: nadvice.
-lisp/emacs-lisp/nadvice.el 1
+lisp/emacs-lisp/nadvice.el 200
 
 # pdump: minibuffer.
-lisp/minibuffer.el 11
+lisp/minibuffer.el 200
 
 # pdump: frame.
 lisp/frame.el 200
@@ -116,7 +119,7 @@ lisp/fringe.el -
 lisp/scroll-bar.el 11
 lisp/select.el -
 lisp/emacs-lisp/timer.el -
-lisp/isearch.el 54
+lisp/isearch.el 400
 
 # pdump: easymenu, rfn-eshadow, menu-bar, tab-bar.
 lisp/emacs-lisp/easymenu.el 1
