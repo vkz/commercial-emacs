@@ -365,14 +365,20 @@
         (buffer-string ))))))
 
 (defvar threads-condvar nil)
+(defvar threads-condvar-notify-count 0)
 
 (defun thread-test-condvar-wait ()
   ;; Wait for condvar to be notified.
+  ;;
+  ;; POSIX condition variables are allowed to have spurious wakeups, so
+  ;; we guard the waits with a predicate.
   (with-mutex (condition-mutex threads-condvar)
-    (condition-wait threads-condvar))
-  ;; Wait again, it will be signaled.
+    (while (zerop threads-condvar-notify-count)
+      (condition-wait threads-condvar)))
+  ;; Wait again; the test expects this to remain blocked until signaled.
   (with-mutex (condition-mutex threads-condvar)
-    (condition-wait threads-condvar)))
+    (while (= threads-condvar-notify-count 1)
+      (condition-wait threads-condvar))))
 
 (ert-deftest threads-condvar-wait ()
   "Test waiting on conditional variable."
@@ -385,6 +391,7 @@
     (while (> (length (all-threads)) 1)
       (thread-yield))
     (setq threads-condvar (make-condition-variable cv-mutex))
+    (setq threads-condvar-notify-count 0)
     (setq new-thread (make-thread #'thread-test-condvar-wait))
 
     ;; Make sure new-thread is alive.
@@ -400,6 +407,7 @@
 
     ;; Notify the waiting thread.
     (with-mutex cv-mutex
+      (setq threads-condvar-notify-count 1)
       (condition-notify threads-condvar t))
     ;; Allow new-thread to process the notification.
     (sleep-for 0.1)
