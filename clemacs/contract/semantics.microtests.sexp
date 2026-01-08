@@ -224,6 +224,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "files-write-region-utf8-roundtrip"
+  :expr "(let* ((f (make-temp-file \"clemacs-wr-\")) (s \"héllo ☃\\n\")) (write-region s nil f nil 'quiet) (with-temp-buffer (insert-file-contents f) (string= (buffer-string) s)))"
+  :expected "t"
+  :emacs :match)
+
  (:name "strings-string-empty-p-empty"
   :expr "(string-empty-p \"\")"
   :expected "t"

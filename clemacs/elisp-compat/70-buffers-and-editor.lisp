@@ -1561,6 +1561,56 @@ Emacs clamps positions outside the buffer to the nearest valid position."
       ;; Return (FILENAME SIZE).
       (list filename (length chunk)))))
 
+(cl:defun write-region (start end filename &optional append _visit _lockname _mustbenew)
+  "Bring-up subset of ELisp `write-region'.
+
+Scope: UTF-8 only (no legacy coding systems)."
+  (declare (cl:ignore _visit _lockname _mustbenew))
+  (unless (stringp filename)
+    (error "ELISP:WRITE-REGION expects a file name string, got: ~S" filename))
+  (let* ((path (%file-name->cl-string filename))
+         (if-exists (if append :append :supersede)))
+    (cond
+     ((or (stringp start) (unibyte-string-p start))
+      (when end
+        (error "ELISP:WRITE-REGION string START requires END=nil, got: ~S" end))
+      (if (unibyte-string-p start)
+          (let ((octets start))
+            (with-open-file (out path
+                                 :direction :output
+                                 :if-exists if-exists
+                                 :if-does-not-exist :create
+                                 :element-type '(unsigned-byte 8))
+              (loop for b across octets do
+                (write-byte b out))))
+          (with-open-file (out path
+                               :direction :output
+                               :if-exists if-exists
+                               :if-does-not-exist :create
+                               :external-format :utf-8)
+            (write-string start out))))
+     ((or (integerp start) (elisp-marker-p start))
+      (unless (or (integerp end) (elisp-marker-p end))
+        (error "ELISP:WRITE-REGION region START requires numeric END, got: ~S" end))
+      (let* ((a (%pos start))
+             (b (%pos end))
+             (lo (min a b))
+             (hi (max a b))
+             (txt (elisp-buffer-text *current-buffer*))
+             (lo-idx (1- lo))
+             (hi-idx (1- hi)))
+        (unless (<= 0 lo-idx hi-idx (length txt))
+          (error "ELISP:WRITE-REGION bad range: ~S..~S" start end))
+        (with-open-file (out path
+                             :direction :output
+                             :if-exists if-exists
+                             :if-does-not-exist :create
+                             :external-format :utf-8)
+          (write-string (subseq txt lo-idx hi-idx) out))))
+     (t
+      (error "ELISP:WRITE-REGION bad START: ~S" start))))
+  nil)
+
 (cl:defun newline (&optional n)
   "Bring-up subset of ELisp `newline'."
   (let ((n (or n 1)))
