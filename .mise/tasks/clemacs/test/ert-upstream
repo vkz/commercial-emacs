@@ -128,18 +128,26 @@ if [[ -f "${load_manifest}" ]]; then
   done < "${load_manifest}"
 fi
 
+eval_args=(
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/backquote.el\")"
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/subr.el\" :max-forms ${bootstrap_eval})"
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/pp.el\")"
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert.el\" :max-forms ${ert_eval})"
+  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert-x.el\")"
+  --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-tests.el\" :max-forms ${tests_eval})"
+  --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-x-tests.el\" :max-forms ${ert_x_tests_eval})"
+)
+
+if [[ "${#extra_eval_args[@]}" != "0" ]]; then
+  eval_args+=("${extra_eval_args[@]}")
+fi
+
+eval_args+=(--eval "(uiop:quit (clemacs:run-upstream-ert-tests :names ${names_lisp} :known-fail ${known_fail_lisp}))")
+
 clemacs_sbcl_eval \
   "${project_root}" \
   "${build_dir}" \
   "${deps_dir}" \
   "${qlot_bin}" \
   "${sbcl_dynamic_space}" \
-  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/backquote.el\")" \
-  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/subr.el\" :max-forms ${bootstrap_eval})" \
-  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/pp.el\")" \
-  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert.el\" :max-forms ${ert_eval})" \
-  --eval "(elisp:load-elisp-file #p\"${project_root}/lisp/emacs-lisp/ert-x.el\")" \
-  --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-tests.el\" :max-forms ${tests_eval})" \
-  --eval "(elisp:load-elisp-file #p\"${project_root}/test/lisp/emacs-lisp/ert-x-tests.el\" :max-forms ${ert_x_tests_eval})" \
-  ${#extra_eval_args[@]:+"${extra_eval_args[@]}"} \
-  --eval "(uiop:quit (clemacs:run-upstream-ert-tests :names ${names_lisp} :known-fail ${known_fail_lisp}))"
+  "${eval_args[@]}"

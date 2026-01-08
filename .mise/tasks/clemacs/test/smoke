@@ -16,13 +16,8 @@ cd "${project_root}"
 build_dir="${usage_build_dir}"
 mkdir -p "${build_dir}"
 
-export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
-export XDG_CONFIG_HOME="${project_root}/${build_dir}/xdg-config"
-export XDG_DATA_HOME="${project_root}/${build_dir}/xdg-data"
-
-home_dir="${project_root}/${build_dir}/home"
-mkdir -p "${home_dir}"
-export HOME="${home_dir}"
+source "${project_root}/.mise/tasks/clemacs/lib/sbcl.sh"
+clemacs_setup_xdg_and_home "${project_root}" "${build_dir}"
 
 if [[ -z "${CLEMACS_REFERENCE_EMACS:-}" ]]; then
   if [[ -x "/opt/homebrew/bin/emacs" ]]; then
@@ -37,47 +32,17 @@ fi
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/substrate/build"
 
+deps_dir="${project_root}/${build_dir}/deps"
+qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
 substrate_dylib="${project_root}/${build_dir}/substrate/libemxsubstrate.dylib"
-core_path="${project_root}/${build_dir}/clemacs.core"
 sbcl_dynamic_space="${CLEMACS_SBCL_DYNAMIC_SPACE_SIZE:-4096}"
 
 export CLEMACS_SUBSTRATE_DYLIB="${substrate_dylib}"
 
-core_fresh=false
-if [[ -f "${core_path}" ]]; then
-  if ! find "${project_root}/clemacs" \
-      -type f \
-      \( -name '*.lisp' -o -name '*.asd' -o -name 'qlfile' -o -name 'qlfile.lock' \) \
-      -newer "${core_path}" \
-      -print -quit | rg -q .; then
-    core_fresh=true
-  fi
-fi
-
-if [[ "${core_fresh}" == "true" ]]; then
-  sbcl \
-    --dynamic-space-size "${sbcl_dynamic_space}" \
-    --core "${core_path}" \
-    --noinform \
-    --disable-debugger \
-    --no-sysinit \
-    --no-userinit \
-    --non-interactive \
-    --eval '(sb-ext:exit :code (clemacs.test:run-smoke))'
-else
-  deps_dir="${project_root}/${build_dir}/deps"
-  qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
-
-  cd "${deps_dir}"
-  "${qlot_bin}" exec sbcl \
-    --dynamic-space-size "${sbcl_dynamic_space}" \
-    --noinform \
-    --no-sysinit \
-    --no-userinit \
-    --non-interactive \
-    --disable-debugger \
-    --eval '(require :asdf)' \
-    --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
-    --eval '(asdf:load-system :clemacs)' \
-    --eval '(uiop:quit (clemacs.test:run-smoke))'
-fi
+clemacs_sbcl_eval \
+  "${project_root}" \
+  "${build_dir}" \
+  "${deps_dir}" \
+  "${qlot_bin}" \
+  "${sbcl_dynamic_space}" \
+  --eval '(uiop:quit (clemacs.test:run-smoke))'

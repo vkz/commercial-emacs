@@ -58,7 +58,18 @@ clemacs_sbcl_eval() {
   local core_path="${project_root}/${build_dir}/clemacs.core"
   local use_core="${CLEMACS_USE_CORE:-1}"
 
+  local style_mode="${CLEMACS_STYLE_WARNING_MODE:-summary}"
+  if [[ "${CLEMACS_MUFFLE_STYLE_WARNINGS:-0}" != "0" ]]; then
+    style_mode="muffle"
+  fi
+
+  local tmp_dir="${project_root}/${build_dir}/tmp"
+  mkdir -p "${tmp_dir}"
+  local log_path="${tmp_dir}/sbcl.$(date -u +%Y%m%dT%H%M%SZ).$$.log"
+  local filter_py="${project_root}/.mise/tasks/clemacs/lib/sbcl-output-filter.py"
+
   local common_args=(
+    --dynamic-space-size "${sbcl_dynamic_space}"
     --noinform
     --no-sysinit
     --no-userinit
@@ -66,7 +77,7 @@ clemacs_sbcl_eval() {
     --disable-debugger
   )
 
-  if [[ "${CLEMACS_MUFFLE_STYLE_WARNINGS:-0}" != "0" ]]; then
+  if [[ "${style_mode}" == "muffle" ]]; then
     common_args+=(--eval '(declaim (sb-ext:muffle-conditions style-warning sb-ext:compiler-note))')
   fi
 
@@ -74,21 +85,32 @@ clemacs_sbcl_eval() {
     clemacs_ensure_core "${project_root}" "${build_dir}" "${core_path}"
   fi
 
+  set +e
   if [[ "${use_core}" != "0" && -f "${core_path}" ]]; then
-    sbcl \
-      --core "${core_path}" \
-      "${common_args[@]}" \
-      "$@"
+    sbcl --core "${core_path}" "${common_args[@]}" "$@" 2>&1 \
+      | python3 "${filter_py}" "${style_mode}" "${log_path}"
   else
     (
       cd "${deps_dir}"
       "${qlot_bin}" exec sbcl \
-        --dynamic-space-size "${sbcl_dynamic_space}" \
         "${common_args[@]}" \
         --eval '(require :asdf)' \
         --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
         --eval '(asdf:load-system :clemacs)' \
         "$@"
-    )
+    ) 2>&1 | python3 "${filter_py}" "${style_mode}" "${log_path}"
+  fi
+
+  local status=$?
+  set -e
+  if [[ "${status}" != "0" ]]; then
+    echo "[clemacs] sbcl failed; full log: ${log_path}" >&2
+    if [[ "${style_mode}" == "full" || "${CLEMACS_SBCL_SHOW_FULL_LOG_ON_FAIL:-0}" != "0" ]]; then
+      cat "${log_path}" >&2
+    else
+      echo "[clemacs] (showing last 200 log lines; set CLEMACS_SBCL_SHOW_FULL_LOG_ON_FAIL=1 for full log)" >&2
+      tail -n 200 "${log_path}" >&2 || true
+    fi
+    return "${status}"
   fi
 }
