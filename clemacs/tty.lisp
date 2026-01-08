@@ -46,10 +46,18 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
      ((characterp k) (char-code k))
      ((eq k :enter) 13)
      ((eq k :backspace) 127)
-     ((eq k :left) +tty-elisp-event-left+)
-     ((eq k :right) +tty-elisp-event-right+)
-     ((eq k :up) +tty-elisp-event-up+)
-     ((eq k :down) +tty-elisp-event-down+)
+     ((eq k :left)
+      (ignore-errors (elisp::internal-event-symbol-parse-modifiers +tty-elisp-event-left+))
+      +tty-elisp-event-left+)
+     ((eq k :right)
+      (ignore-errors (elisp::internal-event-symbol-parse-modifiers +tty-elisp-event-right+))
+      +tty-elisp-event-right+)
+     ((eq k :up)
+      (ignore-errors (elisp::internal-event-symbol-parse-modifiers +tty-elisp-event-up+))
+      +tty-elisp-event-up+)
+     ((eq k :down)
+      (ignore-errors (elisp::internal-event-symbol-parse-modifiers +tty-elisp-event-down+))
+      +tty-elisp-event-down+)
      ((eq k :esc) 27)
      ((and (consp k) (eq (first k) :byte) (integerp (second k)))
       (second k))
@@ -232,6 +240,42 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
       (setf (tty-state-frame state) frame)
       top)))
 
+(defun %tty-project-root ()
+  (let* ((clemacs-dir (uiop:ensure-directory-pathname (asdf:system-source-directory :clemacs)))
+         (root (uiop:pathname-parent-directory-pathname clemacs-dir)))
+    (uiop:ensure-directory-pathname root)))
+
+(defun %tty-maybe-load-startup ()
+  ;; Only load startup if it looks like we are still in the minimal
+  ;; bring-up environment (i.e. `lisp/subr.el` has not established
+  ;; `global-map` yet).  `emacs-main` already loads a startup manifest.
+  (when (or (not (elisp::boundp 'elisp::global-map))
+            (not (ignore-errors (elisp::keymapp (elisp::symbol-value 'elisp::global-map)))))
+    (let ((project-root (%tty-project-root)))
+      (let* ((level (or (uiop:getenv "CLEMACS_TTY_STARTUP_LEVEL") "subr")))
+        (format t "[clemacs] loading startup (~A)~%" level)
+        (finish-output)
+        (handler-case
+          (cond
+           ((string= level "none")
+            nil)
+           ((string= level "subr")
+            ;; Minimal set to obtain shipped keymaps (`global-map`, `ctl-x-map`)
+            ;; without paying the full startup.manifest cost in the TTY loop.
+            (elisp:load-elisp-file
+             (merge-pathnames #p"lisp/emacs-lisp/backquote.el" project-root))
+            (elisp:load-elisp-file
+             (merge-pathnames #p"lisp/subr.el" project-root)))
+           (t
+            (let ((manifest (pathname (format nil "clemacs/contract/startup.~A.files" level))))
+              (elisp:load-elisp-manifest
+               :project-root project-root
+               :manifest manifest
+               :skip-file #p"clemacs/contract/lisp.allowed-skip.files"))))
+          (error (e)
+            (format *error-output* "[clemacs] startup load failed (continuing): ~A~%" e)
+            (finish-output *error-output*)))))))
+
 (defun tty-main (&key path)
   (let* ((dump (uiop:getenv "CLEMACS_GRID_PATCH_DUMP"))
          (path* (and path (not (string= path "")) path))
@@ -241,6 +285,7 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
             (list (make-grid-patch-jsonl-sink dump))))
     (unwind-protect
         (progn
+          (%tty-maybe-load-startup)
           (tty-enter-raw)
           (let ((buf (elisp::get-buffer-create (or path* "*scratch*"))))
             (elisp::set-buffer buf)

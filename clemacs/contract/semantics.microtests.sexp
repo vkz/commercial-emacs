@@ -159,6 +159,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "keymaps-key-parse-c-x-c-s"
+  :expr "(key-parse \"C-x C-s\")"
+  :expected "[24 19]"
+  :emacs :match)
+
  (:name "keymaps-bindings--define-key-defines-key"
   :expr "(let ((m (make-sparse-keymap))) (bindings--define-key m [load] 'foo) (eq (lookup-key m [load]) 'foo))"
   :expected "t"

@@ -61,6 +61,8 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
 - 2026-01-08: added `clemacs:test:ert-upstream-one` support for `ert-upstream.load.files` so newly-loaded upstream tests can be triaged individually.
 - 2026-01-08: started “real editor core” command routing in `clemacs/tty.lisp` (minimal ELisp-style command loop: keymaps + `read-key-sequence` + `key-binding` + `command-execute`) with bring-up stubs in `clemacs/elisp-compat/55-command-loop.lisp`.
 - 2026-01-08: aligned keymap semantics so `keymapp` treats symbols with function-cell keymaps as keymaps; added a focused microtest in `clemacs/contract/semantics.microtests.sexp`.
+- 2026-01-08: enabled `\\C-` string escapes in the ELisp reader so shipped keymaps using strings like `\"\\C-x\"` bind correctly; the clemacs TTY loop now loads a minimal startup set (backquote + subr) by default to use the shipped `global-map`/prefixes.
+- 2026-01-08: promoted a few more rx/seq upstream ERT tests (monotonic) after adding keyboard/command-loop bring-up stubs.
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 
@@ -133,7 +135,7 @@ Acceptance criteria (promotion gate)
 - Promote clemacs to `mise run run` only when `run:clemacs` is a usable terminal editor and exits cleanly.
 
 Next actions (high-leverage)
-- Switch the clemacs TTY loop from the bring-up keymap to shipped `current-global-map` by loading `startup.editor-core.files` during TTY startup (so `lisp/subr.el` establishes `global-map`/prefixes).
+- Switch the clemacs TTY loop from the bring-up keymap to shipped `current-global-map` by loading a minimal startup set (backquote + `lisp/subr.el`) during TTY startup (default), then optionally advancing to deeper `startup.*.files` via `CLEMACS_TTY_STARTUP_LEVEL`.
 - Add minimal keyboard/command-loop stubs needed by shipped ELisp and upstream ERT loads (e.g. `key-parse`, `this-single-command-keys`, event symbol parsing/modifiers), keeping behavior intentionally small but Emacs-shaped.
 
 ## Archive
