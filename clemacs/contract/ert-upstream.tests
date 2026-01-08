@@ -220,3 +220,10 @@ test-hash-table-setf-overwrite-key
 test-setf-map-with-function
 test-map-plist-member
 test-map-plist-put
+
+# cl-lib bring-up (cl-lib-tests).
+cl-lib-test-remprop
+cl-lib-test-remove-if-not
+cl-lib-test-remove
+cl-lib-keyword-names-versus-values
+cl-lib-empty-keyargs

@@ -36,3 +36,7 @@ test/lisp/emacs-lisp/pcase-tests.el -
 lisp/version.el -
 lisp/emacs-lisp/map.el -
 test/lisp/emacs-lisp/map-tests.el -
+
+# 2026-01-08: Bring up `cl-lib` upstream tests.
+lisp/emacs-lisp/cl-seq.el -
+test/lisp/emacs-lisp/cl-lib-tests.el -

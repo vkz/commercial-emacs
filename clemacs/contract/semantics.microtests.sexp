@@ -862,4 +862,14 @@
   :expr "(pcase 'x (:foo 'bad) (_ 'ok))"
   :expected "ok"
   :emacs :match)
+
+ (:name "core-nlistp"
+  :expr "(list (nlistp nil) (nlistp '(1)) (nlistp 3))"
+  :expected "(nil nil t)"
+  :emacs :match)
+
+ (:name "symbols-put-preserves-plist-order"
+  :expr "(let ((x (make-symbol \"x\"))) (put x 'a 1) (put x 'b 2) (put x 'c 3) (symbol-plist x))"
+  :expected "(a 1 b 2 c 3)"
+  :emacs :match)
 )
