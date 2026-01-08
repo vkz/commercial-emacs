@@ -24,3 +24,15 @@ test/lisp/subr-tests.el -
 
 # 2026-01-08: Bring up keymap helpers for subr-tests keymap cluster.
 lisp/keymap.el -
+
+# 2026-01-08: Bring up `pcase` + `map` tests.
+# NOTE: `cl-lib.el` assumes `gv` is already available (as in upstream Emacs
+# preload).  Load macroexp/gv first for clemacs bring-up.
+lisp/emacs-lisp/macroexp.el -
+lisp/emacs-lisp/gv.el -
+lisp/emacs-lisp/cl-lib.el -
+lisp/emacs-lisp/pcase.el -
+test/lisp/emacs-lisp/pcase-tests.el -
+lisp/version.el -
+lisp/emacs-lisp/map.el -
+test/lisp/emacs-lisp/map-tests.el -

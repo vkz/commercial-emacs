@@ -449,6 +449,16 @@
   :expected "(\":\" 92 \"nonl\")"
   :emacs :match)
 
+ (:name "symbol-name-keyword"
+  :expr "(symbol-name :foo)"
+  :expected "\":foo\""
+  :emacs :match)
+
+ (:name "reader-#s-hash-table"
+  :expr "(let* ((ht (car (read-from-string \"#s(hash-table test eq data (a 1 b 2))\")))) (list (hash-table-test ht) (gethash 'a ht) (gethash 'b ht)))"
+  :expected "(eq 1 2)"
+  :emacs :match)
+
  (:name "reader-bare-pipe-symbol"
   :expr "(symbol-name (car (car (read-from-string \"(| a b)\"))))"
   :expected "\"|\""
