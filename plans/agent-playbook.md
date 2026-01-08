@@ -179,3 +179,4 @@ failure, a useful debug flag, a missing helper task):
 - When adding top-level initializers inside the `ELISP` package, qualify CL operators/predicates (`cl:>`, `cl:=`, `cl:<=`, etc.) and avoid calling ELisp helpers at load time unless they are already defined (package `:shadow` makes unqualified operators resolve to `ELISP::...`).
 - Avoid binding local functions/macros named after `CL` symbols inside the `ELISP` package (SBCL package locks): e.g. don’t `labels` a helper named `bit`; pick `mode-bit`/`%bit` instead.
 - When upgrading `load`/`require`, keep `get-load-suffixes` to `.el` only (there are checked-in `.elc` files, but clemacs can’t load bytecode).
+- If `startup-check` fails with `:READ-ERROR` (often “end of file”), use `mise run clemacs:ref-emacs:eval` to print the failing top-level form by index and identify the unsupported reader syntax (e.g. `?\\^?`).
