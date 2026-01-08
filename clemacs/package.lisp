@@ -58,6 +58,7 @@
            #:member
            #:mapcar
            #:prin1 #:princ #:prin1-to-string #:princ-to-string #:read-from-string
+           #:read
            #:string= #:string-equal
            #:aref
            #:stringp

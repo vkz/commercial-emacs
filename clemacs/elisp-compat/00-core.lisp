@@ -57,7 +57,6 @@
 (cl:defvar auto-mode-alist nil)
 (cl:defvar magic-fallback-mode-alist nil)
 (cl:defvar minor-mode-map-alist nil)
-(cl:defvar mode-line-mode-menu nil)
 (cl:defvar load-path nil)
 (cl:defvar load-file-rep-suffixes nil)
 (cl:defvar temporary-file-directory nil)
@@ -78,6 +77,11 @@ without evaluating the interactive spec."
 (cl:defun ding (&optional _arg)
   "Bring-up stub for ELisp `ding'."
   (declare (cl:ignore _arg))
+  nil)
+
+(cl:defun garbage-collect ()
+  "Bring-up stub for ELisp `garbage-collect'."
+  (ignore-errors (sb-ext:gc :full t))
   nil)
 
 (cl:defmacro defvar (var &optional (init nil init-supplied-p) doc)
@@ -220,7 +224,7 @@ This currently only supports COLLECTION as a list of strings."
             (push s out)))))
     (nreverse out)))
 
-(cl:defun intern (name &optional (package *package*))
+(cl:defun intern (name &optional (package (find-package "ELISP")))
   "ELisp-ish INTERN; canonicalizes strings to CL-style names.
 
 This is a pragmatic compatibility shim, not a full obarray model."

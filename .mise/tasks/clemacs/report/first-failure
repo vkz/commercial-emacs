@@ -4,7 +4,7 @@ set -euo pipefail
 #MISE description="Run a clemacs load gate, capture output, and extract the first ELisp load error"
 #USAGE flag "-h --help" help="Print help"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
-#USAGE flag "--mode <mode>" help="What to run: startup-smoke|startup-check|bootstrap|ert-upstream" default="startup-check"
+#USAGE flag "--mode <mode>" help="What to run: startup-smoke|startup-check|startup-editor-core|bootstrap|ert-upstream" default="startup-check"
 #USAGE flag "--debug" help="Enable CLEMACS_LOAD_DEBUG_FILE backtraces for the run"
 
 if [[ "${usage_help:-false}" == "true" ]]; then
@@ -30,6 +30,7 @@ cmd=(mise run)
 case "${mode}" in
   startup-smoke) cmd+=(clemacs:test:startup -- --build-dir "${build_dir}" --level smoke) ;;
   startup-check) cmd+=(clemacs:test:startup-check -- --build-dir "${build_dir}") ;;
+  startup-editor-core) cmd+=(clemacs:test:startup -- --build-dir "${build_dir}" --level editor-core) ;;
   bootstrap) cmd+=(clemacs:test:load-bootstrap -- --build-dir "${build_dir}") ;;
   ert-upstream) cmd+=(clemacs:test:ert-upstream -- --build-dir "${build_dir}") ;;
   *)

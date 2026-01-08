@@ -124,6 +124,10 @@ So we:
 	                     ;; as line anchors.
 	                     (#\` (write-string "\\A" out))
 	                     (#\' (write-string "\\z" out))
+                             ;; Word boundary anchors (Emacs `\\<'/`\\>').
+                             ;; Approximate using PCRE's `\\b`.
+                             (#\< (write-string "\\b" out))
+                             (#\> (write-string "\\b" out))
 	                     (otherwise
 	                      (write-char #\\ out)
 	                      (write-char next out)))))
@@ -720,6 +724,22 @@ character in STRING."
             (let* ((ins-before (%count-insertions-before insertions pos))
                    (pos* (- pos ins-before)))
               (cons obj (+ start pos*)))))))))
+
+(cl:defun read (&optional stream)
+  "Bring-up subset of ELisp `read'.
+
+Supports reading from a string (used by `lisp/bindings.el` during startup)."
+  (cond
+   ;; clemacs does not currently have a minibuffer reader; keep failures loud.
+   ((null stream)
+    (error "ELISP:READ without STREAM is not supported in clemacs bring-up"))
+   ((stringp stream)
+    (car (read-from-string stream)))
+   (t
+    (let ((*package* (find-package "ELISP"))
+          (*readtable* (elisp::%ensure-elisp-readtable))
+          (*read-eval* t))
+      (cl:read stream nil :eof)))))
 
 (cl:defun string-to-number (string)
   "Bring-up subset of ELisp `string-to-number'."

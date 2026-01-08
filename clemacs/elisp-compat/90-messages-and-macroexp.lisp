@@ -890,6 +890,10 @@ Supports the common pattern of a self-referential closure (used by ERT)."
   "Bring-up subset of ELisp `indirect-function'."
   (handler-case
       (cond
+       ;; Some upstream code (e.g. `substitute-key-definition') uses
+       ;; `indirect-function' on keymap objects while scanning bindings.
+       ;; Treat concrete keymaps as already-indirect.
+       ((and (not (symbolp thing)) (keymapp thing)) thing)
        ((symbolp thing)
         (let ((seen nil)
               (cur thing))

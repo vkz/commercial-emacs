@@ -184,6 +184,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "read-string-parses-vector"
+  :expr "(equal (read \"[1 2]\") [1 2])"
+  :expected "t"
+  :emacs :match)
+
  (:name "cl-progv-binds-dynamically"
   :expr "(progn (require 'cl-lib) (cl-progv '(x) '(7) x))"
   :expected "7"

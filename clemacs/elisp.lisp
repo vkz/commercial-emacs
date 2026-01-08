@@ -414,8 +414,8 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
            (lambda (stream char)
              (declare (cl:ignore char))
              (let ((next (peek-char t stream nil nil t)))
-                (cond
-                 ((and next (char= next #\.))
+               (cond
+                ((and next (char= next #\.))
                  (let* ((dots
                           (with-output-to-string (out)
                             (loop for ch = (peek-char nil stream nil nil t)
@@ -423,15 +423,15 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
                                   do (write-char (read-char stream nil nil t) out))))
                         (sym (cl:intern dots (find-package "ELISP"))))
                    (list 'quote sym)))
-                 (t
-                  (list 'quote (read stream t nil t))))))
+                (t
+                 (list 'quote (cl:read stream t nil t))))))
            nil
            rt)
           (set-macro-character
            #\`
            (lambda (stream char)
              (declare (cl:ignore char))
-             (list bq (read stream t nil t)))
+             (list bq (cl:read stream t nil t)))
            nil
            rt)
           (set-macro-character
@@ -442,9 +442,9 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
                (cond
                 ((and next (char= next #\@))
                  (read-char stream nil nil t)
-                 (list sp (read stream t nil t)))
+                 (list sp (cl:read stream t nil t)))
                 (t
-                 (list uq (read stream t nil t))))))
+                 (list uq (cl:read stream t nil t))))))
            nil
            rt))
         ;; Emacs Lisp treats `|' as an ordinary symbol constituent (e.g. rx DSL
@@ -458,7 +458,7 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
         ;; with a stable printed representation.
         (flet ((read-struct-literal (stream subchar arg)
                  (declare (cl:ignore subchar arg))
-                 (let ((form (read stream t nil t)))
+                 (let ((form (cl:read stream t nil t)))
                    (unless (and (consp form) (symbolp (car form)))
                      (cl:error "ELISP: invalid #s literal: ~S" form))
                    (make-elisp-struct-literal :name (car form) :fields (cdr form)))))
@@ -619,7 +619,7 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
          (lambda (stream sub-char arg)
            (declare (cl:ignore sub-char arg))
            (list (cl:intern "FUNCTION" (find-package "ELISP"))
-                 (read stream t nil t)))
+                 (cl:read stream t nil t)))
          rt)
         (set-dispatch-macro-character
          #\#
@@ -910,7 +910,7 @@ We currently preserve:
                     (loop with form-index = 0 do
                       (let ((form
                               (handler-case
-                                  (read in nil :eof)
+                                  (cl:read in nil :eof)
                                 (cl:error (e)
                                   (let ((next-index (1+ form-index)))
                                     (%maybe-log-load-error e next-index)

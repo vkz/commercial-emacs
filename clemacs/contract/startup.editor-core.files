@@ -25,7 +25,7 @@ lisp/international/mule.el 20
 lisp/international/mule-conf.el 200
 lisp/env.el 10
 lisp/format.el 10
-lisp/bindings.el 10
+lisp/bindings.el 200
 lisp/window.el 10
 lisp/files.el -
 
