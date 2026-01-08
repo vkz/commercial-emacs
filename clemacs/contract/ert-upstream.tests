@@ -1,4 +1,7 @@
-# Upstream ERT tests that must pass under clemacs (names as in ert-tests.el).
+# Upstream ERT tests that must pass under clemacs.
+#
+# Test names must correspond to `ert-deftest` forms that are loaded by the
+# upstream ERT bring-up harness (`mise run clemacs:test:ert-upstream`).
 #
 # Keep this list monotonic during bring-up; move temporary failures to
 # `ert-upstream.known-fail.tests` with a short reason + date.
@@ -95,3 +98,21 @@ ert-test-describe-test
 ert-test-message-log-truncation
 ert-test-builtin-message-log-flushing
 ert-test-force-message-log-buffer-truncation
+
+# subr-x bring-up (threading macros, string helpers).
+subr-x-test-string-remove-prefix
+subr-x-test-string-remove-suffix
+subr-x-test-string-trim-left
+subr-x-test-string-trim-right
+subr-x-test-thread-first-no-forms
+subr-x-test-thread-first-expansion
+subr-x-test-thread-first-examples
+subr-x-test-thread-last-no-forms
+subr-x-test-thread-last-expansion
+subr-x-test-thread-last-examples
+subr-x-test-when-let*-true
+subr-x-test-when-let*-false
+subr-x-test-when-let*-single-symbol-expansion
+subr-x-test-when-let*-body-expansion
+subr-x-test-if-let*-true
+subr-x-test-if-let*-false

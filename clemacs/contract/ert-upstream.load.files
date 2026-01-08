@@ -1,0 +1,10 @@
+# Extra upstream ELisp files to load for the clemacs upstream ERT bring-up gate.
+#
+# One entry per line:
+#   <repo-relative-path> [<max-forms>|-]
+#
+# Keep this list monotonic: add entries, don't delete to "get green".
+
+# 2026-01-08: Bring up `subr-x` (string helpers + threading macros).
+lisp/subr-x.el -
+test/lisp/emacs-lisp/subr-x-tests.el -
