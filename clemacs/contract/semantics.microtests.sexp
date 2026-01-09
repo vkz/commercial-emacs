@@ -904,6 +904,21 @@
   :expected "0"
   :emacs :match)
 
+ (:name "syntax-ppss-in-string-nth3-and-start"
+  :expr "(with-temp-buffer (emacs-lisp-mode) (insert \"\\\"ab\\\"\") (goto-char 3) (let ((st (syntax-ppss))) (list (nth 3 st) (nth 8 st) (point))) )"
+  :expected "(34 1 3)"
+  :emacs :match)
+
+ (:name "syntax-ppss-in-comment-nth4-and-start"
+  :expr "(with-temp-buffer (emacs-lisp-mode) (insert \"a;xx\\n\") (goto-char 3) (let ((st (syntax-ppss))) (list (nth 4 st) (nth 8 st) (point))) )"
+  :expected "(t 2 3)"
+  :emacs :match)
+
+ (:name "syntax-parse-partial-sexp-commentstop-stops-at-comment"
+  :expr "(with-temp-buffer (emacs-lisp-mode) (insert \"a;xx\\n\") (goto-char 1) (let ((st (parse-partial-sexp 1 (point-max) nil nil nil t))) (list (point) (nth 4 st) (nth 8 st))) )"
+  :expected "(3 t 2)"
+  :emacs :match)
+
  (:name "vars-special-variable-p-defvar"
   :expr "(progn (defvar clemacs-svp 1) (special-variable-p 'clemacs-svp))"
   :expected "t"

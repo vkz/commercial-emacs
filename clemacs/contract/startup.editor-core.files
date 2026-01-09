@@ -107,7 +107,7 @@ lisp/term/tty-colors.el 50
 lisp/font-core.el 50
 
 # pdump: syntax.
-lisp/emacs-lisp/syntax.el 20
+lisp/emacs-lisp/syntax.el -
 
 # pdump: font-lock.
 lisp/font-lock.el 3

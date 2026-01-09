@@ -64,6 +64,7 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
 - 2026-01-08: enabled `\\C-` string escapes in the ELisp reader so shipped keymaps using strings like `\"\\C-x\"` bind correctly; the clemacs TTY loop now loads a minimal startup set (backquote + subr) by default to use the shipped `global-map`/prefixes.
 - 2026-01-08: promoted a few more rx/seq upstream ERT tests (monotonic) after adding keyboard/command-loop bring-up stubs.
 - 2026-01-09: implemented high-fanout bring-up shims driven by the elisp-core gate (minibuffer/completion basics, single-window primitives incl. `window-end`, backquote/pcase forward refs, basic file modes/permissions, simple process/call-process-region surface, and sexp/point/key helpers), plus microtests + compat notes to keep the contract green.
+- 2026-01-09: implemented a baseline `parse-partial-sexp` + `syntax-ppss` scanner (Emacs-shaped enough for indentation/isearch callers) and uncapped `lisp/emacs-lisp/syntax.el` in the clemacs startup manifests.
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 
@@ -99,19 +100,14 @@ Done (2026-01-09)
 - Uncapped `lisp/emacs-lisp/nadvice.el` in `startup.check` and `startup.editor-core` manifests.
 - Uncapped `lisp/minibuffer.el` in `startup.check` and `startup.editor-core` manifests.
 - Started a buffer-backed minibuffer model (`read-from-minibuffer` populates ` *Minibuf-0*`; `exit-minibuffer`/`delete-minibuffer-contents` are no longer hard errors).
+- Baseline syntax scanning: `parse-partial-sexp` + `syntax-ppss` (and uncapped `lisp/emacs-lisp/syntax.el` in `startup.check`/`startup.editor-core`).
 
 1) Uncap `lisp/frame.el` (currently max-forms=200)
    - Provide a minimal TTY frame model and core accessors like
      `frame-parameter`, `minibuffer-window`, and `minibuffer-prompt-end`.
    - Goal is "Emacs-shaped enough for editor-core", not GUI parity.
 
-2) Baseline syntax scanning (`parse-partial-sexp` + `syntax-ppss`)
-   - This unlocks indentation/font-lock/jit-lock/isearch helpers without
-     rewriting shipped `lisp/` call sites.
-   - Even if we later accelerate with tree-sitter, keep the API and a correct
-     baseline scanner.
-
-3) Process/subprocess surface (batch-first, then interactive)
+2) Process/subprocess surface (batch-first, then interactive)
    - Expand beyond the current `call-process-region` subset: `call-process`,
      process plists/flags, and enough attributes to unblock `files.el`,
      `server.el`, and crypto/process callers.
@@ -133,8 +129,7 @@ High priority (next ROI)
 - Minibuffer/completion basics: now have `minibuffer-depth`, a minimal `completing-read`, and a buffer-backed minibuffer state; next is an editable minibuffer buffer (keymaps + cursor motion + in-buffer edits) rather than the current line-prompt input.
 - Window/buffer motion basics: now have `window-point`/`window-height`/`window-start`/`window-end` + a single-window model; next is enough window-state APIs for `frame.el`/display paths and more accurate window-end/window-start semantics under scrolling.
 - Process/subprocess surface: now have a minimal `process-buffer`/`get-buffer-process` and `call-process-region`; next is `call-process`, `set-process-plist`, and the small flags/attrs (`process-query-on-exit-flag`, `process-attributes`, etc.) that unblock `lisp/files.el`, `lisp/server.el`, and crypto/process callers.
-- Syntax/parse-state core: `syntax-ppss` (and immediate deps) to unlock indentation/font-lock/jit-lock/isearch helpers.
-  - Even if we later lean on tree-sitter, keep `syntax-ppss` as a compatible API (avoid rewriting shipped `lisp/` call sites); implement a correct baseline scanner first, then optionally add a tree-sitter-backed acceleration path (tree-sitter is currently disabled in the TTY build flow).
+- Syntax/parse-state core: baseline `parse-partial-sexp` + `syntax-ppss` is in place; next is raising `font-lock.el`/`jit-lock.el` caps and addressing the missing primitives those loads expose.
 
 Next actions
 - Grow `clemacs/contract/startup.{smoke,check,editor-core}.files` monotonically, following pdump order.

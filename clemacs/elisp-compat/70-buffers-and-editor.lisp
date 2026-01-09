@@ -218,119 +218,13 @@ Return the current *Messages* buffer (creating it if needed)."
 (cl:defun syntax-ppss (&optional pos)
   "Bring-up subset of ELisp `syntax-ppss' for Emacs Lisp buffers.
 
-Returns an Emacs-style parse state list (11 elements), computed by a simple
-scanner that recognizes strings (\"...\"), line comments (;...\\n), and
-parentheses nesting."
-  (cl:let* ((p (%pos (or pos (point))))
-            (txt (elisp-buffer-text *current-buffer*))
-            (limit (cl:max 1 (cl:min p (1+ (length txt)))))
-            (ppss-paren-stack nil)
-            (ppss-token-start nil)
-            (ppss-last-sexp-start nil)
-            (ppss-in-string nil)
-            (ppss-string-start nil)
-            (ppss-in-comment nil)
-            (ppss-comment-start nil))
-    (cl:labels ((peek (pos0)
-                  (when (and (<= 1 pos0) (< pos0 (1+ (length txt))))
-                    (char txt (1- pos0))))
-                (ws-p (ch)
-                  (or (char= ch #\Space)
-                      (char= ch #\Tab)
-                      (char= ch #\Newline)
-                      (char= ch #\Return)))
-                (delimiter-p (ch)
-                  (or (ws-p ch)
-                      (char= ch #\()
-                      (char= ch #\))
-                      (char= ch #\")
-                      (char= ch #\;)
-                      (char= ch #\')
-                      (char= ch #\`)
-                      (char= ch #\,)
-                      (char= ch #\#))))
-      (cl:let ((pos0 1))
-        (cl:loop while (< pos0 limit) do
-          (cl:let ((ch (char txt (1- pos0))))
-            (cond
-             (ppss-in-comment
-              (when (char= ch #\Newline)
-                (setf ppss-in-comment nil ppss-comment-start nil))
-              (incf pos0))
-             (ppss-in-string
-              (cond
-               ((char= ch #\\)
-                (incf pos0 2))
-               ((char= ch #\")
-                (setf ppss-in-string nil)
-                (setf ppss-last-sexp-start ppss-string-start)
-                (setf ppss-string-start nil)
-                (incf pos0))
-               (t
-                (incf pos0))))
-             (t
-              (cond
-               ((char= ch #\;)
-                (when ppss-token-start
-                  (setf ppss-last-sexp-start ppss-token-start
-                        ppss-token-start nil))
-                (setf ppss-in-comment t ppss-comment-start pos0)
-                (incf pos0))
-               ((char= ch #\")
-                (when ppss-token-start
-                  (setf ppss-last-sexp-start ppss-token-start
-                        ppss-token-start nil))
-                (setf ppss-in-string t ppss-string-start pos0)
-                (incf pos0))
-               ((char= ch #\()
-                (when ppss-token-start
-                  (setf ppss-last-sexp-start ppss-token-start
-                        ppss-token-start nil))
-                (push pos0 ppss-paren-stack)
-                (incf pos0))
-               ((char= ch #\))
-                (when ppss-token-start
-                  (setf ppss-last-sexp-start ppss-token-start
-                        ppss-token-start nil))
-                (when ppss-paren-stack (pop ppss-paren-stack))
-                (incf pos0))
-               ((ws-p ch)
-                (when ppss-token-start
-                  (setf ppss-last-sexp-start ppss-token-start
-                        ppss-token-start nil))
-                (incf pos0))
-               ((delimiter-p ch)
-                (when ppss-token-start
-                  (setf ppss-last-sexp-start ppss-token-start
-                        ppss-token-start nil))
-                (incf pos0))
-               (t
-                (unless ppss-token-start
-                  (setf ppss-token-start pos0))
-                (incf pos0)))))))
-        (when ppss-token-start
-          (cl:let ((next (peek limit)))
-            (when (or (null next) (delimiter-p next))
-              (setf ppss-last-sexp-start ppss-token-start
-                    ppss-token-start nil))))))
-    (cl:let* ((depth (length ppss-paren-stack))
-              (innermost (car ppss-paren-stack))
-              (start (cond
-                      (ppss-in-string ppss-string-start)
-                      (ppss-in-comment ppss-comment-start)
-                      (t nil)))
-              (quote (and ppss-in-string 34)))
-      (list depth
-            innermost
-            ppss-last-sexp-start
-            quote
-            (and ppss-in-comment t)
-            nil
-            0
-            nil
-            start
-            (nreverse (copy-list ppss-paren-stack))
-            nil))))
+Returns an Emacs-style parse state list (11 elements), computed via the
+compat `parse-partial-sexp' scanner.
+
+Note: Like Emacs, this has a point-moving side effect when POS differs from
+the current point (because it delegates to `parse-partial-sexp')."
+  (let ((p (%pos (or pos (point)))))
+    (parse-partial-sexp (point-min) p)))
 
 (cl:defvar indent-line-function nil)
 
@@ -907,88 +801,99 @@ This implementation is intentionally minimal and syntax-table-ignorant: it
 tracks parentheses, strings, and `;` line comments for Emacs Lisp-like syntax.
 
 It also moves point to where the scan stopped (like the C primitive)."
-  (declare (cl:ignore targetdepth stopbefore))
+  (declare (cl:ignore stopbefore))
   (unless (and (integerp from) (integerp to))
     (error "ELISP:PARSE-PARTIAL-SEXP expected integer region, got: ~S..~S" from to))
   (let* ((txt (elisp-buffer-text *current-buffer*))
          (limit (max 1 (min to (point-max))))
          (pos (max 1 (min from limit)))
          (depth 0)
-         (instring nil)
-         (incomment nil)
-         (quoted nil)
-         (mindepth 0)
+         (min-depth 0)
+         (in-string-delim nil)
+         (in-comment nil)
+         (after-quote nil)
          (comstr-start nil)
-         (stack nil))
+         ;; Internal stack representation: innermost-first for O(1) push/pop.
+         (paren-stack-r nil))
     (when (consp oldstate)
       (setf depth (or (nth 0 oldstate) 0)
-            instring (nth 3 oldstate)
-            incomment (nth 4 oldstate)
-            quoted (nth 5 oldstate)
-            mindepth depth
+            min-depth (or (nth 6 oldstate) depth)
+            in-string-delim (let ((d (nth 3 oldstate)))
+                              (cond
+                               ((null d) nil)
+                               ((eq d t) 34)
+                               ((integerp d) d)
+                               (t 34)))
+            in-comment (and (nth 4 oldstate) t)
+            after-quote (and (nth 5 oldstate) t)
             comstr-start (nth 8 oldstate)
-            stack (nth 9 oldstate)))
+            paren-stack-r (reverse (or (nth 9 oldstate) nil))))
     (labels ((at (p)
-               (and (<= 1 p) (<= p (point-max))
+               (and (<= 1 p) (< p (point-max))
                     (char txt (1- p))))
              (push-paren (p)
-               (setf stack (append stack (list p)))
+               (push p paren-stack-r)
                (incf depth))
              (pop-paren ()
                (when (> depth 0)
                  (decf depth))
-               (when (consp stack)
-                 (setf stack (butlast stack 1)))))
+               (when paren-stack-r
+                 (pop paren-stack-r))))
       (loop while (< pos limit) do
         (let ((ch (at pos)))
           (when (null ch)
             (return))
           (cond
-           ((and incomment (char= ch #\Newline))
-            (setf incomment nil comstr-start nil quoted nil)
+           ((and in-comment (char= ch #\Newline))
+            (setf in-comment nil comstr-start nil after-quote nil)
             (incf pos))
-           (incomment
+           (in-comment
             (incf pos))
-           (instring
+           (in-string-delim
             (cond
              ((char= ch #\\)
-              (incf pos 2))
-             ((char= ch #\")
-              (setf instring nil comstr-start nil quoted nil)
+              (incf pos (if (< (1+ pos) limit) 2 1)))
+             ((and (integerp in-string-delim)
+                   (= (char-code ch) in-string-delim))
+              (setf in-string-delim nil comstr-start nil after-quote nil)
               (incf pos))
              (t
               (incf pos))))
            (t
-            (setf quoted (char= ch #\'))
+            (setf after-quote nil)
             (cond
              ((char= ch #\;)
+              ;; In Emacs Lisp, semicolon starts a line comment.
+              (setf in-comment t comstr-start pos)
+              (incf pos)
               (when commentstop
-                (setf incomment t comstr-start pos)
-                (return))
-              (setf incomment t comstr-start pos)
-              (incf pos))
+                (return)))
              ((char= ch #\")
-              (setf instring t comstr-start pos)
+              (setf in-string-delim 34 comstr-start pos)
               (incf pos))
              ((char= ch #\()
               (push-paren pos)
               (incf pos))
              ((char= ch #\))
               (pop-paren)
-              (setf mindepth (min mindepth depth))
+              (setf min-depth (min min-depth depth))
               (incf pos))
              (t
-              (incf pos))))))))
+              (incf pos))))))
+        (when (and (integerp targetdepth)
+                   (= depth targetdepth))
+          (return))))
       ;; Like the C primitive, update point to where we stopped scanning.
       (goto-char pos)
-      (let* ((prevlevelstart (car (last stack))))
+      (let* ((stack (reverse paren-stack-r))
+             (prevlevelstart (car (last stack))))
         (list depth
               prevlevelstart
               nil
-              (and instring t)
-              (and incomment t)
-              (and quoted t)
-              mindepth
+              in-string-delim
+              (and in-comment t)
+              (and after-quote t)
+              min-depth
               nil
               comstr-start
               stack
