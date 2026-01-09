@@ -622,6 +622,22 @@
   :expected "5"
   :emacs :match)
 
+ (:name "read-event-honors-unread-command-events"
+  :expr "(progn (setq unread-command-events '(65)) (list (read-event) unread-command-events))"
+  :expected "(65 nil)"
+  :emacs nil
+  :notes "clemacs TTY loop uses `unread-command-events` for pushback (universal-argument and friends).")
+
+ (:name "universal-argument-sets-prefix-arg-and-pushes-back"
+  :expr "(progn (setq unread-command-events '(6)) (setq prefix-arg nil) (setq current-prefix-arg nil) (universal-argument) (list prefix-arg unread-command-events))"
+  :expected "((4) (6))"
+  :emacs nil)
+
+ (:name "universal-argument-digit-prefix"
+  :expr "(progn (setq unread-command-events '(51 6)) (setq prefix-arg nil) (setq current-prefix-arg nil) (universal-argument) (list prefix-arg unread-command-events))"
+  :expected "(3 (6))"
+  :emacs nil)
+
  (:name "function-preserves-local-function-binding"
   :expr "(cl:labels ((rec (x) x)) (cl:mapcar #'rec '(1 2 3)))"
   :expected "(1 2 3)"

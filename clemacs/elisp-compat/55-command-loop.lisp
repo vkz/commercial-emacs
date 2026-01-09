@@ -51,6 +51,16 @@ Outside the minibuffer, we return the last captured minibuffer input."
   "Bring-up stub for ELisp `this-single-command-raw-keys'."
   (this-single-command-keys))
 
+(cl:defun %clemacs--unread-pop ()
+  (when (consp unread-command-events)
+    (let ((ev (car unread-command-events)))
+      (setf unread-command-events (cdr unread-command-events))
+      ev)))
+
+(cl:defun %clemacs--unread-push (ev)
+  (setf unread-command-events (cons ev (or unread-command-events nil)))
+  nil)
+
 (cl:defun input-pending-p ()
   "Bring-up stub for the C primitive `input-pending-p'."
   nil)
@@ -458,7 +468,14 @@ Outside the minibuffer, we return the last captured minibuffer input."
     (return-from command-execute nil))
   (setf last-command this-command)
   (setf this-command command)
-  (call-interactively command))
+  (let ((saved-prefix-arg prefix-arg))
+    ;; Emacs command loop behavior: `prefix-arg' is for the *next* command.
+    ;; Promote it to `current-prefix-arg' at dispatch, then clear it.
+    (setf prefix-arg nil)
+    (setf current-prefix-arg saved-prefix-arg)
+    (unwind-protect
+        (call-interactively command)
+      (setf current-prefix-arg nil))))
 
 (cl:defun read-event (&optional _prompt _inherit-input-method _seconds)
   "Bring-up subset of ELisp `read-event'.
@@ -466,7 +483,8 @@ Outside the minibuffer, we return the last captured minibuffer input."
 Returns a single event: an integer character code or an ELISP symbol
 (LEFT/RIGHT/UP/DOWN)."
   (declare (cl:ignore _prompt _inherit-input-method _seconds))
-  (let ((ev (clemacs::%tty-read-event)))
+  (let ((ev (or (%clemacs--unread-pop)
+                (clemacs::%tty-read-event))))
     (setf last-command-event ev)
     ev))
 
@@ -637,14 +655,87 @@ Returns a vector of events."
   (declare (cl:ignore _prompt _args))
   (let ((events nil))
     (loop
-      (let ((ev (clemacs::%tty-read-event)))
-        (setf last-command-event ev)
+      (let ((ev (read-event)))
         (push ev events)
         (let* ((seq (coerce (nreverse events) 'vector))
                (binding (key-binding seq t)))
           (when (or (null binding) (not (keymapp binding)))
             (setf *clemacs-this-command-keys* seq)
             (return seq)))))))
+
+(cl:defun negative-argument (&optional _arg)
+  "Bring-up subset of ELisp `negative-argument'.
+
+This sets `prefix-arg' to the raw prefix marker `-' when no numeric prefix has
+been started, or negates an existing numeric prefix."
+  (declare (cl:ignore _arg))
+  (cond
+   ((null prefix-arg) (setf prefix-arg '-))
+   ((eq prefix-arg '-) nil)
+   ((integerp prefix-arg) (setf prefix-arg (- prefix-arg)))
+   ((consp prefix-arg) (setf prefix-arg (list (- (prefix-numeric-value prefix-arg)))))
+   (t (setf prefix-arg '-)))
+  nil)
+
+(cl:defun digit-argument (&optional _arg)
+  "Bring-up subset of ELisp `digit-argument'.
+
+This reads the digit from `last-command-event' and extends `prefix-arg'."
+  (declare (cl:ignore _arg))
+  (unless (integerp last-command-event)
+    (return-from digit-argument nil))
+  (let ((d (- last-command-event 48)))
+    (unless (and (<= 0 d) (<= d 9))
+      (return-from digit-argument nil))
+    (cond
+     ((null prefix-arg)
+      (setf prefix-arg d))
+     ((eq prefix-arg '-)
+      (setf prefix-arg (- d)))
+     ((integerp prefix-arg)
+      (setf prefix-arg (if (minusp prefix-arg)
+                           (- (+ (* (- prefix-arg) 10) d))
+                           (+ (* prefix-arg 10) d))))
+     ((consp prefix-arg)
+      (setf prefix-arg (prefix-numeric-value prefix-arg))
+      (digit-argument))
+     (t
+      (setf prefix-arg d))))
+  nil)
+
+(cl:defun universal-argument (&optional _arg)
+  "Bring-up subset of ELisp `universal-argument' (C-u).
+
+This builds `prefix-arg' for the *next* command by reading subsequent events:
+- Repeated C-u multiplies by 4.
+- Digits build a decimal numeric prefix.
+- A leading `-' introduces a negative prefix.
+The first non-argument event is pushed back onto `unread-command-events'."
+  (declare (cl:ignore _arg))
+  (let ((base (* 4 (prefix-numeric-value (or current-prefix-arg 1))))
+        (sign 1)
+        (num nil))
+    (setf prefix-arg (list base))
+    (loop
+      (let ((ev (read-event)))
+        (cond
+         ;; C-u (control-u) is 21 in our TTY event encoding.
+         ((and (integerp ev) (= ev 21) (null num) (= sign 1))
+          (setf base (* base 4))
+          (setf prefix-arg (list base)))
+         ;; Leading '-' starts a negative numeric prefix.
+         ((and (integerp ev) (= ev 45) (null num))
+          (setf sign -1)
+          (setf prefix-arg '-))
+         ;; Digits build a decimal prefix (override the initial 4^n).
+         ((and (integerp ev) (<= 48 ev) (<= ev 57))
+          (let ((d (- ev 48)))
+            (setf num (if num (+ (* num 10) d) d))
+            (setf prefix-arg (* sign num))))
+         (t
+          (%clemacs--unread-push ev)
+          (return))))))
+  nil)
 
 (cl:defun clemacs-tty--reset-goal-column ()
   (setf clemacs-tty-goal-column nil)
@@ -777,6 +868,7 @@ Returns a vector of events."
     (define-key global (vector 6) 'clemacs-tty-forward-char)  ; C-f
     (define-key global (vector 16) 'clemacs-tty-previous-line) ; C-p
     (define-key global (vector 14) 'clemacs-tty-next-line)      ; C-n
+    (define-key global (vector 21) 'universal-argument)         ; C-u
 
     ;; Editing (keep these explicit until the shipped bindings are loaded deeper).
     (define-key global (vector 127) 'clemacs-tty-delete-backward-char) ; DEL

@@ -40,6 +40,7 @@
 (cl:defvar standard-output t)
 ;; Common command/key processing vars referenced early by upstream lisp/.
 ;; Bind to NIL for bring-up so loads don't spam UNBOUND warnings.
+(cl:defvar prefix-arg nil)
 (cl:defvar current-prefix-arg nil)
 (cl:defvar defining-kbd-macro nil)
 (cl:defvar last-command-event nil)

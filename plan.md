@@ -103,10 +103,11 @@ Done (2026-01-09)
 - Baseline syntax scanning: `parse-partial-sexp` + `syntax-ppss` (and uncapped `lisp/emacs-lisp/syntax.el` in `startup.check`/`startup.editor-core`).
 - Process/subprocess surface (batch-first): `call-process`, `set-process-plist`, `emacs-pid`, `process-attributes` (plus microtests).
 - Raised `lisp/font-lock.el` and `lisp/jit-lock.el` caps to 200 in `startup.check`/`startup.editor-core`.
+- Command-loop prefix args: add `prefix-arg` plumbing, `unread-command-events` pushback in `read-event`, and minimal `universal-argument`/`digit-argument`/`negative-argument` for the clemacs TTY loop.
 
-1) Uncap `lisp/frame.el` (currently max-forms=200)
-   - Provide a minimal TTY frame model and core accessors like
-     `frame-parameter`, `minibuffer-window`, and `minibuffer-prompt-end`.
+1) TTY frame model completeness (`lisp/frame.el` is already uncapped)
+   - Extend the minimal single-frame model and accessors like `frame-parameter`,
+     `minibuffer-window`, and `minibuffer-prompt-end` where editor-core expects more.
    - Goal is "Emacs-shaped enough for editor-core", not GUI parity.
 
 2) Process/subprocess surface (batch-first, then interactive)
