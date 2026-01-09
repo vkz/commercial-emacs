@@ -215,6 +215,123 @@ Return the current *Messages* buffer (creating it if needed)."
              ,@body)
          (set-syntax-table ,old)))))
 
+(cl:defun syntax-ppss (&optional pos)
+  "Bring-up subset of ELisp `syntax-ppss' for Emacs Lisp buffers.
+
+Returns an Emacs-style parse state list (11 elements), computed by a simple
+scanner that recognizes strings (\"...\"), line comments (;...\\n), and
+parentheses nesting."
+  (cl:let* ((p (%pos (or pos (point))))
+            (txt (elisp-buffer-text *current-buffer*))
+            (limit (cl:max 1 (cl:min p (1+ (length txt)))))
+            (ppss-paren-stack nil)
+            (ppss-token-start nil)
+            (ppss-last-sexp-start nil)
+            (ppss-in-string nil)
+            (ppss-string-start nil)
+            (ppss-in-comment nil)
+            (ppss-comment-start nil))
+    (cl:labels ((peek (pos0)
+                  (when (and (<= 1 pos0) (< pos0 (1+ (length txt))))
+                    (char txt (1- pos0))))
+                (ws-p (ch)
+                  (or (char= ch #\Space)
+                      (char= ch #\Tab)
+                      (char= ch #\Newline)
+                      (char= ch #\Return)))
+                (delimiter-p (ch)
+                  (or (ws-p ch)
+                      (char= ch #\()
+                      (char= ch #\))
+                      (char= ch #\")
+                      (char= ch #\;)
+                      (char= ch #\')
+                      (char= ch #\`)
+                      (char= ch #\,)
+                      (char= ch #\#))))
+      (cl:let ((pos0 1))
+        (cl:loop while (< pos0 limit) do
+          (cl:let ((ch (char txt (1- pos0))))
+            (cond
+             (ppss-in-comment
+              (when (char= ch #\Newline)
+                (setf ppss-in-comment nil ppss-comment-start nil))
+              (incf pos0))
+             (ppss-in-string
+              (cond
+               ((char= ch #\\)
+                (incf pos0 2))
+               ((char= ch #\")
+                (setf ppss-in-string nil)
+                (setf ppss-last-sexp-start ppss-string-start)
+                (setf ppss-string-start nil)
+                (incf pos0))
+               (t
+                (incf pos0))))
+             (t
+              (cond
+               ((char= ch #\;)
+                (when ppss-token-start
+                  (setf ppss-last-sexp-start ppss-token-start
+                        ppss-token-start nil))
+                (setf ppss-in-comment t ppss-comment-start pos0)
+                (incf pos0))
+               ((char= ch #\")
+                (when ppss-token-start
+                  (setf ppss-last-sexp-start ppss-token-start
+                        ppss-token-start nil))
+                (setf ppss-in-string t ppss-string-start pos0)
+                (incf pos0))
+               ((char= ch #\()
+                (when ppss-token-start
+                  (setf ppss-last-sexp-start ppss-token-start
+                        ppss-token-start nil))
+                (push pos0 ppss-paren-stack)
+                (incf pos0))
+               ((char= ch #\))
+                (when ppss-token-start
+                  (setf ppss-last-sexp-start ppss-token-start
+                        ppss-token-start nil))
+                (when ppss-paren-stack (pop ppss-paren-stack))
+                (incf pos0))
+               ((ws-p ch)
+                (when ppss-token-start
+                  (setf ppss-last-sexp-start ppss-token-start
+                        ppss-token-start nil))
+                (incf pos0))
+               ((delimiter-p ch)
+                (when ppss-token-start
+                  (setf ppss-last-sexp-start ppss-token-start
+                        ppss-token-start nil))
+                (incf pos0))
+               (t
+                (unless ppss-token-start
+                  (setf ppss-token-start pos0))
+                (incf pos0)))))))
+        (when ppss-token-start
+          (cl:let ((next (peek limit)))
+            (when (or (null next) (delimiter-p next))
+              (setf ppss-last-sexp-start ppss-token-start
+                    ppss-token-start nil))))))
+    (cl:let* ((depth (length ppss-paren-stack))
+              (innermost (car ppss-paren-stack))
+              (start (cond
+                      (ppss-in-string ppss-string-start)
+                      (ppss-in-comment ppss-comment-start)
+                      (t nil)))
+              (quote (and ppss-in-string 34)))
+      (list depth
+            innermost
+            ppss-last-sexp-start
+            quote
+            (and ppss-in-comment t)
+            nil
+            0
+            nil
+            start
+            (nreverse (copy-list ppss-paren-stack))
+            nil))))
+
 (cl:defvar indent-line-function nil)
 
 (cl:defun lisp-mode-variables (&optional _arg)
@@ -917,16 +1034,64 @@ Emacs clamps positions outside the buffer to the nearest valid position."
   (indent-to 0))
 
 (cl:defun use-region-p ()
-  "Bring-up stub for ELisp `use-region-p'."
-  nil)
+  "Bring-up subset of ELisp `use-region-p'."
+  (and (region-active-p) t))
 
 (cl:defun region-beginning ()
-  "Bring-up stub for ELisp `region-beginning'."
-  (error "ELISP:REGION-BEGINNING not implemented"))
+  "Bring-up subset of ELisp `region-beginning'."
+  (let ((mpos (and (markerp (mark-marker))
+                   (marker-position (mark-marker)))))
+    (unless (integerp mpos)
+      (error "ELISP:REGION-BEGINNING no mark"))
+    (min (point) mpos)))
 
 (cl:defun region-end ()
-  "Bring-up stub for ELisp `region-end'."
-  (error "ELISP:REGION-END not implemented"))
+  "Bring-up subset of ELisp `region-end'."
+  (let ((mpos (and (markerp (mark-marker))
+                   (marker-position (mark-marker)))))
+    (unless (integerp mpos)
+      (error "ELISP:REGION-END no mark"))
+    (max (point) mpos)))
+
+(cl:defun mark-marker ()
+  "Bring-up subset of ELisp `mark-marker'."
+  (let ((v (and (boundp 'mark-marker) (symbol-value 'mark-marker))))
+    (unless (markerp v)
+      (set 'mark-marker (make-marker))
+      (setf v (symbol-value 'mark-marker)))
+    v))
+
+(cl:defun region-active-p ()
+  "Bring-up subset of ELisp `region-active-p'."
+  (and (boundp 'transient-mark-mode)
+       (symbol-value 'transient-mark-mode)
+       (boundp 'mark-active)
+       (symbol-value 'mark-active)
+       (let ((m (mark-marker)))
+         (and (markerp m) (integerp (marker-position m))))
+       t))
+
+(cl:defun push-mark (&optional location nomsg activate)
+  "Bring-up subset of ELisp `push-mark'."
+  (let* ((m (mark-marker))
+         (buf (current-buffer))
+         (loc (or location (point))))
+    ;; Push old mark onto the mark ring if it was set.
+    (let ((oldpos (and (markerp m) (marker-position m))))
+      (when (integerp oldpos)
+        (set 'mark-ring
+             (cons (copy-marker m t)
+                   (and (boundp 'mark-ring)
+                        (symbol-value 'mark-ring))))))
+    (set-marker m loc buf)
+    (set 'mark-active
+         (cond
+          ((and (boundp 'transient-mark-mode) (symbol-value 'transient-mark-mode))
+           (and activate t))
+          (t t)))
+    (unless nomsg
+      (message "Mark set"))
+    m))
 
 (cl:defun point-max-marker ()
   (let ((m (make-elisp-marker :buffer *current-buffer*
@@ -2028,9 +2193,19 @@ for upstream ERT's `ert--make-xrefs-region'."
   (set-buffer-modified-p flag))
 
 (cl:defvar global-mark-ring nil)
+(cl:defvar mark-ring nil)
+(cl:defvar mark-active nil)
+(cl:defvar transient-mark-mode nil)
 (cl:defvar inhibit-modification-hooks nil)
 (cl:defvar inhibit-read-only nil)
 (cl:defvar buffer-read-only nil)
+
+(cl:defun barf-if-buffer-read-only (&optional _pos)
+  "Bring-up subset of the C primitive `barf-if-buffer-read-only'."
+  (declare (cl:ignore _pos))
+  (when (and buffer-read-only (not inhibit-read-only))
+    (signal 'buffer-read-only (list (current-buffer))))
+  nil)
 
 (defstruct elisp-window
   (buffer nil))
@@ -2058,6 +2233,14 @@ for upstream ERT's `ert--make-xrefs-region'."
   "Bring-up subset of the C primitive `frame-parameter' (single-frame)."
   (let ((plist (gethash (%frame-parameters--key frame) *frame-parameters*)))
     (plist-get plist parameter)))
+
+(cl:defun frame-parameters (&optional frame)
+  "Bring-up subset of the C primitive `frame-parameters' (single-frame)."
+  (let ((plist (gethash (%frame-parameters--key frame) *frame-parameters*)))
+    (let ((out nil))
+      (loop for (k v) on plist by #'cddr do
+        (push (cons k v) out))
+      (nreverse out))))
 
 (cl:defun modify-frame-parameters (frame alist)
   "Bring-up subset of ELisp `modify-frame-parameters' (single-frame)."
@@ -2118,6 +2301,13 @@ for upstream ERT's `ert--make-xrefs-region'."
     (unless (window-live-p w)
       (error "ELISP:WINDOW-FRAME expected live window, got: ~S" w))
     (selected-frame)))
+
+(cl:defun window-normalize-frame (frame)
+  "Bring-up subset of the C primitive `window-normalize-frame' (single-frame)."
+  (cond
+   ((null frame) (selected-frame))
+   ((framep frame) frame)
+   (t (selected-frame))))
 
 (cl:defun frame-selected-window (&optional frame)
   "Bring-up subset of ELisp `frame-selected-window' (single-frame)."
@@ -2204,6 +2394,11 @@ for upstream ERT's `ert--make-xrefs-region'."
   (declare (cl:ignore _buffer))
   nil)
 
+(cl:defun constrain-to-field (newpos _oldpos &optional _escape-from-edge _only-in-line _inhibit-capture-property)
+  "Bring-up subset of the C primitive `constrain-to-field'."
+  (declare (cl:ignore _oldpos _escape-from-edge _only-in-line _inhibit-capture-property))
+  newpos)
+
 (cl:defun delete-minibuffer-contents ()
   "Bring-up stub for ELisp `delete-minibuffer-contents' (no minibuffer)."
   (error "ELISP:DELETE-MINIBUFFER-CONTENTS not in minibuffer"))
@@ -2257,6 +2452,23 @@ for upstream ERT's `ert--make-xrefs-region'."
   (let ((win (display-buffer buffer-or-name)))
     (select-window win)
     (window-buffer win)))
+
+(cl:defun switch-to-buffer (buffer-or-name &optional _norecord _force-same-window)
+  "Bring-up subset of ELisp `switch-to-buffer' (single-window)."
+  (declare (cl:ignore _norecord _force-same-window))
+  (pop-to-buffer buffer-or-name))
+
+(cl:defun buffer-size (&optional buffer)
+  "Bring-up subset of the C primitive `buffer-size'."
+  (let ((buf (or buffer (current-buffer))))
+    (unless (elisp-buffer-p buf)
+      (error "ELISP:BUFFER-SIZE expected buffer, got: ~S" buffer))
+    (let ((saved (current-buffer)))
+      (unwind-protect
+          (progn
+            (set-buffer buf)
+            (- (point-max) (point-min)))
+        (set-buffer saved)))))
 
 (cl:defun force-mode-line-update (&optional _all)
   "Bring-up stub for ELisp `force-mode-line-update'."

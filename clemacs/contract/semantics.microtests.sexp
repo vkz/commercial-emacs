@@ -908,4 +908,34 @@
   :expr "(let ((x (make-symbol \"x\"))) (put x 'a 1) (put x 'b 2) (put x 'c 3) (symbol-plist x))"
   :expected "(a 1 b 2 c 3)"
   :emacs :match)
+
+ (:name "call-interactively-p-prefix-numeric"
+  :expr "(progn (defun clemacs-test--ci-p (n) (interactive \"p\") n) (setq current-prefix-arg 7) (call-interactively 'clemacs-test--ci-p))"
+  :expected "7"
+  :emacs :match)
+
+ (:name "call-interactively-P-raw-prefix"
+  :expr "(progn (defun clemacs-test--ci-P (x) (interactive \"P\") x) (setq current-prefix-arg '(4)) (call-interactively 'clemacs-test--ci-P))"
+  :expected "(4)"
+  :emacs :match)
+
+ (:name "barf-if-buffer-read-only-signals"
+  :expr "(with-temp-buffer (setq buffer-read-only t) (condition-case _e (progn (barf-if-buffer-read-only) 'bad) (buffer-read-only 'ok)))"
+  :expected "ok"
+  :emacs :match)
+
+ (:name "syntax-ppss-empty"
+  :expr "(with-temp-buffer (emacs-lisp-mode) (syntax-ppss))"
+  :expected "(0 nil nil nil nil nil 0 nil nil nil nil)"
+  :emacs :match)
+
+ (:name "syntax-ppss-in-comment"
+  :expr "(with-temp-buffer (emacs-lisp-mode) (insert \"(foo ; c\\n \\\"str\\\" (bar))\") (goto-char 8) (list (nth 0 (syntax-ppss)) (nth 4 (syntax-ppss)) (nth 8 (syntax-ppss)) (nth 9 (syntax-ppss))))"
+  :expected "(1 t 6 (1))"
+  :emacs :match)
+
+ (:name "syntax-ppss-in-string"
+  :expr "(with-temp-buffer (emacs-lisp-mode) (insert \"(foo ; c\\n \\\"str\\\" (bar))\") (goto-char 14) (list (nth 0 (syntax-ppss)) (nth 3 (syntax-ppss)) (nth 8 (syntax-ppss)) (nth 9 (syntax-ppss))))"
+  :expected "(1 34 11 (1))"
+  :emacs :match)
 )

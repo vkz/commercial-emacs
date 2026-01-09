@@ -1144,6 +1144,45 @@ Supports the common pattern of a self-referential closure (used by ERT)."
     (setf (gethash (car (last events)) (elisp-keymap-table km)) definition)
     definition))
 
+(cl:defun where-is-internal (command &optional keymap firstonly _noindirect _noany _include-menus)
+  "Bring-up subset of ELisp `where-is-internal'.
+
+Returns a list of key sequences (vectors of events).  This is enough for early
+help/key-description callers."
+  (declare (cl:ignore _noindirect _noany _include-menus))
+  (let ((seen (cl:make-hash-table :test 'eq))
+        (out nil))
+    (labels ((scan (km prefix)
+               (when (null km)
+                 (return-from scan nil))
+               (let ((k (%keymap-resolve km)))
+                 (when (gethash k seen)
+                   (return-from scan nil))
+                 (setf (gethash k seen) t)
+                 (map-keymap
+                  (lambda (event binding)
+                    (cond
+                     ;; Ignore menu items during bring-up.
+                     ((and (consp binding) (eq (car binding) 'menu-item)) nil)
+                     ((keymapp binding)
+                      (scan binding (append prefix (list event))))
+                     ((and (symbolp binding) (eq binding command))
+                      (push (coerce (append prefix (list event)) 'vector) out)
+                      (when firstonly
+                        (return-from where-is-internal (nreverse out))))
+                     (t nil)))
+                  k)
+                 (scan (keymap-parent k) prefix))))
+      (let ((km*
+              (cond
+               ((null keymap)
+                ;; Prefer local bindings first, then global.
+                (list (current-local-map) (current-global-map)))
+               (t (list keymap)))))
+        (dolist (km km*)
+          (scan km nil))
+        (nreverse out)))))
+
 (cl:defun bindings--define-key (map key item)
   "Bring-up subset of ELisp `bindings--define-key'."
   (define-key

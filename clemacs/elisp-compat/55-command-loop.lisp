@@ -346,20 +346,72 @@
   (declare (cl:ignore _record-flag _keys))
   (let* ((iform (interactive-form command))
          (spec (and (consp iform) (eq (car iform) 'interactive) (cadr iform))))
-    (cond
-     ((and (stringp spec)
-           (not (cl:string= (%elisp-string->cl-string spec) "")))
-      (let* ((s (%elisp-string->cl-string spec))
-             (ch (cl:aref s 0)))
-        (cond
-         ((cl:char= ch #\p)
-          (funcall command (prefix-numeric-value current-prefix-arg)))
-         ((cl:char= ch #\P)
-          (funcall command current-prefix-arg))
-         (t
-          (funcall command)))))
-     (t
-      (funcall command)))))
+    (labels ((split-lines (s)
+               (let ((out nil)
+                     (start 0)
+                     (len (cl:length s)))
+                 (loop for i from 0 to len do
+                   (when (or (= i len) (cl:char= (cl:aref s i) #\Newline))
+                     (push (cl:subseq s start i) out)
+                     (setf start (1+ i))))
+                 (nreverse out)))
+             (parse-spec-string (spec-string)
+               ;; Return a list of args (or signal an error).
+               (let ((args nil))
+                 (dolist (line (split-lines spec-string))
+                   (when (> (cl:length line) 0)
+                     (let* ((i 0)
+                            (len (cl:length line)))
+                       ;; Prefix chars.  For now, only * is meaningful (read-only check).
+                       (loop while (< i len) do
+                         (let ((ch (cl:aref line i)))
+                           (cond
+                            ((cl:char= ch #\*)
+                             (when (fboundp 'barf-if-buffer-read-only)
+                               (barf-if-buffer-read-only))
+                             (incf i))
+                            ((or (cl:char= ch #\@) (cl:char= ch #\^))
+                             (incf i))
+                            (t (return)))))
+                       (when (< i len)
+                         (let* ((code (cl:aref line i))
+                                (prompt (cl:subseq line (1+ i))))
+                           (case code
+                             (#\p
+                              (push (prefix-numeric-value current-prefix-arg) args))
+                             (#\P
+                              (push current-prefix-arg args))
+                             (#\s
+                              (push (read-from-minibuffer (string-to-unibyte prompt)) args))
+                             (#\b
+                              ;; `interactive "b"` yields a buffer name string.
+                              (push (read-from-minibuffer (string-to-unibyte prompt)) args))
+                             (#\f
+                              (push (read-file-name (string-to-unibyte prompt)) args))
+                             (#\F
+                              (push (read-file-name (string-to-unibyte prompt)) args))
+                             (#\r
+                              (push (region-beginning) args)
+                              (push (region-end) args))
+                             (otherwise
+                              (error "ELISP:CALL-INTERACTIVELY unsupported interactive code: ~S"
+                                     (string code)))))))))
+                 (nreverse args))))
+      (cond
+       ((and (stringp spec)
+             (not (cl:string= (%elisp-string->cl-string spec) "")))
+        (let ((args (parse-spec-string (%elisp-string->cl-string spec))))
+          (apply command args)))
+       ((consp spec)
+        ;; Emacs allows `(interactive (list ...))` forms.  Bring-up subset:
+        ;; evaluate SPEC and treat the result as an arg list.
+        (let ((args (eval spec)))
+          (cond
+           ((null args) (funcall command))
+           ((listp args) (apply command args))
+           (t (funcall command args)))))
+       (t
+        (funcall command))))))
 
 (cl:defun command-execute (command &optional _record-flag _keys _special)
   "Bring-up subset of ELisp `command-execute'."
@@ -369,6 +421,51 @@
   (setf last-command this-command)
   (setf this-command command)
   (call-interactively command))
+
+(cl:defun read-event (&optional _prompt _inherit-input-method _seconds)
+  "Bring-up subset of ELisp `read-event'.
+
+Returns a single event: an integer character code or an ELISP symbol
+(LEFT/RIGHT/UP/DOWN)."
+  (declare (cl:ignore _prompt _inherit-input-method _seconds))
+  (let ((ev (clemacs::%tty-read-event)))
+    (setf last-command-event ev)
+    ev))
+
+(cl:defmacro minibuffer-with-setup-hook (hook &body body)
+  "Bring-up subset of ELisp `minibuffer-with-setup-hook'.
+
+This only extends `minibuffer-setup-hook' around BODY."
+  (let ((saved (cl:gensym "SAVED-MINIBUFFER-SETUP-HOOK-")))
+    `(let ((,saved (and (boundp 'minibuffer-setup-hook)
+                        (symbol-value 'minibuffer-setup-hook))))
+       (unwind-protect
+           (progn
+             (set 'minibuffer-setup-hook
+                  (cons ,hook (or ,saved nil)))
+             ,@body)
+         (set 'minibuffer-setup-hook ,saved)))))
+
+(cl:defun read-from-minibuffer (prompt &optional _initial-contents _keymap _read
+                                       _hist _default-value _inherit-input-method)
+  "Bring-up subset of the C primitive `read-from-minibuffer'.
+
+In clemacs TTY bring-up, this reads a line via the terminal prompt helper."
+  (declare (cl:ignore _initial-contents _keymap _read _hist _default-value _inherit-input-method))
+  (unless (stringp prompt)
+    (error "ELISP:READ-FROM-MINIBUFFER expected string PROMPT, got: ~S" prompt))
+  ;; Run setup hooks if present (common callers rely on it for keymaps).
+  (when (and (boundp 'minibuffer-setup-hook)
+             (consp (symbol-value 'minibuffer-setup-hook)))
+    (dolist (fn (symbol-value 'minibuffer-setup-hook))
+      (when (functionp fn)
+        (ignore-errors (funcall fn)))))
+  (let* ((p (%elisp-string->cl-string prompt))
+         (s (and (fboundp 'clemacs::%tty-prompt)
+                 (clemacs::%tty-prompt p))))
+    (when (null s)
+      (signal 'quit nil))
+    (string-to-unibyte s)))
 
 (cl:defun read-key-sequence (&optional _prompt &rest _args)
   "Bring-up subset of ELisp `read-key-sequence'.

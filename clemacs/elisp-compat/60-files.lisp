@@ -18,6 +18,37 @@
   (declare (cl:ignore _filename))
   nil)
 
+(cl:defun read-file-name (prompt &optional dir default-filename _mustmatch initial _predicate)
+  "Bring-up subset of the C primitive `read-file-name' (TTY only).
+
+This does not implement completion.  It prompts for a path and returns an
+expanded file name string."
+  (declare (cl:ignore _mustmatch _predicate))
+  (unless (stringp prompt)
+    (error "ELISP:READ-FILE-NAME expected string PROMPT, got: ~S" prompt))
+  (let* ((base
+           (cond
+            ((and dir (stringp dir)) dir)
+            ((and (boundp 'default-directory) (stringp (symbol-value 'default-directory)))
+             (symbol-value 'default-directory))
+            (t nil)))
+         (initial*
+           (cond
+            ((and initial (stringp initial)) initial)
+            ((and default-filename (stringp default-filename)) default-filename)
+            (t nil)))
+         (input (read-from-minibuffer prompt initial*)))
+    (when (and (stringp input)
+               (= (length (%file-name->cl-string input)) 0)
+               (stringp default-filename))
+      (setf input default-filename))
+    (cond
+     ((null input) nil)
+     ((and base (stringp base))
+      (string-to-unibyte (expand-file-name input base)))
+     (t
+      (string-to-unibyte (expand-file-name input))))))
+
 (cl:defun %initial-exec-path ()
   (let ((path (uiop:getenv "PATH")))
     (cond

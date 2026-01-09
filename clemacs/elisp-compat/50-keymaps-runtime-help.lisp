@@ -201,6 +201,7 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
 (cl:defvar help-char 8)
 (cl:defvar meta-prefix-char 27)
 (cl:defvar minibuffer-prompt-properties nil)
+(cl:defvar minibuffer-setup-hook nil)
 (cl:defvar font-lock-mode nil)
 (cl:defvar font-lock-function nil)
 

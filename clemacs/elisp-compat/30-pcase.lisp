@@ -426,6 +426,12 @@ Records enough symbol properties for upstream ERT's `should-error':
     (seed 'end-of-buffer
           (list 'end-of-buffer 'error)
           "End of buffer")
+    (seed 'buffer-read-only
+          (list 'buffer-read-only 'error)
+          "Buffer is read-only")
+    (seed 'quit
+          (list 'quit 'error)
+          "Quit")
     ;; Common argument/type errors used by upstream tests and core libs.
     (seed 'wrong-type-argument
           (list 'wrong-type-argument 'error)
