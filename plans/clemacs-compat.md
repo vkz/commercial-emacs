@@ -116,6 +116,15 @@ Runtime
   - Breadcrumbs:
     - Skip entry: `clemacs/contract/lisp.allowed-skip.files` (`lisp/leim/leim-list.el`)
 
+- 2026-01-09: `completing-read` returns DEF in batch mode
+  - Decision: when `noninteractive` is non-nil, clemacs `completing-read`
+    returns the default (DEF) when provided (and errors when REQUIRE-MATCH is
+    set and DEF is missing), rather than trying to read from stdin.
+  - Rationale: clemacs contract gates run in noninteractive mode; attempting to
+    read from stdin can block or EOF. Returning DEF unblocks many callers while
+    we bring up the real minibuffer/completion pipeline.
+  - Test breadcrumbs: `clemacs/contract/semantics.microtests.sexp` (`completing-read-noninteractive-default`).
+
 ## Compiler/codegen notes (for later)
 
 These are constraints the eventual ELisp→CL compiler must preserve; if a new

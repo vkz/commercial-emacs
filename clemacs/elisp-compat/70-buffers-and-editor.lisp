@@ -817,6 +817,25 @@ STREAM may be a buffer."
         (if (and (integerp cols) (> cols 0)) cols 80))
     (cl:error () 80)))
 
+(cl:defun window-height (&optional _window _pixelwise)
+  "Bring-up subset of ELisp `window-height'."
+  (declare (cl:ignore _window _pixelwise))
+  (handler-case
+      (multiple-value-bind (rows _cols) (clemacs::tty-winsize)
+        (declare (cl:ignore _cols))
+        (if (and (integerp rows) (> rows 0)) rows 24))
+    (cl:error () 24)))
+
+(cl:defun window-body-height (&optional window _pixelwise)
+  "Bring-up subset of ELisp `window-body-height' (single-window)."
+  (declare (cl:ignore _pixelwise))
+  (window-height window))
+
+(cl:defun window-total-height (&optional window _pixelwise)
+  "Bring-up subset of ELisp `window-total-height' (single-window)."
+  (declare (cl:ignore _pixelwise))
+  (window-height window))
+
 (cl:defun forward-comment (count &optional limit)
   "Bring-up subset of ELisp `forward-comment'.
 
@@ -2208,12 +2227,15 @@ for upstream ERT's `ert--make-xrefs-region'."
   nil)
 
 (defstruct elisp-window
-  (buffer nil))
+  (buffer nil)
+  (start nil))
 
 (defstruct elisp-frame
   (selected-window nil))
 
-(cl:defvar *single-window* (make-elisp-window :buffer *current-buffer*))
+(cl:defvar *single-window*
+  (make-elisp-window :buffer *current-buffer*
+                     :start (point-min)))
 (cl:defvar *selected-window* *single-window*)
 (cl:defvar *single-frame* (make-elisp-frame :selected-window *single-window*))
 (cl:defvar *selected-frame* *single-frame*)
@@ -2359,6 +2381,47 @@ for upstream ERT's `ert--make-xrefs-region'."
       (error "ELISP:WINDOW-BUFFER expected live window, got: ~S" w))
     (elisp-window-buffer w)))
 
+(cl:defun window-point (&optional window)
+  "Bring-up subset of the C primitive `window-point'."
+  (let* ((w (or window (selected-window)))
+         (buf (and (window-live-p w) (elisp-window-buffer w))))
+    (unless (and (window-live-p w) (elisp-buffer-p buf))
+      (error "ELISP:WINDOW-POINT expected live window, got: ~S" w))
+    (elisp-buffer-point buf)))
+
+(cl:defun set-window-point (window pos)
+  "Bring-up subset of ELisp `set-window-point'."
+  (unless (window-live-p window)
+    (error "ELISP:SET-WINDOW-POINT expected live window, got: ~S" window))
+  (let ((buf (elisp-window-buffer window)))
+    (unless (elisp-buffer-p buf)
+      (error "ELISP:SET-WINDOW-POINT expected window buffer, got: ~S" buf))
+    (with-current-buffer buf
+      (goto-char pos))))
+
+(cl:defun window-start (&optional window)
+  "Bring-up subset of the C primitive `window-start'."
+  (let* ((w (or window (selected-window)))
+         (buf (and (window-live-p w) (elisp-window-buffer w))))
+    (unless (and (window-live-p w) (elisp-buffer-p buf))
+      (error "ELISP:WINDOW-START expected live window, got: ~S" w))
+    (or (elisp-window-start w)
+        (with-current-buffer buf (point-min)))))
+
+(cl:defun set-window-start (window pos &optional _noforce)
+  "Bring-up subset of ELisp `set-window-start'."
+  (declare (cl:ignore _noforce))
+  (unless (window-live-p window)
+    (error "ELISP:SET-WINDOW-START expected live window, got: ~S" window))
+  (let ((buf (elisp-window-buffer window)))
+    (unless (elisp-buffer-p buf)
+      (error "ELISP:SET-WINDOW-START expected window buffer, got: ~S" buf))
+    (with-current-buffer buf
+      (let* ((p (%pos pos))
+             (p* (max (point-min) (min p (point-max)))))
+        (setf (elisp-window-start window) p*)
+        p*))))
+
 (cl:defun get-buffer-window (&optional buffer-or-name _frame)
   "Bring-up subset of ELisp `get-buffer-window' (single-window)."
   (declare (cl:ignore _frame))
@@ -2425,6 +2488,7 @@ for upstream ERT's `ert--make-xrefs-region'."
                  (and (stringp buffer-or-name) (get-buffer-create buffer-or-name))
                  (error "ELISP:DISPLAY-BUFFER invalid buffer: ~S" buffer-or-name))))
     (setf (elisp-window-buffer *single-window*) buf)
+    (setf (elisp-window-start *single-window*) (with-current-buffer buf (point-min)))
     (when (eq (selected-window) *single-window*)
       (set-buffer buf))
     *single-window*))

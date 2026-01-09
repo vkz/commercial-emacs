@@ -6,9 +6,14 @@
 (cl:defvar *clemacs-this-command-keys* nil)
 (cl:defvar clemacs-tty-path nil)
 (cl:defvar clemacs-tty-goal-column nil)
+(cl:defvar *clemacs-minibuffer-depth* 0)
 
 (cl:defvar *clemacs-tty-global-map* nil)
 (cl:defvar *clemacs-tty-ctl-x-map* nil)
+
+(cl:defun minibuffer-depth ()
+  "Bring-up subset of the C primitive `minibuffer-depth'."
+  (or *clemacs-minibuffer-depth* 0))
 
 (cl:defun this-single-command-keys ()
   "Bring-up stub for ELisp `this-single-command-keys'."
@@ -454,18 +459,90 @@ In clemacs TTY bring-up, this reads a line via the terminal prompt helper."
   (declare (cl:ignore _initial-contents _keymap _read _hist _default-value _inherit-input-method))
   (unless (stringp prompt)
     (error "ELISP:READ-FROM-MINIBUFFER expected string PROMPT, got: ~S" prompt))
-  ;; Run setup hooks if present (common callers rely on it for keymaps).
-  (when (and (boundp 'minibuffer-setup-hook)
-             (consp (symbol-value 'minibuffer-setup-hook)))
-    (dolist (fn (symbol-value 'minibuffer-setup-hook))
-      (when (functionp fn)
-        (ignore-errors (funcall fn)))))
-  (let* ((p (%elisp-string->cl-string prompt))
-         (s (and (fboundp 'clemacs::%tty-prompt)
-                 (clemacs::%tty-prompt p))))
-    (when (null s)
-      (signal 'quit nil))
-    (string-to-unibyte s)))
+  (let ((*clemacs-minibuffer-depth* (1+ (minibuffer-depth))))
+    ;; Run setup hooks if present (common callers rely on it for keymaps).
+    (when (and (boundp 'minibuffer-setup-hook)
+               (consp (symbol-value 'minibuffer-setup-hook)))
+      (dolist (fn (symbol-value 'minibuffer-setup-hook))
+        (when (functionp fn)
+          (ignore-errors (funcall fn)))))
+    (let* ((p (%elisp-string->cl-string prompt))
+           (s (and (fboundp 'clemacs::%tty-prompt)
+                   (clemacs::%tty-prompt p))))
+      (when (null s)
+        (signal 'quit nil))
+      (string-to-unibyte s))))
+
+(cl:defun completing-read (prompt collection &optional _predicate require-match
+                                  _initial-input _hist def _inherit-input-method)
+  "Bring-up subset of the C primitive `completing-read'.
+
+This is intentionally small, but Emacs-shaped enough to unblock many callers.
+Supported COLLECTION forms:
+- list of strings
+- list of (STRING . VALUE) pairs (we complete over STRING keys)
+
+If `noninteractive' is non-nil, prefer DEF (or error if REQUIRE-MATCH is set and
+no default is provided)."
+  (declare (cl:ignore _predicate _initial-input _hist _inherit-input-method))
+  (unless (stringp prompt)
+    (error "ELISP:COMPLETING-READ expected string PROMPT, got: ~S" prompt))
+  (labels ((default-string ()
+             (cond
+              ((null def) nil)
+              ((stringp def) def)
+              ((and (consp def) (stringp (car def))) (car def))
+              (t nil)))
+           (collection-strings ()
+             (cond
+              ((listp collection)
+               (let ((out nil))
+                 (dolist (x collection)
+                   (cond
+                    ((stringp x) (push x out))
+                    ((and (consp x) (stringp (car x))) (push (car x) out))
+                    (t nil)))
+                 (nreverse out)))
+              (t
+               (error "ELISP:COMPLETING-READ unsupported COLLECTION: ~S" collection))))
+           (exact-member-p (s cands)
+             (and (stringp s)
+                  (cl:member (%elisp-string->cl-string s) cands
+                             :test #'cl:string=
+                             :key (lambda (x) (%elisp-string->cl-string x)))))
+           (unique-completion (input cands)
+             (let ((matches (all-completions input cands)))
+               (when (= (length matches) 1)
+                 (first matches)))))
+    (let* ((cands (collection-strings))
+           (d (default-string)))
+      (when noninteractive
+        (return-from completing-read
+          (cond
+           (d d)
+           (require-match
+            (let ((only (and (= (length cands) 1) (first cands))))
+              (or only
+                  (error "ELISP:COMPLETING-READ noninteractive needs DEF when REQUIRE-MATCH"))))
+           (t (or d (string-to-unibyte ""))))))
+      (let* ((prompt* (if d
+                          (string-to-unibyte
+                           (cl:format nil "~A (default ~A): "
+                                      (%elisp-string->cl-string prompt)
+                                      (%elisp-string->cl-string d)))
+                          prompt))
+             (input (read-from-minibuffer prompt*)))
+        (when (and (stringp input)
+                   (cl:string= (%elisp-string->cl-string input) "")
+                   d)
+          (setf input d))
+        (cond
+         ((not require-match) input)
+         ((exact-member-p input cands) input)
+         ((let ((uniq (unique-completion input cands)))
+            (when uniq uniq)))
+         (t
+          (error "ELISP:COMPLETING-READ no match: %S" input)))))))
 
 (cl:defun read-key-sequence (&optional _prompt &rest _args)
   "Bring-up subset of ELisp `read-key-sequence'.

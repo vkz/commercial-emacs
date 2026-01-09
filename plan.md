@@ -92,6 +92,8 @@ High priority (next ROI)
 - Autoload/function-designator robustness: make core helpers accept autoload markers and treat them as callable/inspectable where Emacs does (current blocker: `nadvice.el` via `get-advertised-calling-convention` during `cl-generic` method definition).
 - Interactive command pipeline: implement `commandp`, `interactive-form`, `call-interactively`, prefix-arg + command history plumbing (unblocks real editor usage and a lot of `simple.el`/minibuffer code paths).
 - Minimal TTY frame/window/minibuffer shims: enough of `frame-parameter`, `minibuffer-window`, `minibuffer-prompt-end`, plus staples like `switch-to-buffer`, `buffer-file-name`, `move-to-column` (high fanout in editor-core startup).
+- Minibuffer/completion basics: `minibuffer-depth` + a minimal `completing-read` (start with `noninteractive` behavior and a small interactive path) to unblock more interactive callers.
+- Window/buffer motion basics: `window-point`, `window-height`, and friends (`window-start`, `set-window-point`, etc.) for display/UX call paths.
 - Syntax/parse-state core: `syntax-ppss` (and immediate deps) to unlock indentation/font-lock/jit-lock/isearch helpers.
   - Even if we later lean on tree-sitter, keep `syntax-ppss` as a compatible API (avoid rewriting shipped `lisp/` call sites); implement a correct baseline scanner first, then optionally add a tree-sitter-backed acceleration path (tree-sitter is currently disabled in the TTY build flow).
 

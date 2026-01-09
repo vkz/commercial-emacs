@@ -854,6 +854,26 @@
   :expected "nil"
   :emacs :match)
 
+ (:name "minibuffer-depth-top-level-zero"
+  :expr "(= (minibuffer-depth) 0)"
+  :expected "t"
+  :emacs :match)
+
+ (:name "completing-read-noninteractive-default"
+  :expr "(let ((old noninteractive)) (unwind-protect (progn (setq noninteractive t) (completing-read \"P: \" '(\"a\" \"b\") nil t nil nil \"b\")) (setq noninteractive old)))"
+  :expected "\"b\""
+  :emacs nil)
+
+ (:name "windows-window-height-positive"
+  :expr "(and (integerp (window-height)) (> (window-height) 0))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "windows-window-point-follows-point"
+  :expr "(save-window-excursion (let ((b (get-buffer-create \"*WPT*\"))) (with-current-buffer b (erase-buffer) (insert \"abc\") (goto-char 2)) (switch-to-buffer b) (= (window-point (selected-window)) 2)))"
+  :expected "t"
+  :emacs :match)
+
  (:name "keymaps-lookup-key-single-char"
   :expr "(let ((m (make-sparse-keymap))) (define-key m \"a\" 'foo) (eq (lookup-key m \"a\") 'foo))"
   :expected "t"
