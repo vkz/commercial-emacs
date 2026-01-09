@@ -586,6 +586,22 @@
   :emacs nil
   :notes "Bring-up stub used by ldefs-boot/loaddefs: stores an (autoload FILE) marker in the function cell.")
 
+ (:name "advertised-calling-convention-autoload-marker"
+  :expr "(progn (autoload 'clemacs--acc \"cl-print\") (get-advertised-calling-convention (symbol-function 'clemacs--acc)))"
+  :expected "t"
+  :emacs :match
+  :notes "Emacs returns `t` when queried on an autoload placeholder; cl-generic calls this during method definition/defalias.")
+
+ (:name "interactive-form-commandp-defun"
+  :expr "(progn (defun clemacs--it0 () (interactive) 1) (list (interactive-form 'clemacs--it0) (commandp 'clemacs--it0)))"
+  :expected "((interactive nil) t)"
+  :emacs :match)
+
+ (:name "call-interactively-prefix-p"
+  :expr "(progn (defun clemacs--itp (x) (interactive \"p\") x) (let ((current-prefix-arg 5)) (call-interactively 'clemacs--itp)))"
+  :expected "5"
+  :emacs :match)
+
  (:name "function-preserves-local-function-binding"
   :expr "(cl:labels ((rec (x) x)) (cl:mapcar #'rec '(1 2 3)))"
   :expected "(1 2 3)"

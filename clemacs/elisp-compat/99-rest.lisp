@@ -458,6 +458,12 @@ Supports the usage exercised by `map-tests.el' via `cl-defgeneric' declares."
     (labels ((function-name-symbol (fn)
                (cond
                 ((symbolp fn) fn)
+                ;; `symbol-function' can return non-function markers (notably
+                ;; autoload placeholders, and our `(macro . FN)` wrapper).
+                ;; Treat those as "unknown name" in this helper.
+                ((and (consp fn) (eq (car fn) 'autoload)) nil)
+                ((and (consp fn) (eq (car fn) 'macro))
+                 (function-name-symbol (cdr fn)))
                 #+sbcl
                 ((typep fn 'cl:generic-function)
                  (let ((nm (sb-mop:generic-function-name fn)))
@@ -477,9 +483,17 @@ Supports the usage exercised by `map-tests.el' via `cl-defgeneric' declares."
   (declare (cl:ignore _args))
   (destructuring-bind (function &optional _argspec &rest _rest) _args
     (declare (cl:ignore _argspec _rest))
+    ;; In Emacs, asking about an autoload placeholder returns `t` (not a
+    ;; structured arglist), and it must not error (cl-generic calls this during
+    ;; method definition/defalias).
+    (when (and (consp function) (eq (car function) 'autoload))
+      (return-from get-advertised-calling-convention t))
     (labels ((function-name-symbol (fn)
                (cond
                 ((symbolp fn) fn)
+                ((and (consp fn) (eq (car fn) 'autoload)) nil)
+                ((and (consp fn) (eq (car fn) 'macro))
+                 (function-name-symbol (cdr fn)))
                 #+sbcl
                 ((typep fn 'cl:generic-function)
                  (let ((nm (sb-mop:generic-function-name fn)))
@@ -496,7 +510,7 @@ Supports the usage exercised by `map-tests.el' via `cl-defgeneric' declares."
             ;; advertised signature differences are deprecated trailing
             ;; `testfn` args.  When we don't have the stored advertised
             ;; convention, derive a best-effort value from the generic lambda
-            ;; list.
+             ;; list.
             #+sbcl
             (when (typep function 'cl:generic-function)
               (let* ((ll (copy-list (sb-mop:generic-function-lambda-list function))))
@@ -508,7 +522,9 @@ Supports the usage exercised by `map-tests.el' via `cl-defgeneric' declares."
                              (symbolp (car (last ll)))
                              (cl:string-equal "&OPTIONAL" (cl:symbol-name (car (last ll)))))
                     (setf ll (butlast ll))))
-                ll)))))))
+                ll))
+            ;; When unknown, Emacs returns `t` (not nil).
+            t)))))
 
 (cl:defun make-obsolete-variable (&rest _args)
   "Stub for ELisp `make-obsolete-variable'."
@@ -539,7 +555,15 @@ trying to redefine locked symbols while loading upstream ELisp)."
       `(progn ',name)
       (let* ((doc (and body (stringp (car body)) (car body)))
              (doc* (and doc (if (cl:stringp doc) doc (%elisp-string->cl-string doc))))
-             (rest (if doc (cdr body) body)))
+             (tail (if doc (cdr body) body))
+             (interactive-form
+               (and tail
+                    (consp (car tail))
+                    (eq (caar tail) 'interactive)
+                    ;; Emacs returns (interactive nil) for (interactive).
+                    (let ((form (car tail)))
+                      (if (null (cdr form)) '(interactive nil) form))))
+             (rest (if interactive-form (cdr tail) tail)))
         `(progn
            ;; Populate `current-load-list' so `load-history' + `symbol-file'
            ;; can report the defining file for TYPE = 'defun.
@@ -547,7 +571,10 @@ trying to redefine locked symbols while loading upstream ELisp)."
              (push (cons 'defun ',name) current-load-list))
            (cl:defun ,name ,lambda-list
              ,@(when doc* (list doc*))
-             ,@rest)))))
+             ,@rest)
+           ,@(when interactive-form
+               `((function-put ',name 'interactive-form ',interactive-form)))
+           ',name))))
 
 (cl:defmacro defsubst (name lambda-list &body body)
   "ELisp-ish DEFSUBST (currently just DEFUN)."

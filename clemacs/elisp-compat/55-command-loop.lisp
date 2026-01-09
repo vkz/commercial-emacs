@@ -318,6 +318,49 @@
      ((and global (lookup-key global keys accept-default)))
      (t nil))))
 
+(cl:defun interactive-form (function)
+  "Bring-up subset of ELisp `interactive-form'."
+  (labels ((function-name-symbol (fn)
+             (cond
+              ((symbolp fn) fn)
+              ((and (consp fn) (eq (car fn) 'macro))
+               (function-name-symbol (cdr fn)))
+              ((and (consp fn) (eq (car fn) 'autoload))
+               nil)
+              (t
+               (multiple-value-bind (_lambda _closed name)
+                   (cl:function-lambda-expression fn)
+                 (declare (cl:ignore _lambda _closed))
+                 (and (symbolp name) name))))))
+    (let* ((sym (function-name-symbol function))
+           (iform (and sym (function-get sym 'interactive-form))))
+      iform)))
+
+(cl:defun commandp (function &optional _for-call-interactively)
+  "Bring-up subset of ELisp `commandp'."
+  (declare (cl:ignore _for-call-interactively))
+  (and (interactive-form function) t))
+
+(cl:defun call-interactively (command &optional _record-flag _keys)
+  "Bring-up subset of ELisp `call-interactively'."
+  (declare (cl:ignore _record-flag _keys))
+  (let* ((iform (interactive-form command))
+         (spec (and (consp iform) (eq (car iform) 'interactive) (cadr iform))))
+    (cond
+     ((and (stringp spec)
+           (not (cl:string= (%elisp-string->cl-string spec) "")))
+      (let* ((s (%elisp-string->cl-string spec))
+             (ch (cl:aref s 0)))
+        (cond
+         ((cl:char= ch #\p)
+          (funcall command (prefix-numeric-value current-prefix-arg)))
+         ((cl:char= ch #\P)
+          (funcall command current-prefix-arg))
+         (t
+          (funcall command)))))
+     (t
+      (funcall command)))))
+
 (cl:defun command-execute (command &optional _record-flag _keys _special)
   "Bring-up subset of ELisp `command-execute'."
   (declare (cl:ignore _record-flag _keys _special))
@@ -325,9 +368,7 @@
     (return-from command-execute nil))
   (setf last-command this-command)
   (setf this-command command)
-  ;; During bring-up we treat \"commands\" as simply callable function
-  ;; designators, and ignore interactive specs/prefix args/etc.
-  (funcall command))
+  (call-interactively command))
 
 (cl:defun read-key-sequence (&optional _prompt &rest _args)
   "Bring-up subset of ELisp `read-key-sequence'.
