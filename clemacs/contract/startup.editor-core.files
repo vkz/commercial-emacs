@@ -89,7 +89,7 @@ lisp/emacs-lisp/cl-generic.el -
 lisp/simple.el -
 
 # pdump: nadvice.
-lisp/emacs-lisp/nadvice.el 200
+lisp/emacs-lisp/nadvice.el -
 
 # pdump: minibuffer.
 lisp/minibuffer.el 200
