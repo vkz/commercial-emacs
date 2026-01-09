@@ -36,6 +36,10 @@
   (apply #'message format-string args)
   t)
 
+(cl:defun user-error (format-string &rest args)
+  "Bring-up subset of ELisp `user-error'."
+  (signal 'user-error (list (apply #'format format-string args))))
+
 (cl:defun error-message-string (condition)
   (princ-to-string condition))
 
@@ -107,6 +111,43 @@ back to a tiny stub list."
   (list (cons 'backtrace-get-frames nil)
         (cons 'signal nil)))
 
+(cl:defun mapbacktrace (function &optional base)
+  "Bring-up subset of the C primitive `mapbacktrace'.
+
+Call FUNCTION for each backtrace frame.  FUNCTION is called with:
+  (EVALD FUN ARGS FLAGS)
+where FLAGS is currently always nil in clemacs bring-up.
+
+If BASE is non-nil (a symbol naming a function), skip frames until the first
+occurrence of BASE, then start calling FUNCTION after that frame."
+  (let ((base-sym (and base (symbolp base) base))
+        (seen-base (null base))
+        (calls nil))
+    #+sbcl
+    (sb-debug:map-backtrace
+     (lambda (frame)
+       (handler-case
+           (multiple-value-bind (call _ok)
+               (sb-debug::frame-call-as-list frame 80)
+             (declare (cl:ignore _ok))
+             (when (consp call)
+               (push call calls)))
+         (cl:error () nil)))
+     :from :interrupted-frame
+     :count 120)
+    #-sbcl
+    (setf calls (list (list 'mapbacktrace function base)))
+    (dolist (call (nreverse calls))
+      (let ((fun (car call))
+            (args (cdr call)))
+        (cond
+         ((and base-sym (not seen-base))
+          (when (and (symbolp fun) (eq fun base-sym))
+            (setf seen-base t)))
+         (t
+          (funcall function t fun args nil)))))
+    nil))
+
 (cl:defun backtrace-frame-fun (frame)
   "Bring-up subset of ELisp `backtrace-frame-fun'."
   (cond
@@ -165,6 +206,119 @@ FORM.  For bring-up, suppress the warning and return FORM."
              (consp (cdr exp))
              (symbolp (cadr exp)))))
    (t t)))
+
+(cl:defparameter backquote-backquote-symbol '|`|)
+(cl:defparameter backquote-unquote-symbol '|,|)
+(cl:defparameter backquote-splice-symbol '|,@|)
+
+(cl:defun backquote-delay-process (s level)
+  "Process a (un|back|splice)quote inside a backquote."
+  (let ((exp (backquote-listify (list (cons 0 (list 'quote (car s))))
+                                (backquote-process (cdr s) level))))
+    (cons (if (eq (car-safe exp) 'quote) 0 1) exp)))
+
+(cl:defun backquote-process (s &optional level)
+  "Process the body of a backquote.
+
+Return (TAG . FORM), where TAG is:
+  0 => FORM is constant
+  1 => FORM evaluates to the template value
+  2 => FORM evaluates to a list to splice into its environment."
+  (unless level (setf level 0))
+  (cond
+   ((vectorp s)
+    (let ((n (backquote-process (coerce s 'list) level)))
+      (if (= (car n) 0)
+          (cons 0 s)
+          (cons 1
+                (cond
+                 ((not (listp (cdr n)))
+                  (list 'vconcat (cdr n)))
+                 ((eq (cadr n) 'list)
+                  (cons 'vector (cddr n)))
+                 ((eq (cadr n) 'append)
+                  (cons 'vconcat (cddr n)))
+                 (t
+                  (list 'apply '(function vector) (cdr n))))))))
+   ((cl:atom s)
+    (cons 0 (if (or (null s) (eq s t) (not (symbolp s)))
+                s
+                (list 'quote s))))
+   ((eq (car s) backquote-unquote-symbol)
+    (if (<= level 0)
+        (cond
+         ((> (length s) 2)
+          (error "Multiple args to , are not supported: %S" s))
+         (t (cons (if (eq (car-safe (cadr s)) 'quote) 0 1)
+                  (cadr s))))
+        (backquote-delay-process s (1- level))))
+   ((eq (car s) backquote-splice-symbol)
+    (if (<= level 0)
+        (if (> (length s) 2)
+            (error "Multiple args to ,@ are not supported: %S" s)
+            (cons 2 (cadr s)))
+        (backquote-delay-process s (1- level))))
+   ((eq (car s) backquote-backquote-symbol)
+    (backquote-delay-process s (1+ level)))
+   (t
+    (let ((rest s)
+          item firstlist list lists expression)
+      (while (and (consp rest)
+                  (not (or (eq (car rest) backquote-unquote-symbol)
+                           (eq (car rest) backquote-backquote-symbol))))
+        (setf item (backquote-process (car rest) level))
+        (cond
+         ((= (car item) 2)
+          (when (null lists)
+            (setf firstlist list
+                  list nil))
+          (when list
+            (push (backquote-listify list '(0 . nil)) lists))
+          (push (cdr item) lists)
+          (setf list nil))
+         (t
+          (setf list (cons item list))))
+        (setf rest (cdr rest)))
+      (when (or rest list)
+        (push (backquote-listify list (backquote-process rest level)) lists))
+      (setf expression
+            (if (or (cdr lists)
+                    (eq (car-safe (car lists)) backquote-splice-symbol))
+                (cons 'append (nreverse lists))
+                (car lists)))
+      (when firstlist
+        (setf expression (backquote-listify firstlist (cons 1 expression))))
+      (cons (if (eq (car-safe expression) 'quote) 0 1) expression)))))
+
+(cl:defun backquote-listify (list old-tail)
+  "Turn a list of (TAG . FORM) pairs into a list-building form."
+  (let ((heads nil)
+        (tail (cdr old-tail))
+        (list-tail list)
+        (item nil))
+    (when (= (car old-tail) 0)
+      (setf tail (eval tail)
+            old-tail nil))
+    (while (consp list-tail)
+      (setf item (car list-tail)
+            list-tail (cdr list-tail))
+      (if (or heads old-tail (/= (car item) 0))
+          (setf heads (cons (cdr item) heads))
+          (setf tail (cons (eval (cdr item)) tail))))
+    (cond
+     (tail
+      (when (null old-tail)
+        (setf tail (list 'quote tail)))
+      (if heads
+          (let ((use-list*
+                  (or (cdr heads)
+                      (and (consp (car heads))
+                           (eq (car (car heads)) backquote-splice-symbol)))))
+            (cons (if use-list* 'backquote-list* 'cons)
+                  (append heads (list tail))))
+          tail))
+     (t
+      (cons 'list heads)))))
 
 (cl:defvar macro-declarations-alist nil)
 (cl:defvar defun-declarations-alist nil)

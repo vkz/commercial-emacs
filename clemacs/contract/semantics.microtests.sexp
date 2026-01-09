@@ -1058,4 +1058,79 @@
   :expr "(with-temp-buffer (emacs-lisp-mode) (insert \"(foo ; c\\n \\\"str\\\" (bar))\") (goto-char 14) (list (nth 0 (syntax-ppss)) (nth 3 (syntax-ppss)) (nth 8 (syntax-ppss)) (nth 9 (syntax-ppss))))"
   :expected "(1 34 11 (1))"
   :emacs :match)
+
+ (:name "backquote-basic-unquote"
+  :expr "(let ((b '(ba bb bc))) `(a ,b c))"
+  :expected "(a (ba bb bc) c)"
+  :emacs :match)
+
+ (:name "derived-mode--flush-clears-caches"
+  :expr "(let ((a 'clemacs-test-a) (b 'clemacs-test-b)) (put a 'derived-mode--all-parents 7) (put a 'derived-mode--followers (list b)) (put b 'derived-mode--all-parents 9) (derived-mode--flush a) (and (null (get a 'derived-mode--all-parents)) (null (get b 'derived-mode--all-parents)) (null (get a 'derived-mode--followers)) t))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "mapbacktrace-no-error"
+  :expr "(condition-case _e (progn (mapbacktrace (lambda (&rest _f) nil)) t) (error nil))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "substitute-key-definition-key-basic"
+  :expr "(let ((m (make-sparse-keymap))) (substitute-key-definition-key 'foo 'foo 'bar [97] m) (eq (lookup-key m [97]) 'bar))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "event-modifiers-char-nil"
+  :expr "(event-modifiers ?a)"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "frame-root-window-selected-window"
+  :expr "(eq (frame-root-window) (selected-window))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "default-file-modes-integerp"
+  :expr "(integerp (default-file-modes))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "file-modes-non-nil"
+  :expr "(let ((m (file-modes \"lisp/subr.el\"))) (and (integerp m) (> m 0) t))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "minibuffer-contents-stringp"
+  :expr "(stringp (minibuffer-contents))"
+  :expected "t"
+  :emacs nil)
+
+ (:name "number-at-point-basic"
+  :expr "(with-temp-buffer (insert \"x 42 y\") (goto-char 4) (number-at-point))"
+  :expected "42"
+  :emacs :match)
+
+ (:name "forward-sexp-paren"
+  :expr "(with-temp-buffer (insert \"(a b)\") (goto-char 1) (forward-sexp 1) (point))"
+  :expected "6"
+  :emacs :match)
+
+ (:name "window-end-single-window"
+  :expr "(with-temp-buffer (insert \"abc\") (let ((b (current-buffer))) (save-window-excursion (switch-to-buffer b) (window-end))))"
+  :expected "4"
+  :emacs :match)
+
+ (:name "single-key-description-printable"
+  :expr "(single-key-description ?a)"
+  :expected "\"a\""
+  :emacs :match)
+
+ (:name "event-apply-modifier-control"
+  :expr "(event-apply-modifier ?a 'control 26 \"C-\")"
+  :expected "1"
+  :emacs :match)
+
+ (:name "call-process-region-cat-inserts"
+  :expr "(with-temp-buffer (insert \"abc\") (call-process-region (point-min) (point-max) \"cat\" nil t) (buffer-string))"
+  :expected "\"abcabc\""
+  :emacs :match)
 )

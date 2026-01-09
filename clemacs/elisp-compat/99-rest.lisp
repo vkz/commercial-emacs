@@ -1144,8 +1144,23 @@ The \"default\" value is CL's global binding model."
         (make-hash-table :test 'eq))
   nil)
 
+(cl:defmacro setq-local (&rest pairs)
+  "Bring-up subset of `setq-local'."
+  (unless (evenp (length pairs))
+    (error "ELISP:SETQ-LOCAL needs even number of args, got: ~S" pairs))
+  (let ((forms nil))
+    (loop for (var val) on pairs by #'cddr do
+      (unless (symbolp var)
+        (error "ELISP:SETQ-LOCAL only supports symbol vars, got: ~S" var))
+      (push `(progn
+               (make-local-variable ',var)
+               (set ',var ,val))
+            forms))
+    `(progn ,@(nreverse forms))))
+
 (defstruct elisp-process
   (status 'run)
+  (buffer nil)
   (plist nil))
 
 (cl:defun processp (object)
@@ -1165,6 +1180,37 @@ The \"default\" value is CL's global binding model."
    ((null process) nil)
    ((elisp-process-p process) (or (elisp-process-plist process) nil))
    (t (error "ELISP:PROCESS-PLIST expected process, got: ~S" process))))
+
+(cl:defun process-buffer (process)
+  "Bring-up subset of the C primitive `process-buffer'."
+  (cond
+   ((null process) nil)
+   ((elisp-process-p process) (elisp-process-buffer process))
+   (t (error "ELISP:PROCESS-BUFFER expected process, got: ~S" process))))
+
+(cl:defvar *elisp-process-list* nil)
+
+(cl:defun get-buffer-process (&optional buffer-or-name)
+  "Bring-up subset of ELisp `get-buffer-process'."
+  (let ((buf (cond
+              ((null buffer-or-name) (current-buffer))
+              (t (or (get-buffer buffer-or-name)
+                     (error "ELISP:GET-BUFFER-PROCESS no such buffer: ~S"
+                            buffer-or-name))))))
+    (dolist (p *elisp-process-list* nil)
+      (when (and (elisp-process-p p)
+                 (eq (elisp-process-buffer p) buf))
+        (return-from get-buffer-process p)))))
+
+(cl:defun process-query-on-exit-flag (process)
+  "Bring-up subset of the C primitive `process-query-on-exit-flag'."
+  (cond
+   ((null process) nil)
+   ((elisp-process-p process)
+    (let ((plist (elisp-process-plist process)))
+      (and (listp plist) (getf plist 'query-on-exit-flag))))
+   (t
+    (error "ELISP:PROCESS-QUERY-ON-EXIT-FLAG expected process, got: ~S" process))))
 
 (cl:defun default-value (symbol)
   "Stub for ELisp `default-value'."

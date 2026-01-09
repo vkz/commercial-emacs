@@ -1166,6 +1166,18 @@ Emacs clamps positions outside the buffer to the nearest valid position."
   "Bring-up subset of the C primitive `backward-word'."
   (forward-word (- (or n 1))))
 
+(cl:defun count-words--format (str start end)
+  "Bring-up subset of `count-words--format'.
+
+Upstream `lisp/simple.el' calls this helper before defining it later in the
+file, which causes forward-reference warnings under SBCL.  Provide a minimal
+implementation here; the upstream definition will override it once loaded."
+  (let* ((label (if (stringp str) str (prin1-to-string str)))
+         (a (or (ignore-errors (%pos start)) 0))
+         (b (or (ignore-errors (%pos end)) 0))
+         (chars (abs (- b a))))
+    (format "%s has %d character%s" label chars (if (= chars 1) "" "s"))))
+
 (cl:defun back-to-indentation ()
   "Bring-up subset of ELisp `back-to-indentation'."
   (beginning-of-line)
@@ -1605,6 +1617,45 @@ This checks overlays first (when OBJECT is a buffer), then falls back to
     (when (> (point) (point-max))
       (goto-char (point-max)))
     nil))
+
+(cl:defun call-process-region (start end program &optional delete destination _display &rest args)
+  "Bring-up subset of the C primitive `call-process-region'."
+  (declare (cl:ignore _display))
+  (unless (stringp program)
+    (error "ELISP:CALL-PROCESS-REGION expected string PROGRAM, got: ~S" program))
+  (let* ((s (%pos start))
+         (e (%pos end))
+         (input (%elisp-string->cl-string (buffer-substring-no-properties s e)))
+         (cmd (cons (%elisp-string->cl-string program)
+                    (mapcar (lambda (a)
+                              (cond
+                               ((stringp a) (%elisp-string->cl-string a))
+                               ((symbolp a) (symbol-name a))
+                               (t (prin1-to-string a))))
+                            args))))
+    (when delete
+      (delete-region s e))
+    (multiple-value-bind (out _err code)
+        (uiop:run-program cmd
+                          :input (make-string-input-stream input)
+                          :output :string
+                          :error-output :string
+                          :ignore-error-status t)
+      (declare (cl:ignore _err))
+      (let ((dest
+              (cond
+               ((null destination) nil)
+               ((or (eq destination t) (and (integerp destination) (zerop destination)))
+                (current-buffer))
+               ((stringp destination) (get-buffer-create destination))
+               ((bufferp destination) destination)
+               (t (error "ELISP:CALL-PROCESS-REGION unsupported DESTINATION: ~S"
+                         destination)))))
+        (when dest
+          (with-current-buffer dest
+            (goto-char (point-max))
+            (insert out)))
+        code))))
 
 (cl:defun delete-char (n &optional _killflag)
   "Bring-up subset of ELisp `delete-char'."
@@ -2243,6 +2294,43 @@ for upstream ERT's `ert--make-xrefs-region'."
         (goto-char (1+ idx))
         (point))))))
 
+(cl:defun isearch-search ()
+  "Bring-up stub for `isearch-search'.
+
+This is defined in upstream `lisp/isearch.el', but is referenced earlier in
+that file before its definition, leading to noisy SBCL forward-reference
+warnings while compiling under clemacs.
+
+Interactive incremental search is not supported yet."
+  (error "ELISP:ISEARCH-SEARCH not implemented"))
+
+(cl:defun number-at-point ()
+  "Bring-up subset of ELisp `number-at-point'."
+  (let* ((txt (elisp-buffer-text *current-buffer*))
+         (len (length txt))
+         (p (point))
+         (p0 (1- p)))
+    (labels ((digitp (ch)
+               (and ch (char<= #\0 ch) (char<= ch #\9)))
+             (safe-char (i)
+               (and (<= 0 i) (< i len) (char txt i))))
+      (let ((pos
+              (cond
+               ((digitp (safe-char p0)) p0)
+               ((digitp (safe-char (1- p0))) (1- p0))
+               (t nil))))
+        (when (null pos)
+          (return-from number-at-point nil))
+        (let ((start pos)
+              (end (1+ pos)))
+          (loop while (digitp (safe-char (1- start))) do (decf start))
+          (let ((sign (safe-char (1- start))))
+            (when (and sign (or (char= sign #\+) (char= sign #\-)))
+              (decf start)))
+          (loop while (digitp (safe-char end)) do (incf end))
+          (let ((s (subseq txt start end)))
+            (ignore-errors (cl:parse-integer s))))))))
+
 (cl:defun scan-sexps (from count)
   "Bring-up subset of ELisp `scan-sexps'."
   (unless (integerp count)
@@ -2339,6 +2427,21 @@ for upstream ERT's `ert--make-xrefs-region'."
                   (sb-debug:print-backtrace :stream out :count 20)
                   (finish-output out))))))))
       pos)))
+
+(cl:defun forward-sexp (&optional n)
+  "Bring-up subset of the C primitive `forward-sexp'."
+  (let ((n (or n 1)))
+    (unless (integerp n)
+      (error "ELISP:FORWARD-SEXP bad arg: ~S" n))
+    (when (zerop n)
+      (return-from forward-sexp nil))
+    (when (minusp n)
+      (error "ELISP:FORWARD-SEXP negative N not supported yet: ~S" n))
+    (let ((pos (scan-sexps (point) n)))
+      (when (integerp pos)
+        (goto-char pos)))
+    nil))
+
 (cl:defun %column-at-pos (pos)
   (let ((saved (point)))
     (unwind-protect
@@ -2554,6 +2657,16 @@ for upstream ERT's `ert--make-xrefs-region'."
   (declare (cl:ignore _frame))
   1)
 
+(cl:defun frame-char-height (&optional _frame)
+  "Bring-up stub for the C primitive `frame-char-height'."
+  (declare (cl:ignore _frame))
+  1)
+
+(cl:defun scroll-bar-scale (&rest _args)
+  "Bring-up stub for ELisp `scroll-bar-scale' (no scroll bars)."
+  (declare (cl:ignore _args))
+  nil)
+
 (cl:defun frame-live-p (frame)
   "Bring-up subset of ELisp `frame-live-p' (single-frame)."
   (and (elisp-frame-p frame) (eq frame *single-frame*)))
@@ -2578,6 +2691,11 @@ for upstream ERT's `ert--make-xrefs-region'."
     (unless (frame-live-p f)
       (error "ELISP:FRAME-SELECTED-WINDOW expected live frame, got: ~S" f))
     (or (elisp-frame-selected-window f) *single-window*)))
+
+(cl:defun frame-root-window (&optional frame)
+  "Bring-up subset of the C primitive `frame-root-window' (single-frame)."
+  (declare (cl:ignore frame))
+  *single-window*)
 
 (cl:defun tty-top-frame (&optional frame)
   "Bring-up subset of ELisp `tty-top-frame' (single-frame)."
@@ -2649,6 +2767,25 @@ for upstream ERT's `ert--make-xrefs-region'."
     (or (elisp-window-start w)
         (with-current-buffer buf (point-min)))))
 
+(cl:defun window-font-height (&optional _window)
+  "Bring-up stub for the C primitive `window-font-height' (TTY)."
+  (declare (cl:ignore _window))
+  1)
+
+(cl:defun window-font-width (&optional _window)
+  "Bring-up stub for the C primitive `window-font-width' (TTY)."
+  (declare (cl:ignore _window))
+  1)
+
+(cl:defun window-end (&optional window _update)
+  "Bring-up subset of the C primitive `window-end' (single-window)."
+  (declare (cl:ignore _update))
+  (let* ((w (or window (selected-window)))
+         (buf (and (window-live-p w) (elisp-window-buffer w))))
+    (unless (and (window-live-p w) (elisp-buffer-p buf))
+      (error "ELISP:WINDOW-END expected live window, got: ~S" w))
+    (with-current-buffer buf (point-max))))
+
 (cl:defun set-window-start (window pos &optional _noforce)
   "Bring-up subset of ELisp `set-window-start'."
   (declare (cl:ignore _noforce))
@@ -2684,6 +2821,10 @@ for upstream ERT's `ert--make-xrefs-region'."
   (declare (cl:ignore frame))
   *single-window*)
 
+(cl:defun active-minibuffer-window ()
+  "Bring-up stub for the C primitive `active-minibuffer-window' (no minibuffer)."
+  nil)
+
 (cl:defun minibuffer-prompt-end ()
   "Bring-up subset of ELisp `minibuffer-prompt-end' (no minibuffer)."
   (point-min))
@@ -2698,6 +2839,20 @@ for upstream ERT's `ert--make-xrefs-region'."
   (declare (cl:ignore _buffer))
   nil)
 
+(cl:defun exit-recursive-edit ()
+  "Bring-up stub for the C primitive `exit-recursive-edit'."
+  (error "ELISP:EXIT-RECURSIVE-EDIT not in recursive edit"))
+
+(cl:defun buffer-base-buffer (&optional _buffer)
+  "Bring-up stub for the C primitive `buffer-base-buffer' (no indirect buffers)."
+  (declare (cl:ignore _buffer))
+  nil)
+
+(cl:defun posn-at-point (&optional _pos _window)
+  "Bring-up stub for the C primitive `posn-at-point'."
+  (declare (cl:ignore _pos _window))
+  nil)
+
 (cl:defun constrain-to-field (newpos _oldpos &optional _escape-from-edge _only-in-line _inhibit-capture-property)
   "Bring-up subset of the C primitive `constrain-to-field'."
   (declare (cl:ignore _oldpos _escape-from-edge _only-in-line _inhibit-capture-property))
@@ -2705,7 +2860,9 @@ for upstream ERT's `ert--make-xrefs-region'."
 
 (cl:defun delete-minibuffer-contents ()
   "Bring-up stub for ELisp `delete-minibuffer-contents' (no minibuffer)."
-  (error "ELISP:DELETE-MINIBUFFER-CONTENTS not in minibuffer"))
+  (when (boundp '*clemacs-last-minibuffer-contents*)
+    (set '*clemacs-last-minibuffer-contents* (string-to-unibyte "")))
+  nil)
 
 (cl:defun exit-minibuffer ()
   "Bring-up stub for ELisp `exit-minibuffer' (no minibuffer)."

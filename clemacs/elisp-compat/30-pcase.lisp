@@ -48,6 +48,23 @@ For bring-up, we register the expander in two places:
          (setf (get ',name 'pcase-macroexpander) #',fsym)
          ',name))))
 
+(cl:defun pcase--expand (exp cases)
+  "Compat shim for upstream `pcase.el' forward references.
+
+Upstream `lisp/emacs-lisp/pcase.el' defines the `pcase' macro early, and only
+defines the helper `pcase--expand' later in the same file.  When clemacs
+loads/compiles that file under SBCL, this creates noisy \"undefined function\"
+style warnings.
+
+Provide a small expansion compatible with our bring-up `pcase-exhaustive'
+subset until upstream overwrites this definition."
+  (let* ((has-default
+           (cl:some (lambda (clause)
+                      (and (consp clause) (eq (car clause) '_)))
+                    cases))
+         (final (if has-default cases (append cases (list (list '_ nil))))))
+    `(pcase-exhaustive ,exp ,@final)))
+
 (cl:defun %pcase--dontcare-p (pat)
   (and (symbolp pat) (or (eq pat '_) (eq pat t) (eq pat 'pcase--dontcare))))
 

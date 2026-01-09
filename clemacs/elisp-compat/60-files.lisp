@@ -78,6 +78,120 @@ expanded file name string."
   #-sbcl
   nil)
 
+(cl:defun %posix-access-ok-p (path mode)
+  #+sbcl
+  (handler-case
+      (progn (sb-posix:access path mode) t)
+    (sb-posix:syscall-error () nil)
+    (cl:error () nil))
+  #-sbcl
+  (declare (cl:ignore path mode))
+  #-sbcl
+  nil)
+
+(cl:defun %file-parent-directory (path)
+  (let ((slash (position #\/ path :from-end t)))
+    (cond
+     ((null slash)
+      (cond
+       ((and (boundp 'default-directory)
+             (stringp (symbol-value 'default-directory)))
+        (%file-name->cl-string (symbol-value 'default-directory)))
+       (t ".")))
+     ((zerop slash) "/")
+     (t (subseq path 0 (1+ slash))))))
+
+(cl:defun file-writable-p (filename)
+  "Bring-up subset of the C primitive `file-writable-p'."
+  (unless (stringp filename)
+    (error "ELISP:FILE-WRITABLE-P expected string, got: ~S" filename))
+  (let* ((path (%file-name->cl-string filename))
+         (existing (probe-file path)))
+    (cond
+     (existing
+      (and (%posix-access-ok-p (namestring existing) sb-posix:w-ok) t))
+     (t
+      (let ((dir (%file-parent-directory path)))
+        (and dir (%posix-access-ok-p dir sb-posix:w-ok) t))))))
+
+(cl:defun file-accessible-directory-p (filename)
+  "Bring-up subset of the C primitive `file-accessible-directory-p'."
+  (unless (stringp filename)
+    (error "ELISP:FILE-ACCESSIBLE-DIRECTORY-P expected string, got: ~S" filename))
+  (let* ((path (%file-name->cl-string filename))
+         (dir (ignore-errors (uiop:ensure-directory-pathname (pathname path)))))
+    (and dir
+         (uiop:directory-exists-p dir)
+         (%posix-access-ok-p (namestring dir)
+                             (logior sb-posix:r-ok sb-posix:x-ok))
+         t)))
+
+(cl:defun %posix-current-umask ()
+  #+sbcl
+  (let ((old (sb-posix:umask 0)))
+    (sb-posix:umask old)
+    old)
+  #-sbcl
+  #o022)
+
+(cl:defun default-file-modes ()
+  "Bring-up subset of the C primitive `default-file-modes'."
+  (let ((umask (%posix-current-umask)))
+    (logand #o666 (logand #o777 (lognot umask)))))
+
+(cl:defun set-default-file-modes (modes)
+  "Bring-up subset of the C primitive `set-default-file-modes'."
+  (unless (integerp modes)
+    (error "ELISP:SET-DEFAULT-FILE-MODES expected integer, got: ~S" modes))
+  (let* ((old (default-file-modes))
+         (m (logand modes #o777))
+         (umask (logand #o777 (lognot m))))
+    #+sbcl
+    (sb-posix:umask umask)
+    old))
+
+(cl:defun file-modes (filename)
+  "Bring-up subset of the C primitive `file-modes'."
+  (unless (stringp filename)
+    (error "ELISP:FILE-MODES expected string, got: ~S" filename))
+  #+sbcl
+  (handler-case
+      (let* ((path (%file-name->cl-string filename))
+             (st (sb-posix:stat path)))
+        (sb-posix:stat-mode st))
+    (sb-posix:syscall-error () nil)
+    (cl:error () nil))
+  #-sbcl
+  nil)
+
+(cl:defun file-name-with-extension (filename extension)
+  "Bring-up subset of ELisp `file-name-with-extension'."
+  (unless (stringp filename)
+    (error "ELISP:FILE-NAME-WITH-EXTENSION expected string FILENAME, got: ~S" filename))
+  (unless (stringp extension)
+    (error "ELISP:FILE-NAME-WITH-EXTENSION expected string EXTENSION, got: ~S" extension))
+  (let* ((base (%file-name->cl-string filename))
+         (ext (%elisp-string->cl-string extension))
+         (ext* (if (and (> (length ext) 0) (char= (char ext 0) #\.))
+                   ext
+                   (concatenate 'cl:string "." ext)))
+         (dot (position #\. base :from-end t))
+         (slash (position #\/ base :from-end t))
+         (stem (if (and dot (or (null slash) (> dot slash)))
+                   (subseq base 0 dot)
+                   base)))
+    (string-to-unibyte (concatenate 'cl:string stem ext*))))
+
+(cl:defmacro with-temp-file (file &rest body)
+  "Bring-up subset of ELisp `with-temp-file'."
+  (let ((f (cl:gensym "FILE-"))
+        (v (cl:gensym "VALUE-")))
+    `(let ((,f ,file))
+       (with-temp-buffer
+         (let ((,v (progn ,@body)))
+           (write-region (point-min) (point-max) ,f nil)
+           ,v)))))
+
 (cl:defun file-name-quote (name &optional _top)
   "Bring-up stub for ELisp `file-name-quote'.
 

@@ -63,6 +63,7 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
 - 2026-01-08: aligned keymap semantics so `keymapp` treats symbols with function-cell keymaps as keymaps; added a focused microtest in `clemacs/contract/semantics.microtests.sexp`.
 - 2026-01-08: enabled `\\C-` string escapes in the ELisp reader so shipped keymaps using strings like `\"\\C-x\"` bind correctly; the clemacs TTY loop now loads a minimal startup set (backquote + subr) by default to use the shipped `global-map`/prefixes.
 - 2026-01-08: promoted a few more rx/seq upstream ERT tests (monotonic) after adding keyboard/command-loop bring-up stubs.
+- 2026-01-09: implemented high-fanout bring-up shims driven by the elisp-core gate (minibuffer/completion basics, single-window primitives incl. `window-end`, backquote/pcase forward refs, basic file modes/permissions, simple process/call-process-region surface, and sexp/point/key helpers), plus microtests + compat notes to keep the contract green.
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 
@@ -92,8 +93,9 @@ High priority (next ROI)
 - Autoload/function-designator robustness: make core helpers accept autoload markers and treat them as callable/inspectable where Emacs does (current blocker: `nadvice.el` via `get-advertised-calling-convention` during `cl-generic` method definition).
 - Interactive command pipeline: implement `commandp`, `interactive-form`, `call-interactively`, prefix-arg + command history plumbing (unblocks real editor usage and a lot of `simple.el`/minibuffer code paths).
 - Minimal TTY frame/window/minibuffer shims: enough of `frame-parameter`, `minibuffer-window`, `minibuffer-prompt-end`, plus staples like `switch-to-buffer`, `buffer-file-name`, `move-to-column` (high fanout in editor-core startup).
-- Minibuffer/completion basics: `minibuffer-depth` + a minimal `completing-read` (start with `noninteractive` behavior and a small interactive path) to unblock more interactive callers.
-- Window/buffer motion basics: `window-point`, `window-height`, and friends (`window-start`, `set-window-point`, etc.) for display/UX call paths.
+- Minibuffer/completion basics: now have `minibuffer-depth`, a minimal `completing-read`, and a TTY-friendly `minibuffer-contents` stub; next is a real minibuffer buffer model (so `delete-minibuffer-contents`/`exit-minibuffer` and friends can behave more like Emacs).
+- Window/buffer motion basics: now have `window-point`/`window-height`/`window-start`/`window-end` + a single-window model; next is enough window-state APIs for `frame.el`/display paths and more accurate window-end/window-start semantics under scrolling.
+- Process/subprocess surface: now have a minimal `process-buffer`/`get-buffer-process` and `call-process-region`; next is `call-process`, `set-process-plist`, and the small flags/attrs (`process-query-on-exit-flag`, `process-attributes`, etc.) that unblock `lisp/files.el`, `lisp/server.el`, and crypto/process callers.
 - Syntax/parse-state core: `syntax-ppss` (and immediate deps) to unlock indentation/font-lock/jit-lock/isearch helpers.
   - Even if we later lean on tree-sitter, keep `syntax-ppss` as a compatible API (avoid rewriting shipped `lisp/` call sites); implement a correct baseline scanner first, then optionally add a tree-sitter-backed acceleration path (tree-sitter is currently disabled in the TTY build flow).
 

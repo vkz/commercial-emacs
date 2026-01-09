@@ -125,6 +125,15 @@ Runtime
     we bring up the real minibuffer/completion pipeline.
   - Test breadcrumbs: `clemacs/contract/semantics.microtests.sexp` (`completing-read-noninteractive-default`).
 
+- 2026-01-09: Minibuffer contents are tracked as last prompt input (TTY)
+  - Decision: clemacs does not yet implement an editable minibuffer buffer; in
+    TTY bring-up, `read-from-minibuffer` reads a terminal line. We model:
+    - `minibuffer-contents` as “last line read” (or empty string),
+    - `delete-minibuffer-contents` as clearing that state (no error).
+  - Rationale: unblocks early callers that inspect/clear minibuffer text
+    (e.g. file-name shadowing), without pretending we have full minibuffer UI.
+  - Test breadcrumbs: `clemacs/contract/semantics.microtests.sexp` (`minibuffer-contents-stringp`).
+
 ## Compiler/codegen notes (for later)
 
 These are constraints the eventual ELisp→CL compiler must preserve; if a new

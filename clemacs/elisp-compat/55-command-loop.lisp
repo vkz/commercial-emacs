@@ -7,6 +7,7 @@
 (cl:defvar clemacs-tty-path nil)
 (cl:defvar clemacs-tty-goal-column nil)
 (cl:defvar *clemacs-minibuffer-depth* 0)
+(cl:defvar *clemacs-last-minibuffer-contents* (string-to-unibyte ""))
 
 (cl:defvar *clemacs-tty-global-map* nil)
 (cl:defvar *clemacs-tty-ctl-x-map* nil)
@@ -14,6 +15,13 @@
 (cl:defun minibuffer-depth ()
   "Bring-up subset of the C primitive `minibuffer-depth'."
   (or *clemacs-minibuffer-depth* 0))
+
+(cl:defun minibuffer-contents ()
+  "Bring-up subset of the C primitive `minibuffer-contents' (TTY prompt).
+
+clemacs does not yet implement an editable minibuffer buffer; the closest
+approximation is the last line read via `read-from-minibuffer'."
+  (or *clemacs-last-minibuffer-contents* (string-to-unibyte "")))
 
 (cl:defun this-single-command-keys ()
   "Bring-up stub for ELisp `this-single-command-keys'."
@@ -450,6 +458,34 @@ Returns a single event: an integer character code or an ELISP symbol
     (setf last-command-event ev)
     ev))
 
+(cl:defun event-apply-modifier (event symbol _lshiftby _prefix)
+  "Bring-up subset of the C primitive `event-apply-modifier'."
+  (declare (cl:ignore _lshiftby _prefix))
+  (cond
+   ((and (integerp event) (symbolp symbol) (eq symbol 'control))
+    (logand event #x1F))
+   (t event)))
+
+(cl:defun single-key-description (key &optional _no-angles)
+  "Bring-up subset of the C primitive `single-key-description'."
+  (declare (cl:ignore _no-angles))
+  (cond
+   ((integerp key)
+    (let ((s
+            (cond
+             ((and (<= 1 key) (<= key 26))
+              (cl:format nil "C-~A" (code-char (+ key 96))))
+             ((= key 27) "ESC")
+             ((= key 127) "DEL")
+             (t
+              (let ((ch (ignore-errors (code-char key))))
+                (if ch (string ch) (cl:format nil "#<key ~D>" key)))))))
+      s))
+   ((symbolp key)
+    (string-to-multibyte (symbol-name key)))
+   (t
+    (prin1-to-string key))))
+
 (cl:defmacro minibuffer-with-setup-hook (hook &body body)
   "Bring-up subset of ELisp `minibuffer-with-setup-hook'.
 
@@ -483,8 +519,11 @@ In clemacs TTY bring-up, this reads a line via the terminal prompt helper."
            (s (and (fboundp 'clemacs::%tty-prompt)
                    (clemacs::%tty-prompt p))))
       (when (null s)
+        (setf *clemacs-last-minibuffer-contents* (string-to-unibyte ""))
         (signal 'quit nil))
-      (string-to-unibyte s))))
+      (let ((out (string-to-unibyte s)))
+        (setf *clemacs-last-minibuffer-contents* out)
+        out))))
 
 (cl:defun completing-read (prompt collection &optional _predicate require-match
                                   _initial-input _hist def _inherit-input-method)

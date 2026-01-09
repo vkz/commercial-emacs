@@ -274,9 +274,110 @@ arguments are not evaluated."
   (declare (cl:ignore _args))
   doc)
 
+(cl:defun apropos-internal (&rest _args)
+  "Bring-up stub for ELisp `apropos-internal'."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun ert-test-at-point (&rest _args)
+  "Bring-up stub for ERT helper `ert-test-at-point'."
+  (declare (cl:ignore _args))
+  nil)
+
 (cl:defun substitute-command-keys (string)
   "Bring-up stub for ELisp `substitute-command-keys'."
   string)
+
+(cl:defun event-modifiers (_event)
+  "Bring-up subset of ELisp `event-modifiers' (TTY bring-up).
+
+clemacs currently represents TTY key events as:
+- integer character codes, or
+- symbols such as LEFT/RIGHT/UP/DOWN.
+
+Return nil (no modifiers) for now."
+  (declare (cl:ignore _event))
+  nil)
+
+(cl:defun keymap-prompt (keymap)
+  "Bring-up subset of ELisp `keymap-prompt'."
+  (let ((km (cond
+             ((not (symbolp keymap)) keymap)
+             ((cl:boundp keymap) (symbol-value keymap))
+             ((fboundp keymap) (symbol-function keymap))
+             (t keymap))))
+    (cond
+     ((and (consp km) (eq (car km) 'keymap) (stringp (cadr km))) (cadr km))
+     (t nil))))
+
+(cl:defvar key-substitution-in-progress nil)
+
+(cl:defun substitute-key-definition-key (defn olddef newdef prefix keymap)
+  "Bring-up subset of `substitute-key-definition-key'.
+
+This is defined in upstream `lisp/subr.el', but is referenced earlier in that
+file before its definition, leading to host CL \"undefined function\" warnings
+while compiling under SBCL.  Provide a compatible implementation here."
+  (let (inner-def skipped menu-item)
+    ;; Find the actual command name within the binding.
+    (if (eq (car-safe defn) 'menu-item)
+        (setf menu-item defn
+              defn (nth 2 defn))
+        (progn
+          ;; Skip past menu-prompt.
+          (loop while (stringp (car-safe defn)) do
+            (push (car defn) skipped)
+            (setf defn (cdr defn)))
+          ;; Skip past cached key-equivalence data for menu items.
+          (when (consp (car-safe defn))
+            (setf defn (cdr defn)))))
+    (if (or (eq defn olddef)
+            (and (or (stringp defn) (vectorp defn))
+                 (equal defn olddef)))
+        (define-key keymap prefix
+          (if menu-item
+              (let ((copy (copy-sequence menu-item)))
+                (setcar (nthcdr 2 copy) newdef)
+                copy)
+              (nconc (nreverse skipped) newdef)))
+        (progn
+          (setf inner-def (or (indirect-function defn) defn))
+          (when (and (keymapp inner-def)
+                     (let ((elt (lookup-key keymap prefix)))
+                       (or (null elt) (natnump elt) (keymapp elt)))
+                     (not (memq inner-def key-substitution-in-progress)))
+            (substitute-key-definition olddef newdef keymap inner-def prefix))))))
+
+(cl:defun help-form-show ()
+  "Bring-up subset of ELisp `help-form-show'."
+  (let ((hf (and (boundp 'help-form) (symbol-value 'help-form))))
+    (when hf
+      (let ((s (cond
+                ((stringp hf) hf)
+                (t (prin1-to-string (eval hf))))))
+        (message "%s" s)
+        t))))
+
+(cl:defun progress-reporter-do-update (reporter value &optional suffix)
+  "Bring-up subset of `progress-reporter-do-update'.
+
+This exists primarily to reduce forward-reference warnings while compiling
+upstream `lisp/subr.el'.  For clemacs bring-up we avoid echo-area churn and
+just update the in-memory reporter object when possible."
+  (declare (cl:ignore value))
+  (when (consp reporter)
+    (let ((params (cdr reporter)))
+      (when (and suffix (vectorp params) (> (length params) 6))
+        (setf (aref params 6) suffix))))
+  reporter)
+
+(cl:defun derived-mode--flush (mode)
+  "Bring-up subset of `derived-mode--flush'."
+  (put mode 'derived-mode--all-parents nil)
+  (let ((followers (get mode 'derived-mode--followers)))
+    (when followers
+      (put mode 'derived-mode--followers nil)
+      (mapc #'derived-mode--flush followers))))
 
 (cl:defun fill-region-as-paragraph (&rest _args)
   "Bring-up stub for ELisp `fill-region-as-paragraph'."
