@@ -189,3 +189,4 @@ failure, a useful debug flag, a missing helper task):
 - When writing `handler-case` probes under `mise run clemacs:sbcl:eval` in the `ELISP` package, qualify condition types (e.g. use `(cl:error (e) ...)` or `(cl:condition (c) ...)`), since unqualified `error` resolves to `ELISP::ERROR` (not a CL condition type).
 - If a startup raise “hangs”, wrap the suspect `(elisp:load-elisp-file ...)` in `sb-ext:with-timeout` and use `handler-bind` on `sb-ext:timeout` to print a useful backtrace at the signal point (a `handler-case` timeout handler runs after unwinding, so the stack is usually gone).
 - To avoid noisy backtraces from expected ELisp signals, set `CLEMACS_DEBUG_CONDITION_CASE=cl` to print backtraces only for wrapped host (CL) errors caught by `condition-case`.
+- When shelling out from compat code via `uiop:run-program`, don’t pass stdin as a raw string: a string is treated as a pathname; use `(make-string-input-stream ...)` (or a temp file) for region input.
