@@ -106,6 +106,7 @@ Done (2026-01-09)
 - Command-loop prefix args: add `prefix-arg` plumbing, `unread-command-events` pushback in `read-event`, and minimal `universal-argument`/`digit-argument`/`negative-argument` for the clemacs TTY loop.
 - Startup checkpoints: uncap `lisp/keymap.el` and raise `lisp/bindings.el` to max-forms=347 in `startup.check` and `startup.editor-core` (bisected at 348; see `build/clemacs/reports/bisect-lisp_bindings_el.md`).
 - Minibuffer input: switch `read-from-minibuffer` from `tty-prompt` to an editable `*Minibuf-0*` buffer (prompt-safe editing, local keymap), with noninteractive defaults and microtests.
+- Upstream ERT: promote `test-keymap-parse-macros` (kbd/key-parse cluster); `subr-test-{local,global}-key-binding` still fail because `(local-key-binding [menu-bar])` returns nil (run `CLEMACS_ERT_DEBUG=1 mise run clemacs:test:ert-upstream-one -- subr-test-local-key-binding` to repro).
 
 1) TTY frame model completeness (`lisp/frame.el` is already uncapped)
    - Extend the minimal single-frame model and accessors like `frame-parameter`,

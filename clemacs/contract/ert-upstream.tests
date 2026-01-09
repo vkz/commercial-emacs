@@ -137,6 +137,7 @@ test-seq-remove
 
 # `kbd` / key-parse bring-up (subr-tests).
 subr-test-kbd
+test-keymap-parse-macros
 
 # More keymap bring-up (subr-tests).
 subr-test-key-valid-p
