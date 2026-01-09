@@ -47,6 +47,7 @@
 (cl:defvar unread-command-events nil)
 (cl:defvar executing-kbd-macro nil)
 (cl:defvar keyboard-translate-table nil)
+(cl:defvar local-map nil)
 (cl:defvar help-form nil)
 (cl:defvar line-spacing nil)
 (cl:defvar xterm-mouse-mode nil)

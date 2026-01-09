@@ -638,6 +638,21 @@
   :expected "(3 (6))"
   :emacs nil)
 
+ (:name "read-from-minibuffer-noninteractive-uses-default"
+  :expr "(progn (setq noninteractive t) (read-from-minibuffer \"P: \" nil nil nil nil \"D\" nil))"
+  :expected "\"D\""
+  :emacs nil)
+
+ (:name "minibuffer-prompt-safe-self-insert"
+  :expr "(with-temp-buffer (insert \"P> \") (setq *clemacs-minibuffer-prompt-end* (point)) (goto-char 1) (setq last-command-event 97) (clemacs-minibuffer-self-insert-command 1) (buffer-string))"
+  :expected "\"P> a\""
+  :emacs nil)
+
+ (:name "minibuffer-prompt-safe-backspace"
+  :expr "(with-temp-buffer (insert \"P> \") (setq *clemacs-minibuffer-prompt-end* (point)) (insert \"a\") (goto-char *clemacs-minibuffer-prompt-end*) (clemacs-minibuffer-delete-backward-char 1) (buffer-string))"
+  :expected "\"P> a\""
+  :emacs nil)
+
  (:name "function-preserves-local-function-binding"
   :expr "(cl:labels ((rec (x) x)) (cl:mapcar #'rec '(1 2 3)))"
   :expected "(1 2 3)"

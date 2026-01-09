@@ -530,18 +530,97 @@ This only extends `minibuffer-setup-hook' around BODY."
              ,@body)
          (set 'minibuffer-setup-hook ,saved)))))
 
+(cl:defvar *clemacs-minibuffer-local-map* nil)
+
+(cl:defun keyboard-quit ()
+  "Bring-up subset of ELisp `keyboard-quit'."
+  (signal 'quit nil))
+
+(cl:defun clemacs--minibuffer--prompt-end ()
+  (or (and (boundp '*clemacs-minibuffer-prompt-end*)
+           (integerp *clemacs-minibuffer-prompt-end*)
+           *clemacs-minibuffer-prompt-end*)
+      (point-min)))
+
+(cl:defun clemacs--minibuffer--ensure-point-after-prompt ()
+  (let ((pe (clemacs--minibuffer--prompt-end)))
+    (when (< (point) pe)
+      (goto-char pe)))
+  nil)
+
+(cl:defun clemacs-minibuffer-self-insert-command (&optional n)
+  "Bring-up minibuffer self-insert command (prompt-safe)."
+  (clemacs--minibuffer--ensure-point-after-prompt)
+  (self-insert-command n))
+
+(cl:defun clemacs-minibuffer-backward-char (&optional n)
+  "Bring-up minibuffer backward-char (prompt-safe)."
+  (clemacs--minibuffer--ensure-point-after-prompt)
+  (let ((pe (clemacs--minibuffer--prompt-end)))
+    (backward-char (or n 1))
+    (when (< (point) pe)
+      (goto-char pe)))
+  nil)
+
+(cl:defun clemacs-minibuffer-forward-char (&optional n)
+  "Bring-up minibuffer forward-char (prompt-safe)."
+  (clemacs--minibuffer--ensure-point-after-prompt)
+  (forward-char (or n 1))
+  nil)
+
+(cl:defun clemacs-minibuffer-delete-backward-char (&optional n)
+  "Bring-up minibuffer delete-backward-char (prompt-safe)."
+  (clemacs--minibuffer--ensure-point-after-prompt)
+  (let ((pe (clemacs--minibuffer--prompt-end))
+        (count (or n 1)))
+    (dotimes (_ count)
+      (when (> (point) pe)
+        (delete-char -1))))
+  nil)
+
+(cl:defun clemacs--ensure-minibuffer-local-map ()
+  (or (and *clemacs-minibuffer-local-map* (keymapp *clemacs-minibuffer-local-map*)
+           *clemacs-minibuffer-local-map*)
+      (let ((m (make-sparse-keymap)))
+        ;; Exit/abort.
+        (define-key m (vector 13) 'exit-minibuffer)     ; RET
+        (define-key m (vector 7) 'keyboard-quit)        ; C-g
+
+        ;; Editing.
+        (define-key m (vector 127) 'clemacs-minibuffer-delete-backward-char) ; DEL
+
+        ;; Movement (arrows + C-b/C-f).
+        (define-key m 'left 'clemacs-minibuffer-backward-char)
+        (define-key m 'right 'clemacs-minibuffer-forward-char)
+        (define-key m (vector 2) 'clemacs-minibuffer-backward-char) ; C-b
+        (define-key m (vector 6) 'clemacs-minibuffer-forward-char)  ; C-f
+
+        ;; Default.
+        (define-key m t 'clemacs-minibuffer-self-insert-command)
+
+        (setf *clemacs-minibuffer-local-map* m)
+        m)))
+
 (cl:defun read-from-minibuffer (prompt &optional _initial-contents _keymap _read
                                        _hist _default-value _inherit-input-method)
   "Bring-up subset of the C primitive `read-from-minibuffer'.
 
-In clemacs TTY bring-up, this reads a line via the terminal prompt helper, but
-tracks a real minibuffer buffer (`*Minibuf-0*`) so buffer-based helpers like
-`minibuffer-contents' can observe the current prompt/input."
-  (declare (cl:ignore _initial-contents _keymap _read _hist _default-value _inherit-input-method))
+In clemacs TTY bring-up, the minibuffer is modeled as an ordinary buffer
+(`*Minibuf-0*`) containing PROMPT followed by editable input text. This is
+intentionally small but Emacs-shaped enough for core completion/help paths."
+  (declare (cl:ignore _read _hist _inherit-input-method))
   (unless (stringp prompt)
     (error "ELISP:READ-FROM-MINIBUFFER expected string PROMPT, got: ~S" prompt))
   (let* ((mbuf (clemacs--ensure-minibuffer-buffer))
-         (prompt-end nil))
+         (prompt-end nil)
+         (saved-local-map (and (boundp 'local-map) (symbol-value 'local-map)))
+         (keymap (cond
+                  ((and _keymap (keymapp _keymap)) _keymap)
+                  ((and (boundp 'minibuffer-local-map)
+                        (keymapp (symbol-value 'minibuffer-local-map)))
+                   (symbol-value 'minibuffer-local-map))
+                  (t (clemacs--ensure-minibuffer-local-map))))
+         (result nil))
     (unwind-protect
         (progn
           (setf *clemacs-minibuffer-active-p* t
@@ -550,7 +629,11 @@ tracks a real minibuffer buffer (`*Minibuf-0*`) so buffer-based helpers like
             (erase-buffer)
             (insert prompt)
             (setf prompt-end (point))
-            (setf *clemacs-minibuffer-prompt-end* prompt-end))
+            (setf *clemacs-minibuffer-prompt-end* prompt-end)
+            (use-local-map keymap)
+            (when (and _initial-contents (stringp _initial-contents))
+              (insert _initial-contents))
+            (goto-char (point-max)))
           (let ((*clemacs-minibuffer-depth* (1+ (minibuffer-depth))))
             ;; Run setup hooks if present (common callers rely on it for keymaps).
             (with-current-buffer mbuf
@@ -559,23 +642,37 @@ tracks a real minibuffer buffer (`*Minibuf-0*`) so buffer-based helpers like
                 (dolist (fn (symbol-value 'minibuffer-setup-hook))
                   (when (functionp fn)
                     (ignore-errors (funcall fn))))))
-            (cl:catch +clemacs-minibuffer-exit-tag+
-              (let* ((p (%elisp-string->cl-string prompt))
-                     (s (and (fboundp 'clemacs::%tty-prompt)
-                             (clemacs::%tty-prompt p))))
-                (when (null s)
-                  (setf *clemacs-last-minibuffer-contents* (string-to-unibyte ""))
-                  (signal 'quit nil))
-                (let ((out (string-to-unibyte s)))
-                  (with-current-buffer mbuf
-                    ;; Replace anything after prompt with OUT.
-                    (delete-region (or prompt-end (point-min)) (point-max))
-                    (goto-char (point-max))
-                    (insert out))
-                  (setf *clemacs-last-minibuffer-contents* out)
-                  out)))))
+            (cond
+             (noninteractive
+              (setf result
+                    (cond
+                     ((and _initial-contents (stringp _initial-contents)) _initial-contents)
+                     ((and _default-value (stringp _default-value)) _default-value)
+                     (t (string-to-unibyte ""))))
+              (with-current-buffer mbuf
+                (delete-region (or prompt-end (point-min)) (point-max))
+                (goto-char (point-max))
+                (insert result))
+             (setf *clemacs-last-minibuffer-contents* result))
+             (t
+              (setf result
+                    (cl:catch +clemacs-minibuffer-exit-tag+
+                      (loop
+                        (with-current-buffer mbuf
+                          (clemacs--minibuffer--ensure-point-after-prompt))
+                        (let* ((keys (read-key-sequence nil))
+                               (cmd (key-binding keys t)))
+                          (cond
+                           ((and cmd (not (integerp cmd)) (not (keymapp cmd)))
+                            (with-current-buffer mbuf
+                              (command-execute cmd)))
+                           (t (ding)))))))
+              (setf *clemacs-last-minibuffer-contents* result)))))
       (setf *clemacs-minibuffer-active-p* nil
-            *clemacs-minibuffer-selected-window* nil))))
+            *clemacs-minibuffer-selected-window* nil)
+      (when (boundp 'local-map)
+        (set 'local-map saved-local-map)))
+    result))
 
 (cl:defun completing-read (prompt collection &optional _predicate require-match
                                   _initial-input _hist def _inherit-input-method)
