@@ -79,6 +79,52 @@ Decision checkpoint (must ask the user)
 
 ## Milestones (TODO)
 
+## Current snapshot (2026-01-09)
+
+Status is tracked in `build/clemacs/reports/progress.md`. As of 2026-01-09:
+
+- clemacs contract gates are green: `smoke`, `elisp-core`, and `check`.
+- Startup manifests:
+  - `clemacs/contract/startup.check.files`: entries=100, capped=76, nolimit=22, sum_maxforms=2705
+  - `clemacs/contract/startup.editor-core.files`: entries=99, capped=76, nolimit=21, sum_maxforms=2895
+- Upstream ERT bring-up: must-pass=198, known-fail=0.
+
+## Next biggest unlocks (priority order)
+
+These are the next high-leverage targets because they remove high-fanout caps
+in `clemacs/contract/startup.*.files` and unblock large portions of shipped
+editor-core ELisp.
+
+1) Uncap `lisp/emacs-lisp/nadvice.el` (currently max-forms=200)
+   - Make function designators more Emacs-shaped: autoload markers should be
+     callable/inspectable where Emacs treats them that way.
+   - Harden `get-advertised-calling-convention` against autoloads and other
+     non-function fdefinitions (it is consulted by `cl-generic`/`bytecomp` and
+     becomes a pervasive startup dependency).
+
+2) Uncap `lisp/minibuffer.el` (currently max-forms=200)
+   - Replace the current "line-read stub" with a real minibuffer buffer model
+     suitable for TTY (so `exit-minibuffer`, `delete-minibuffer-contents`, and
+     prompt/bounds functions can behave like Emacs).
+   - Keep noninteractive behavior strictly non-blocking (contract gates must
+     never prompt).
+
+3) Uncap `lisp/frame.el` (currently max-forms=200)
+   - Provide a minimal TTY frame model and core accessors like
+     `frame-parameter`, `minibuffer-window`, and `minibuffer-prompt-end`.
+   - Goal is "Emacs-shaped enough for editor-core", not GUI parity.
+
+4) Baseline syntax scanning (`parse-partial-sexp` + `syntax-ppss`)
+   - This unlocks indentation/font-lock/jit-lock/isearch helpers without
+     rewriting shipped `lisp/` call sites.
+   - Even if we later accelerate with tree-sitter, keep the API and a correct
+     baseline scanner.
+
+5) Process/subprocess surface (batch-first, then interactive)
+   - Expand beyond the current `call-process-region` subset: `call-process`,
+     process plists/flags, and enough attributes to unblock `files.el`,
+     `server.el`, and crypto/process callers.
+
 ### Milestone B1-8: load the shipped `lisp/` tree under clemacs
 
 Deliverables
