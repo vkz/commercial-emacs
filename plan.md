@@ -101,6 +101,8 @@ Done (2026-01-09)
 - Uncapped `lisp/minibuffer.el` in `startup.check` and `startup.editor-core` manifests.
 - Started a buffer-backed minibuffer model (`read-from-minibuffer` populates ` *Minibuf-0*`; `exit-minibuffer`/`delete-minibuffer-contents` are no longer hard errors).
 - Baseline syntax scanning: `parse-partial-sexp` + `syntax-ppss` (and uncapped `lisp/emacs-lisp/syntax.el` in `startup.check`/`startup.editor-core`).
+- Process/subprocess surface (batch-first): `call-process`, `set-process-plist`, `emacs-pid`, `process-attributes` (plus microtests).
+- Raised `lisp/font-lock.el` and `lisp/jit-lock.el` caps to 200 in `startup.check`/`startup.editor-core`.
 
 1) Uncap `lisp/frame.el` (currently max-forms=200)
    - Provide a minimal TTY frame model and core accessors like
@@ -108,9 +110,11 @@ Done (2026-01-09)
    - Goal is "Emacs-shaped enough for editor-core", not GUI parity.
 
 2) Process/subprocess surface (batch-first, then interactive)
-   - Expand beyond the current `call-process-region` subset: `call-process`,
-     process plists/flags, and enough attributes to unblock `files.el`,
-     `server.el`, and crypto/process callers.
+   - Batch-first is now in place: `call-process-region` + `call-process`, plus
+     minimal process plists and basic `process-attributes`/`emacs-pid`.
+   - Next: interactive process plumbing (`make-process`/`start-process`),
+     `delete-process`, filters/sentinels, and richer `process-attributes` keys
+     as needed by real editor workflows.
 
 ### Milestone B1-8: load the shipped `lisp/` tree under clemacs
 
@@ -128,8 +132,8 @@ High priority (next ROI)
 - Minimal TTY frame/window/minibuffer shims: enough of `frame-parameter`, `minibuffer-window`, `minibuffer-prompt-end`, plus staples like `switch-to-buffer`, `buffer-file-name`, `move-to-column` (high fanout in editor-core startup).
 - Minibuffer/completion basics: now have `minibuffer-depth`, a minimal `completing-read`, and a buffer-backed minibuffer state; next is an editable minibuffer buffer (keymaps + cursor motion + in-buffer edits) rather than the current line-prompt input.
 - Window/buffer motion basics: now have `window-point`/`window-height`/`window-start`/`window-end` + a single-window model; next is enough window-state APIs for `frame.el`/display paths and more accurate window-end/window-start semantics under scrolling.
-- Process/subprocess surface: now have a minimal `process-buffer`/`get-buffer-process` and `call-process-region`; next is `call-process`, `set-process-plist`, and the small flags/attrs (`process-query-on-exit-flag`, `process-attributes`, etc.) that unblock `lisp/files.el`, `lisp/server.el`, and crypto/process callers.
-- Syntax/parse-state core: baseline `parse-partial-sexp` + `syntax-ppss` is in place; next is raising `font-lock.el`/`jit-lock.el` caps and addressing the missing primitives those loads expose.
+- Process/subprocess surface: now have a minimal `process-buffer`/`get-buffer-process`, `call-process-region` + `call-process`, and basic process plists/attrs (`set-process-plist`, `process-attributes`, `emacs-pid`); next is interactive processes (`make-process`/`start-process`), `delete-process`, and filter/sentinel plumbing.
+- Syntax/parse-state core: baseline `parse-partial-sexp` + `syntax-ppss` is in place, and `font-lock.el`/`jit-lock.el` caps are raised; next is addressing the missing primitives those loads expose.
 
 Next actions
 - Grow `clemacs/contract/startup.{smoke,check,editor-core}.files` monotonically, following pdump order.
