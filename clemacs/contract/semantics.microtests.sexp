@@ -1138,4 +1138,9 @@
   :expr "(with-temp-buffer (insert \"abc\") (call-process-region (point-min) (point-max) \"cat\" nil t) (buffer-string))"
   :expected "\"abcabc\""
   :emacs :match)
+
+ (:name "vars-variable-watchers-roundtrip"
+  :expr "(progn (setq clemacs--tmp-vw nil) (add-variable-watcher 'clemacs--tmp-vw #'ignore) (add-variable-watcher 'clemacs--tmp-vw #'ignore) (let ((ws (get-variable-watchers 'clemacs--tmp-vw))) (remove-variable-watcher 'clemacs--tmp-vw #'ignore) (list ws (get-variable-watchers 'clemacs--tmp-vw))))"
+  :expected "((ignore) nil)"
+  :emacs :match)
 )

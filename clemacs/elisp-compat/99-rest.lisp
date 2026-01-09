@@ -114,6 +114,47 @@ This appears early in `lisp/emacs-lisp/cl-generic.el`; ignore it for bring-up."
   (declare (cl:ignore _args))
   nil)
 
+(cl:defun set-buffer-redisplay (&rest _args)
+  "Bring-up stub for the C function `set-buffer-redisplay'.
+
+In Emacs this is used as a variable watcher; during clemacs bring-up we treat
+it as a no-op redisplay hint."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defvar *variable-watchers*
+  (cl:make-hash-table :test 'eq))
+
+(cl:defun get-variable-watchers (variable)
+  "Bring-up subset of the C primitive `get-variable-watchers'."
+  (unless (symbolp variable)
+    (signal 'wrong-type-argument (list 'symbolp variable)))
+  (cl:copy-list (gethash variable *variable-watchers*)))
+
+(cl:defun add-variable-watcher (variable watcher)
+  "Bring-up subset of the C primitive `add-variable-watcher'."
+  (unless (symbolp variable)
+    (signal 'wrong-type-argument (list 'symbolp variable)))
+  (unless (functionp watcher)
+    (signal 'wrong-type-argument (list 'functionp watcher)))
+  (let ((watchers (gethash variable *variable-watchers*)))
+    (unless (cl:member watcher watchers :test #'eq)
+      (setf (gethash variable *variable-watchers*) (cons watcher watchers))))
+  nil)
+
+(cl:defun remove-variable-watcher (variable watcher)
+  "Bring-up subset of the C primitive `remove-variable-watcher'."
+  (unless (symbolp variable)
+    (signal 'wrong-type-argument (list 'symbolp variable)))
+  (unless (functionp watcher)
+    (signal 'wrong-type-argument (list 'functionp watcher)))
+  (let* ((watchers (gethash variable *variable-watchers*))
+         (new (cl:remove watcher watchers :test #'eq)))
+    (cond
+     ((null new) (remhash variable *variable-watchers*))
+     (t (setf (gethash variable *variable-watchers*) new))))
+  nil)
+
 (cl:defvar *oclosure-defined-slots* (cl:make-hash-table :test 'eq))
 
 (cl:defmacro oclosure-define (type-and-options &rest rest)

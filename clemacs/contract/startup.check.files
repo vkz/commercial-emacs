@@ -97,7 +97,7 @@ lisp/emacs-lisp/nadvice.el -
 lisp/minibuffer.el -
 
 # pdump: frame.
-lisp/frame.el 200
+lisp/frame.el -
 
 # pdump: startup.
 lisp/startup.el 1
