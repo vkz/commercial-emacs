@@ -191,3 +191,4 @@ failure, a useful debug flag, a missing helper task):
 - To avoid noisy backtraces from expected ELisp signals, set `CLEMACS_DEBUG_CONDITION_CASE=cl` to print backtraces only for wrapped host (CL) errors caught by `condition-case`.
 - When shelling out from compat code via `uiop:run-program`, don’t pass stdin as a raw string: a string is treated as a pathname; use `(make-string-input-stream ...)` (or a temp file) for region input.
 - When implementing `process-attributes` via `ps`, note that macOS `ps` rejects `euid`/`egid` keywords; use `uid`/`gid` (and still return `euid`/`egid` keys in the alist).
+- If `minibuffer-selected-window` starts returning non-nil at top level after minibuffer changes, ensure `read-from-minibuffer` clears `*clemacs-minibuffer-active-p*` in `unwind-protect` cleanup (avoid early `return-from`; verify via `mise run clemacs:sbcl:eval`).
