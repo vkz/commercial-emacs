@@ -1523,6 +1523,80 @@ This checks overlays first (when OBJECT is a buffer), then falls back to
       (goto-char (point-max)))
     nil))
 
+(cl:defun call-process (program &optional infile destination _display &rest args)
+  "Bring-up subset of the C primitive `call-process'."
+  (declare (cl:ignore _display))
+  (unless (stringp program)
+    (error "ELISP:CALL-PROCESS expected string PROGRAM, got: ~S" program))
+  (labels ((arg->string (a)
+             (cond
+              ((null a) nil)
+              ((stringp a) (%elisp-string->cl-string a))
+              ((symbolp a) (symbol-name a))
+              (t (prin1-to-string a))))
+           (resolve-dest (d)
+             (cond
+              ((null d) nil)
+              ((or (eq d t) (and (integerp d) (zerop d))) (current-buffer))
+              ((stringp d) (get-buffer-create d))
+              ((bufferp d) d)
+              (t (error "ELISP:CALL-PROCESS unsupported DESTINATION: ~S" d))))
+           (split-destination (d)
+             ;; Emacs accepts (OUT . ERR) and (OUT ERR).  We treat both.
+             (cond
+              ((consp d)
+               (cond
+                ((and (consp (cdr d)) (null (cddr d)))
+                 (cl:values (car d) (cadr d)))
+                (t (cl:values (car d) (cdr d)))))
+              (t
+               (cl:values d d)))))
+    (let* ((cmd (cons (%elisp-string->cl-string program)
+                      (remove nil (mapcar #'arg->string args))))
+           (input-kind
+             (cond
+              ((or (null infile) (and (integerp infile) (zerop infile))) :eof)
+              ((eq infile t) :buffer)
+              ((stringp infile) :file)
+              (t (error "ELISP:CALL-PROCESS unsupported INFILE: ~S" infile)))))
+      (multiple-value-bind (outdest errdest) (split-destination destination)
+        (let ((outbuf (resolve-dest outdest))
+              (errbuf (resolve-dest errdest)))
+          (flet ((insert-into (buf s)
+                   (when (and buf s (> (length s) 0))
+                     (with-current-buffer buf
+                       (insert s)))))
+            (multiple-value-bind (out err code)
+                (ecase input-kind
+                  (:eof
+                   (uiop:run-program cmd
+                                     :input (make-string-input-stream "")
+                                     :output :string
+                                     :error-output :string
+                                     :ignore-error-status t))
+                  (:buffer
+                   (let ((input (%elisp-string->cl-string
+                                 (buffer-substring-no-properties (point-min) (point-max)))))
+                     (uiop:run-program cmd
+                                       :input (make-string-input-stream input)
+                                       :output :string
+                                       :error-output :string
+                                       :ignore-error-status t)))
+                  (:file
+                   (with-open-file (in (%elisp-string->cl-string infile)
+                                       :direction :input
+                                       :external-format :utf-8)
+                     (uiop:run-program cmd
+                                       :input in
+                                       :output :string
+                                       :error-output :string
+                                       :ignore-error-status t))))
+              (insert-into outbuf out)
+              ;; If stderr is destined for the same buffer, avoid double insert.
+              (unless (and outbuf errbuf (eq outbuf errbuf))
+                (insert-into errbuf err))
+              code)))))))
+
 (cl:defun call-process-region (start end program &optional delete destination _display &rest args)
   "Bring-up subset of the C primitive `call-process-region'."
   (declare (cl:ignore _display))

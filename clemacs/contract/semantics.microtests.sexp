@@ -1154,6 +1154,16 @@
   :expected "\"abcabc\""
   :emacs :match)
 
+ (:name "call-process-echo-inserts"
+  :expr "(with-temp-buffer (list (call-process \"/usr/bin/printf\" nil t nil \"hi\") (buffer-string)))"
+  :expected "(0 \"hi\")"
+  :emacs :match)
+
+ (:name "process-attributes-has-comm"
+  :expr "(and (assq 'comm (process-attributes (emacs-pid))) t)"
+  :expected "t"
+  :emacs :match)
+
  (:name "vars-variable-watchers-roundtrip"
   :expr "(progn (setq clemacs--tmp-vw nil) (add-variable-watcher 'clemacs--tmp-vw #'ignore) (add-variable-watcher 'clemacs--tmp-vw #'ignore) (let ((ws (get-variable-watchers 'clemacs--tmp-vw))) (remove-variable-watcher 'clemacs--tmp-vw #'ignore) (list ws (get-variable-watchers 'clemacs--tmp-vw))))"
   :expected "((ignore) nil)"

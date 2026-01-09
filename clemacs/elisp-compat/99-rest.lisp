@@ -1222,6 +1222,15 @@ The \"default\" value is CL's global binding model."
    ((elisp-process-p process) (or (elisp-process-plist process) nil))
    (t (error "ELISP:PROCESS-PLIST expected process, got: ~S" process))))
 
+(cl:defun set-process-plist (process plist)
+  "Bring-up subset of the C primitive `set-process-plist'."
+  (cond
+   ((null process) nil)
+   ((elisp-process-p process)
+    (setf (elisp-process-plist process) plist)
+    plist)
+   (t (error "ELISP:SET-PROCESS-PLIST expected process, got: ~S" process))))
+
 (cl:defun process-buffer (process)
   "Bring-up subset of the C primitive `process-buffer'."
   (cond
@@ -1252,6 +1261,93 @@ The \"default\" value is CL's global binding model."
       (and (listp plist) (getf plist 'query-on-exit-flag))))
    (t
     (error "ELISP:PROCESS-QUERY-ON-EXIT-FLAG expected process, got: ~S" process))))
+
+(cl:defun emacs-pid ()
+  "Bring-up subset of the C primitive `emacs-pid'."
+  #+sbcl
+  (sb-posix:getpid)
+  #-sbcl
+  0)
+
+(cl:defun %process-attributes/split-whitespace (s)
+  (let ((tokens nil)
+        (start nil))
+    (labels ((emit (end)
+               (when start
+                 (let ((tok (subseq s start end)))
+                   (push tok tokens))
+                 (setf start nil))))
+      (loop for i from 0 below (length s) do
+        (let ((ch (char s i)))
+          (if (or (char= ch #\Space) (char= ch #\Tab))
+              (emit i)
+              (unless start
+                (setf start i)))))
+      (emit (length s)))
+    (nreverse tokens)))
+
+(cl:defun %process-attributes/join-with-spaces (strings)
+  (let ((out (make-string-output-stream))
+        (firstp t))
+    (dolist (s strings)
+      (if firstp
+          (setf firstp nil)
+          (write-char #\Space out))
+      (write-string s out))
+    (get-output-stream-string out)))
+
+(cl:defun %process-attributes/parse-ps-line (line)
+  ;; Expected columns: euid user egid group comm state ppid args...
+  (let* ((tokens (%process-attributes/split-whitespace line)))
+    (when (< (length tokens) 7)
+      (return-from %process-attributes/parse-ps-line nil))
+    (let* ((euid (parse-integer (nth 0 tokens) :junk-allowed t))
+           (user (nth 1 tokens))
+           (egid (parse-integer (nth 2 tokens) :junk-allowed t))
+           (group (nth 3 tokens))
+           (comm (nth 4 tokens))
+           (state (nth 5 tokens))
+           (ppid (parse-integer (nth 6 tokens) :junk-allowed t))
+           (args (and (nthcdr 7 tokens)
+                      (%process-attributes/join-with-spaces (nthcdr 7 tokens)))))
+      (remove nil
+              (list
+               (and euid (cons 'euid euid))
+               (and user (cons 'user user))
+               (and egid (cons 'egid egid))
+               (and group (cons 'group group))
+               (and comm (cons 'comm comm))
+               (and state (cons 'state state))
+               (and ppid (cons 'ppid ppid))
+               (and args (cons 'args args)))))))
+
+(cl:defun process-attributes (pid)
+  "Bring-up subset of the C primitive `process-attributes'."
+  (unless (integerp pid)
+    (error "ELISP:PROCESS-ATTRIBUTES expected integer PID, got: ~S" pid))
+  ;; The full Emacs primitive is platform-dependent and can expose many fields.
+  ;; For bring-up, we rely on `ps` and expose a small, high-ROI subset.
+  (multiple-value-bind (out _err code)
+      (uiop:run-program (list "ps"
+                              "-p" (prin1-to-string pid)
+                              "-o" "uid="
+                              "-o" "user="
+                              "-o" "gid="
+                              "-o" "group="
+                              "-o" "comm="
+                              "-o" "state="
+                              "-o" "ppid="
+                              "-o" "args=")
+                        :output :string
+                        :error-output :string
+                        :ignore-error-status t)
+    (declare (cl:ignore _err))
+    (cond
+     ((not (and (integerp code) (zerop code))) nil)
+     (t
+      (let ((line (cl:string-trim '(#\Space #\Tab #\Newline #\Return) out)))
+        (and (> (length line) 0)
+             (%process-attributes/parse-ps-line line)))))))
 
 (cl:defun default-value (symbol)
   "Stub for ELisp `default-value'."
