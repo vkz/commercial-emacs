@@ -93,6 +93,7 @@ High priority (next ROI)
 - Interactive command pipeline: implement `commandp`, `interactive-form`, `call-interactively`, prefix-arg + command history plumbing (unblocks real editor usage and a lot of `simple.el`/minibuffer code paths).
 - Minimal TTY frame/window/minibuffer shims: enough of `frame-parameter`, `minibuffer-window`, `minibuffer-prompt-end`, plus staples like `switch-to-buffer`, `buffer-file-name`, `move-to-column` (high fanout in editor-core startup).
 - Syntax/parse-state core: `syntax-ppss` (and immediate deps) to unlock indentation/font-lock/jit-lock/isearch helpers.
+  - Even if we later lean on tree-sitter, keep `syntax-ppss` as a compatible API (avoid rewriting shipped `lisp/` call sites); implement a correct baseline scanner first, then optionally add a tree-sitter-backed acceleration path (tree-sitter is currently disabled in the TTY build flow).
 
 Next actions
 - Grow `clemacs/contract/startup.{smoke,check,editor-core}.files` monotonically, following pdump order.
