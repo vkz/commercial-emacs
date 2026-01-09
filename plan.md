@@ -97,26 +97,21 @@ editor-core ELisp.
 
 Done (2026-01-09)
 - Uncapped `lisp/emacs-lisp/nadvice.el` in `startup.check` and `startup.editor-core` manifests.
+- Uncapped `lisp/minibuffer.el` in `startup.check` and `startup.editor-core` manifests.
+- Started a buffer-backed minibuffer model (`read-from-minibuffer` populates ` *Minibuf-0*`; `exit-minibuffer`/`delete-minibuffer-contents` are no longer hard errors).
 
-1) Uncap `lisp/minibuffer.el` (currently max-forms=200)
-   - Replace the current "line-read stub" with a real minibuffer buffer model
-     suitable for TTY (so `exit-minibuffer`, `delete-minibuffer-contents`, and
-     prompt/bounds functions can behave like Emacs).
-   - Keep noninteractive behavior strictly non-blocking (contract gates must
-     never prompt).
-
-2) Uncap `lisp/frame.el` (currently max-forms=200)
+1) Uncap `lisp/frame.el` (currently max-forms=200)
    - Provide a minimal TTY frame model and core accessors like
      `frame-parameter`, `minibuffer-window`, and `minibuffer-prompt-end`.
    - Goal is "Emacs-shaped enough for editor-core", not GUI parity.
 
-3) Baseline syntax scanning (`parse-partial-sexp` + `syntax-ppss`)
+2) Baseline syntax scanning (`parse-partial-sexp` + `syntax-ppss`)
    - This unlocks indentation/font-lock/jit-lock/isearch helpers without
      rewriting shipped `lisp/` call sites.
    - Even if we later accelerate with tree-sitter, keep the API and a correct
      baseline scanner.
 
-4) Process/subprocess surface (batch-first, then interactive)
+3) Process/subprocess surface (batch-first, then interactive)
    - Expand beyond the current `call-process-region` subset: `call-process`,
      process plists/flags, and enough attributes to unblock `files.el`,
      `server.el`, and crypto/process callers.
@@ -132,10 +127,10 @@ Gate
 - The list is data in-repo and grows monotonically (no deleting to get green).
 
 High priority (next ROI)
-- Autoload/function-designator robustness: make core helpers accept autoload markers and treat them as callable/inspectable where Emacs does (current blocker: `nadvice.el` via `get-advertised-calling-convention` during `cl-generic` method definition).
+- Autoload/function-designator robustness: make core helpers accept autoload markers and treat them as callable/inspectable where Emacs does (still high-fanout via `cl-generic`, `bytecomp`, and help/arglist paths).
 - Interactive command pipeline: implement `commandp`, `interactive-form`, `call-interactively`, prefix-arg + command history plumbing (unblocks real editor usage and a lot of `simple.el`/minibuffer code paths).
 - Minimal TTY frame/window/minibuffer shims: enough of `frame-parameter`, `minibuffer-window`, `minibuffer-prompt-end`, plus staples like `switch-to-buffer`, `buffer-file-name`, `move-to-column` (high fanout in editor-core startup).
-- Minibuffer/completion basics: now have `minibuffer-depth`, a minimal `completing-read`, and a TTY-friendly `minibuffer-contents` stub; next is a real minibuffer buffer model (so `delete-minibuffer-contents`/`exit-minibuffer` and friends can behave more like Emacs).
+- Minibuffer/completion basics: now have `minibuffer-depth`, a minimal `completing-read`, and a buffer-backed minibuffer state; next is an editable minibuffer buffer (keymaps + cursor motion + in-buffer edits) rather than the current line-prompt input.
 - Window/buffer motion basics: now have `window-point`/`window-height`/`window-start`/`window-end` + a single-window model; next is enough window-state APIs for `frame.el`/display paths and more accurate window-end/window-start semantics under scrolling.
 - Process/subprocess surface: now have a minimal `process-buffer`/`get-buffer-process` and `call-process-region`; next is `call-process`, `set-process-plist`, and the small flags/attrs (`process-query-on-exit-flag`, `process-attributes`, etc.) that unblock `lisp/files.el`, `lisp/server.el`, and crypto/process callers.
 - Syntax/parse-state core: `syntax-ppss` (and immediate deps) to unlock indentation/font-lock/jit-lock/isearch helpers.
