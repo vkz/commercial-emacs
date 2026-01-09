@@ -110,10 +110,10 @@ lisp/font-core.el 50
 lisp/emacs-lisp/syntax.el -
 
 # pdump: font-lock.
-lisp/font-lock.el 3
+lisp/font-lock.el 200
 
 # pdump: jit-lock, mouse, timer, isearch.
-lisp/jit-lock.el 2
+lisp/jit-lock.el 200
 lisp/mouse.el 1
 lisp/fringe.el -
 lisp/scroll-bar.el 11
