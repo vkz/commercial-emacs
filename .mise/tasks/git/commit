@@ -47,4 +47,8 @@ if [[ "${usage_edit:-false}" == "true" ]]; then
   args+=("--edit")
 fi
 
-git commit -F "${msg}" "${args[@]}"
+if (( ${#args[@]} > 0 )); then
+  git commit -F "${msg}" "${args[@]}"
+else
+  git commit -F "${msg}"
+fi
