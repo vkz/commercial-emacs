@@ -94,7 +94,7 @@ lisp/simple.el -
 lisp/emacs-lisp/nadvice.el -
 
 # pdump: minibuffer.
-lisp/minibuffer.el 200
+lisp/minibuffer.el -
 
 # pdump: frame.
 lisp/frame.el 200
