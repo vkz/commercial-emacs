@@ -2813,8 +2813,11 @@ Interactive incremental search is not supported yet."
         nil)))
 
 (cl:defun minibuffer-selected-window ()
-  "Bring-up subset of ELisp `minibuffer-selected-window' (no minibuffer)."
-  nil)
+  "Bring-up subset of ELisp `minibuffer-selected-window' (TTY)."
+  (and (boundp '*clemacs-minibuffer-active-p*)
+       *clemacs-minibuffer-active-p*
+       (boundp '*clemacs-minibuffer-selected-window*)
+       *clemacs-minibuffer-selected-window*))
 
 (cl:defun minibuffer-window (&optional frame)
   "Bring-up subset of ELisp `minibuffer-window' (single-window, no minibuffer)."
@@ -2822,12 +2825,20 @@ Interactive incremental search is not supported yet."
   *single-window*)
 
 (cl:defun active-minibuffer-window ()
-  "Bring-up stub for the C primitive `active-minibuffer-window' (no minibuffer)."
-  nil)
+  "Bring-up stub for the C primitive `active-minibuffer-window' (TTY)."
+  (and (boundp '*clemacs-minibuffer-active-p*)
+       *clemacs-minibuffer-active-p*
+       (minibuffer-window)))
 
 (cl:defun minibuffer-prompt-end ()
-  "Bring-up subset of ELisp `minibuffer-prompt-end' (no minibuffer)."
-  (point-min))
+  "Bring-up subset of ELisp `minibuffer-prompt-end'."
+  (cond
+   ((and (boundp '*clemacs-minibuffer-active-p*)
+         *clemacs-minibuffer-active-p*
+         (boundp '*clemacs-minibuffer-prompt-end*)
+         (integerp *clemacs-minibuffer-prompt-end*))
+    *clemacs-minibuffer-prompt-end*)
+   (t (point-min))))
 
 (cl:defun window-minibuffer-p (&optional _window)
   "Bring-up subset of ELisp `window-minibuffer-p' (no minibuffer)."
@@ -2835,9 +2846,18 @@ Interactive incremental search is not supported yet."
   nil)
 
 (cl:defun minibufferp (&optional _buffer)
-  "Bring-up subset of ELisp `minibufferp' (no minibuffer)."
-  (declare (cl:ignore _buffer))
-  nil)
+  "Bring-up subset of ELisp `minibufferp' (TTY)."
+  (let ((buf (or _buffer (current-buffer))))
+    (or (and (boundp '*clemacs-minibuffer-buffer*)
+             (bufferp *clemacs-minibuffer-buffer*)
+             (eq buf *clemacs-minibuffer-buffer*))
+        ;; Pragmatic: treat buffers named like Emacs' minibuffer buffers as minibuffers.
+        (and (bufferp buf)
+             (stringp (buffer-name buf))
+             (if (cl:search " *Minibuf-" (%elisp-string->cl-string (buffer-name buf))
+                            :test #'cl:char=)
+                 t
+                 nil)))))
 
 (cl:defun exit-recursive-edit ()
   "Bring-up stub for the C primitive `exit-recursive-edit'."
@@ -2859,14 +2879,24 @@ Interactive incremental search is not supported yet."
   newpos)
 
 (cl:defun delete-minibuffer-contents ()
-  "Bring-up stub for ELisp `delete-minibuffer-contents' (no minibuffer)."
+  "Bring-up subset of ELisp `delete-minibuffer-contents' (TTY)."
+  (when (and (boundp '*clemacs-minibuffer-active-p*)
+             *clemacs-minibuffer-active-p*
+             (boundp '*clemacs-minibuffer-buffer*)
+             (bufferp *clemacs-minibuffer-buffer*))
+    (with-current-buffer *clemacs-minibuffer-buffer*
+      (delete-region (minibuffer-prompt-end) (point-max))))
   (when (boundp '*clemacs-last-minibuffer-contents*)
     (set '*clemacs-last-minibuffer-contents* (string-to-unibyte "")))
   nil)
 
 (cl:defun exit-minibuffer ()
-  "Bring-up stub for ELisp `exit-minibuffer' (no minibuffer)."
-  (error "ELISP:EXIT-MINIBUFFER not in minibuffer"))
+  "Bring-up subset of ELisp `exit-minibuffer' (TTY)."
+  (if (and (boundp '*clemacs-minibuffer-active-p*)
+           *clemacs-minibuffer-active-p*
+           (boundp '+clemacs-minibuffer-exit-tag+))
+      (cl:throw +clemacs-minibuffer-exit-tag+ (minibuffer-contents))
+      (error "ELISP:EXIT-MINIBUFFER not in minibuffer")))
 
 (cl:defun select-window (window &optional _norecord)
   "Bring-up subset of ELisp `select-window'."

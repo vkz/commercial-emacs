@@ -9,6 +9,11 @@
 (cl:defvar *clemacs-minibuffer-depth* 0)
 (cl:defvar *clemacs-last-minibuffer-contents* (string-to-unibyte ""))
 
+(cl:defun clemacs--ensure-minibuffer-buffer ()
+  (or (and (boundp '*clemacs-minibuffer-buffer*) (bufferp *clemacs-minibuffer-buffer*)
+           *clemacs-minibuffer-buffer*)
+      (setf *clemacs-minibuffer-buffer* (get-buffer-create +clemacs-minibuffer-buffer-name+))))
+
 (cl:defvar *clemacs-tty-global-map* nil)
 (cl:defvar *clemacs-tty-ctl-x-map* nil)
 
@@ -19,9 +24,16 @@
 (cl:defun minibuffer-contents ()
   "Bring-up subset of the C primitive `minibuffer-contents' (TTY prompt).
 
-clemacs does not yet implement an editable minibuffer buffer; the closest
-approximation is the last line read via `read-from-minibuffer'."
-  (or *clemacs-last-minibuffer-contents* (string-to-unibyte "")))
+When clemacs is in a `read-from-minibuffer' call, we model the minibuffer as an
+ordinary buffer (`*Minibuf-0*`) containing PROMPT followed by the current input.
+Outside the minibuffer, we return the last captured minibuffer input."
+  (cond
+   ((and *clemacs-minibuffer-active-p* (bufferp (clemacs--ensure-minibuffer-buffer)))
+    (with-current-buffer (clemacs--ensure-minibuffer-buffer)
+      (buffer-substring-no-properties
+       (or *clemacs-minibuffer-prompt-end* (point-min))
+       (point-max))))
+   (t (or *clemacs-last-minibuffer-contents* (string-to-unibyte "")))))
 
 (cl:defun this-single-command-keys ()
   "Bring-up stub for ELisp `this-single-command-keys'."
@@ -504,26 +516,48 @@ This only extends `minibuffer-setup-hook' around BODY."
                                        _hist _default-value _inherit-input-method)
   "Bring-up subset of the C primitive `read-from-minibuffer'.
 
-In clemacs TTY bring-up, this reads a line via the terminal prompt helper."
+In clemacs TTY bring-up, this reads a line via the terminal prompt helper, but
+tracks a real minibuffer buffer (`*Minibuf-0*`) so buffer-based helpers like
+`minibuffer-contents' can observe the current prompt/input."
   (declare (cl:ignore _initial-contents _keymap _read _hist _default-value _inherit-input-method))
   (unless (stringp prompt)
     (error "ELISP:READ-FROM-MINIBUFFER expected string PROMPT, got: ~S" prompt))
-  (let ((*clemacs-minibuffer-depth* (1+ (minibuffer-depth))))
-    ;; Run setup hooks if present (common callers rely on it for keymaps).
-    (when (and (boundp 'minibuffer-setup-hook)
-               (consp (symbol-value 'minibuffer-setup-hook)))
-      (dolist (fn (symbol-value 'minibuffer-setup-hook))
-        (when (functionp fn)
-          (ignore-errors (funcall fn)))))
-    (let* ((p (%elisp-string->cl-string prompt))
-           (s (and (fboundp 'clemacs::%tty-prompt)
-                   (clemacs::%tty-prompt p))))
-      (when (null s)
-        (setf *clemacs-last-minibuffer-contents* (string-to-unibyte ""))
-        (signal 'quit nil))
-      (let ((out (string-to-unibyte s)))
-        (setf *clemacs-last-minibuffer-contents* out)
-        out))))
+  (let* ((mbuf (clemacs--ensure-minibuffer-buffer))
+         (prompt-end nil))
+    (unwind-protect
+        (progn
+          (setf *clemacs-minibuffer-active-p* t
+                *clemacs-minibuffer-selected-window* (selected-window))
+          (with-current-buffer mbuf
+            (erase-buffer)
+            (insert prompt)
+            (setf prompt-end (point))
+            (setf *clemacs-minibuffer-prompt-end* prompt-end))
+          (let ((*clemacs-minibuffer-depth* (1+ (minibuffer-depth))))
+            ;; Run setup hooks if present (common callers rely on it for keymaps).
+            (with-current-buffer mbuf
+              (when (and (boundp 'minibuffer-setup-hook)
+                         (consp (symbol-value 'minibuffer-setup-hook)))
+                (dolist (fn (symbol-value 'minibuffer-setup-hook))
+                  (when (functionp fn)
+                    (ignore-errors (funcall fn))))))
+            (cl:catch +clemacs-minibuffer-exit-tag+
+              (let* ((p (%elisp-string->cl-string prompt))
+                     (s (and (fboundp 'clemacs::%tty-prompt)
+                             (clemacs::%tty-prompt p))))
+                (when (null s)
+                  (setf *clemacs-last-minibuffer-contents* (string-to-unibyte ""))
+                  (signal 'quit nil))
+                (let ((out (string-to-unibyte s)))
+                  (with-current-buffer mbuf
+                    ;; Replace anything after prompt with OUT.
+                    (delete-region (or prompt-end (point-min)) (point-max))
+                    (goto-char (point-max))
+                    (insert out))
+                  (setf *clemacs-last-minibuffer-contents* out)
+                  out)))))
+      (setf *clemacs-minibuffer-active-p* nil
+            *clemacs-minibuffer-selected-window* nil))))
 
 (cl:defun completing-read (prompt collection &optional _predicate require-match
                                   _initial-input _hist def _inherit-input-method)

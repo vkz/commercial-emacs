@@ -954,6 +954,11 @@
   :expected "nil"
   :emacs :match)
 
+ (:name "windows-minibufferp-minibuf-0-t"
+  :expr "(minibufferp (get-buffer-create \" *Minibuf-0*\"))"
+  :expected "t"
+  :emacs :match)
+
  (:name "minibuffer-depth-top-level-zero"
   :expr "(= (minibuffer-depth) 0)"
   :expected "t"
