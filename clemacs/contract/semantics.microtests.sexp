@@ -839,6 +839,31 @@
   :expected "\"xbc\""
   :emacs :match)
 
+ (:name "buffers-line-number-at-pos-basic"
+  :expr "(with-temp-buffer (insert \"a\\nb\\nc\") (list (line-number-at-pos 1) (line-number-at-pos 3) (line-number-at-pos 5)))"
+  :expected "(1 2 3)"
+  :emacs :match)
+
+ (:name "buffers-mark-basic"
+  :expr "(with-temp-buffer (insert \"abc\") (goto-char 2) (push-mark 3 t t) (mark t))"
+  :expected "3"
+  :emacs :match)
+
+ (:name "messages-minibuffer-message-returns-t"
+  :expr "(minibuffer-message \"hi\")"
+  :expected "t"
+  :emacs :match)
+
+ (:name "overlays-move-overlay-updates-start-end"
+  :expr "(with-temp-buffer (insert \"abcd\") (let ((ov (make-overlay 2 4))) (move-overlay ov 1 3) (list (overlay-start ov) (overlay-end ov))))"
+  :expected "(1 3)"
+  :emacs :match)
+
+ (:name "text-get-char-property-overlay-wins"
+  :expr "(with-temp-buffer (insert \"abc\") (let ((ov (make-overlay 1 2))) (overlay-put ov 'foo 7) (get-char-property 1 'foo)))"
+  :expected "7"
+  :emacs :match)
+
  (:name "windows-minibuffer-selected-window-nil"
   :expr "(minibuffer-selected-window)"
   :expected "nil"

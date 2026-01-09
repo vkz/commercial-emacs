@@ -31,6 +31,11 @@
                         (delete-region (point-min) (+ idx 2)))))))))))
     s))
 
+(cl:defun minibuffer-message (format-string &rest args)
+  "Bring-up subset of the C primitive `minibuffer-message'."
+  (apply #'message format-string args)
+  t)
+
 (cl:defun error-message-string (condition)
   (princ-to-string condition))
 

@@ -784,6 +784,19 @@ STREAM may be a buffer."
             (incf col 1))))
     col))
 
+(cl:defun line-number-at-pos (&optional pos absolute)
+  "Bring-up subset of ELisp `line-number-at-pos'.
+
+If ABSOLUTE is non-nil, count lines from the start of the buffer.  Otherwise,
+count from `point-min' (respects narrowing)."
+  (let* ((p (if pos (%pos pos) (point)))
+         (start (if absolute 1 (point-min)))
+         (p* (max start (min p (point-max))))
+         (txt (elisp-buffer-text *current-buffer*))
+         (start-idx (max 0 (1- start)))
+         (end-idx (max start-idx (min (length txt) (1- p*)))))
+    (1+ (count #\Newline txt :start start-idx :end end-idx))))
+
 (cl:defun move-to-column (column &optional force)
   "Bring-up subset of ELisp `move-to-column'."
   (declare (cl:ignore force))
@@ -1080,6 +1093,15 @@ Emacs clamps positions outside the buffer to the nearest valid position."
       (setf v (symbol-value 'mark-marker)))
     v))
 
+(cl:defun mark (&optional force)
+  "Bring-up subset of the C primitive `mark'."
+  (let* ((m (mark-marker))
+         (p (and (markerp m) (marker-position m))))
+    (cond
+     ((integerp p) p)
+     (force (error "Mark is not set"))
+     (t nil))))
+
 (cl:defun region-active-p ()
   "Bring-up subset of ELisp `region-active-p'."
   (and (boundp 'transient-mark-mode)
@@ -1227,6 +1249,49 @@ Emacs clamps positions outside the buffer to the nearest valid position."
   (let ((m (elisp-overlay-end-marker overlay)))
     (when (elisp-marker-p m) (set-marker m nil)))
   nil)
+
+(cl:defun move-overlay (overlay start end &optional buffer)
+  "Bring-up subset of ELisp `move-overlay'."
+  (unless (elisp-overlay-p overlay)
+    (error "ELISP:MOVE-OVERLAY expected overlay, got: ~S" overlay))
+  (let* ((buf (or buffer (elisp-overlay-buffer overlay)))
+         (old (elisp-overlay-buffer overlay))
+         (a (%pos start))
+         (b (%pos end))
+         (min (min a b))
+         (max (max a b)))
+    (unless (elisp-buffer-p buf)
+      (error "ELISP:MOVE-OVERLAY expected buffer, got: ~S" buf))
+    (when (and (elisp-buffer-p old) (not (eq old buf)))
+      (setf (elisp-buffer-overlays old) (remove overlay (elisp-buffer-overlays old) :test #'eq))
+      (setf (elisp-buffer-overlays buf) (cons overlay (elisp-buffer-overlays buf))))
+    (setf (elisp-overlay-buffer overlay) buf)
+    (let ((m1 (elisp-overlay-start-marker overlay))
+          (m2 (elisp-overlay-end-marker overlay)))
+      (set-marker m1 min buf)
+      (set-marker m2 max buf))
+    overlay))
+
+(cl:defun get-char-property (pos prop &optional object)
+  "Bring-up subset of the C primitive `get-char-property'.
+
+This checks overlays first (when OBJECT is a buffer), then falls back to
+`get-text-property'."
+  (cond
+   ((or (null object) (bufferp object))
+    (let* ((buf (or object (current-buffer)))
+           (p (%pos pos)))
+      (dolist (ov (and (elisp-buffer-p buf) (elisp-buffer-overlays buf)))
+        (when (and (elisp-overlay-p ov)
+                   (eq (elisp-overlay-buffer ov) buf))
+          (let ((s (overlay-start ov))
+                (e (overlay-end ov)))
+            (when (and (integerp s) (integerp e) (<= s p) (< p e))
+              (let ((v (overlay-get ov prop)))
+                (when v (return-from get-char-property v)))))))
+      (get-text-property pos prop buf)))
+   (t
+    (get-text-property pos prop object))))
 
 (cl:defun %pos (x)
   (etypecase x
