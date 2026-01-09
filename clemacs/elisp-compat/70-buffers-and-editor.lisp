@@ -574,6 +574,20 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
       (setf (elisp-window-buffer *single-window*) *current-buffer*))
     t))
 
+(cl:defun bury-buffer (&optional buffer-or-name)
+  "Bring-up subset of ELisp `bury-buffer' (single-window)."
+  (let* ((buf (or (and buffer-or-name (get-buffer buffer-or-name))
+                  (current-buffer))))
+    (unless (bufferp buf)
+      (error "ELISP:BURY-BUFFER expected buffer or name, got: ~S" buffer-or-name))
+    (setf *buffer-list* (append (remove buf *buffer-list* :test #'eq) (list buf)))
+    (when (eq buf (current-buffer))
+      (let ((next (find-if (lambda (b) (and (elisp-buffer-p b) (%buffer-live-p b) (not (eq b buf))))
+                           *buffer-list*)))
+        (when next
+          (set-buffer next))))
+    nil))
+
 (cl:defun set-buffer (buffer-or-name)
   "Bring-up subset of ELisp `set-buffer'."
   (let ((buf (or (get-buffer buffer-or-name)
@@ -849,6 +863,11 @@ count from `point-min' (respects narrowing)."
   (declare (cl:ignore _pixelwise))
   (window-height window))
 
+(cl:defun recenter (&optional _arg)
+  "Bring-up stub for ELisp `recenter'."
+  (declare (cl:ignore _arg))
+  nil)
+
 (cl:defun forward-comment (count &optional limit)
   "Bring-up subset of ELisp `forward-comment'.
 
@@ -875,11 +894,105 @@ This is currently just enough for pp.el: skip whitespace and `;` line comments."
                              (let ((c (at pos)))
                                (and c (not (char= c #\Newline)))))
                   do (incf pos))
-            (when (and (< pos stop) (char= (at pos) #\Newline))
+           (when (and (< pos stop) (char= (at pos) #\Newline))
               (incf pos)))
            (t (return))))))
     (goto-char pos)
     nil))
+
+(cl:defun parse-partial-sexp (from to &optional targetdepth stopbefore oldstate commentstop)
+  "Bring-up subset of the C primitive `parse-partial-sexp'.
+
+This implementation is intentionally minimal and syntax-table-ignorant: it
+tracks parentheses, strings, and `;` line comments for Emacs Lisp-like syntax.
+
+It also moves point to where the scan stopped (like the C primitive)."
+  (declare (cl:ignore targetdepth stopbefore))
+  (unless (and (integerp from) (integerp to))
+    (error "ELISP:PARSE-PARTIAL-SEXP expected integer region, got: ~S..~S" from to))
+  (let* ((txt (elisp-buffer-text *current-buffer*))
+         (limit (max 1 (min to (point-max))))
+         (pos (max 1 (min from limit)))
+         (depth 0)
+         (instring nil)
+         (incomment nil)
+         (quoted nil)
+         (mindepth 0)
+         (comstr-start nil)
+         (stack nil))
+    (when (consp oldstate)
+      (setf depth (or (nth 0 oldstate) 0)
+            instring (nth 3 oldstate)
+            incomment (nth 4 oldstate)
+            quoted (nth 5 oldstate)
+            mindepth depth
+            comstr-start (nth 8 oldstate)
+            stack (nth 9 oldstate)))
+    (labels ((at (p)
+               (and (<= 1 p) (<= p (point-max))
+                    (char txt (1- p))))
+             (push-paren (p)
+               (setf stack (append stack (list p)))
+               (incf depth))
+             (pop-paren ()
+               (when (> depth 0)
+                 (decf depth))
+               (when (consp stack)
+                 (setf stack (butlast stack 1)))))
+      (loop while (< pos limit) do
+        (let ((ch (at pos)))
+          (when (null ch)
+            (return))
+          (cond
+           ((and incomment (char= ch #\Newline))
+            (setf incomment nil comstr-start nil quoted nil)
+            (incf pos))
+           (incomment
+            (incf pos))
+           (instring
+            (cond
+             ((char= ch #\\)
+              (incf pos 2))
+             ((char= ch #\")
+              (setf instring nil comstr-start nil quoted nil)
+              (incf pos))
+             (t
+              (incf pos))))
+           (t
+            (setf quoted (char= ch #\'))
+            (cond
+             ((char= ch #\;)
+              (when commentstop
+                (setf incomment t comstr-start pos)
+                (return))
+              (setf incomment t comstr-start pos)
+              (incf pos))
+             ((char= ch #\")
+              (setf instring t comstr-start pos)
+              (incf pos))
+             ((char= ch #\()
+              (push-paren pos)
+              (incf pos))
+             ((char= ch #\))
+              (pop-paren)
+              (setf mindepth (min mindepth depth))
+              (incf pos))
+             (t
+              (incf pos))))))))
+      ;; Like the C primitive, update point to where we stopped scanning.
+      (goto-char pos)
+      (let* ((prevlevelstart (car (last stack))))
+        (list depth
+              prevlevelstart
+              nil
+              (and instring t)
+              (and incomment t)
+              (and quoted t)
+              mindepth
+              nil
+              comstr-start
+              stack
+              nil))))
 
 (cl:defun goto-char (pos)
   "Bring-up subset of ELisp `goto-char'.
@@ -948,6 +1061,20 @@ Emacs clamps positions outside the buffer to the nearest valid position."
      ((>= n 0) (- n moved))
      (t (+ n moved)))))
 
+(cl:defun vertical-motion (count &optional _window _curcol _end-of-window)
+  "Bring-up subset of the C primitive `vertical-motion'."
+  (declare (cl:ignore _window _curcol _end-of-window))
+  (let ((n (prefix-numeric-value (or count 0))))
+    (cond
+     ((= n 0)
+      (beginning-of-line)
+      0)
+     (t
+      (let ((ret (forward-line n)))
+        (if (>= n 0)
+            (- n ret)
+            (- ret n)))))))
+
 (cl:defun line-end-position (&optional n)
   "Bring-up subset of ELisp `line-end-position'."
   (let ((n (or n 1)))
@@ -978,6 +1105,10 @@ Emacs clamps positions outside the buffer to the nearest valid position."
             (+ nl 2)
             (point-min))))))
 
+(cl:defun pos-bol ()
+  "Bring-up subset of the C primitive `pos-bol'."
+  (line-beginning-position))
+
 (cl:defun beginning-of-line (&optional n)
   "Bring-up subset of ELisp `beginning-of-line'."
   (let ((n (or n 1)))
@@ -1004,6 +1135,36 @@ Emacs clamps positions outside the buffer to the nearest valid position."
     (unless (integerp n)
       (error "ELISP:BACKWARD-CHAR bad arg: ~S" n))
     (forward-char (- n))))
+
+(cl:defun %word-char-p (code)
+  (and (integerp code)
+       (let ((ch (code-char code)))
+         (and ch (or (alphanumericp ch) (char= ch #\_))))))
+
+(cl:defun forward-word (&optional n)
+  "Bring-up subset of the C primitive `forward-word'."
+  (let ((n (or n 1)))
+    (unless (integerp n)
+      (error "ELISP:FORWARD-WORD bad arg: ~S" n))
+    (cond
+     ((= n 0) nil)
+     ((> n 0)
+      (dotimes (_ n)
+        (loop while (and (not (eobp)) (not (%word-char-p (char-after))))
+              do (forward-char 1))
+        (loop while (and (not (eobp)) (%word-char-p (char-after)))
+              do (forward-char 1))))
+     (t
+      (dotimes (_ (- n))
+        (loop while (and (not (bobp)) (not (%word-char-p (char-before))))
+              do (backward-char 1))
+        (loop while (and (not (bobp)) (%word-char-p (char-before)))
+              do (backward-char 1))))))
+  nil)
+
+(cl:defun backward-word (&optional n)
+  "Bring-up subset of the C primitive `backward-word'."
+  (forward-word (- (or n 1))))
 
 (cl:defun back-to-indentation ()
   "Bring-up subset of ELisp `back-to-indentation'."
@@ -2378,6 +2539,21 @@ for upstream ERT's `ert--make-xrefs-region'."
   "Bring-up subset of ELisp `selected-frame' (single-frame)."
   *selected-frame*)
 
+(cl:defun frame-list (&optional _terminal)
+  "Bring-up subset of the C primitive `frame-list' (single-frame)."
+  (declare (cl:ignore _terminal))
+  (list (selected-frame)))
+
+(cl:defun make-frame (&optional _parameters)
+  "Bring-up stub for the C primitive `make-frame' (TTY single-frame)."
+  (declare (cl:ignore _parameters))
+  (selected-frame))
+
+(cl:defun frame-char-width (&optional _frame)
+  "Bring-up stub for the C primitive `frame-char-width'."
+  (declare (cl:ignore _frame))
+  1)
+
 (cl:defun frame-live-p (frame)
   "Bring-up subset of ELisp `frame-live-p' (single-frame)."
   (and (elisp-frame-p frame) (eq frame *single-frame*)))
@@ -2586,6 +2762,11 @@ for upstream ERT's `ert--make-xrefs-region'."
   "Bring-up subset of ELisp `switch-to-buffer' (single-window)."
   (declare (cl:ignore _norecord _force-same-window))
   (pop-to-buffer buffer-or-name))
+
+(cl:defun switch-to-buffer-other-window (buffer-or-name &optional _norecord)
+  "Bring-up stub for ELisp `switch-to-buffer-other-window' (no windows)."
+  (declare (cl:ignore _norecord))
+  (switch-to-buffer buffer-or-name))
 
 (cl:defun buffer-size (&optional buffer)
   "Bring-up subset of the C primitive `buffer-size'."

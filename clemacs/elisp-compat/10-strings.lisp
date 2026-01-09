@@ -7,6 +7,13 @@
    ((characterp ch) (string ch))
    (t (error "ELISP:CHAR-TO-STRING expects character code, got: ~S" ch))))
 
+(cl:defun encode-coding-string (string _coding-system &optional _nocopy _buffer)
+  "Bring-up stub for the C primitive `encode-coding-string'."
+  (declare (cl:ignore _coding-system _nocopy _buffer))
+  (unless (stringp string)
+    (error "ELISP:ENCODE-CODING-STRING expected string, got: ~S" string))
+  string)
+
 (cl:defun concat (&rest parts)
   "Stub for ELisp `concat'."
   ;; Minimal type-correctness: if all emitted character codes are ASCII, return a

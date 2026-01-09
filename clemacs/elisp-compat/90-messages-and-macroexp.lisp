@@ -1361,8 +1361,34 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
     (dolist (fn cur)
       (let ((v (apply #'funcall fn args)))
         (when v
-          (return v))))
+          (return-from run-hook-with-args-until-success v))))
     nil))
+
+(cl:defun run-hook-wrapped (hook wrap-function &rest args)
+  "Bring-up subset of the C primitive `run-hook-wrapped'."
+  (unless (symbolp hook)
+    (error "ELISP:RUN-HOOK-WRAPPED expected hook symbol, got: ~S" hook))
+  (let ((cur (if (cl:boundp hook) (symbol-value hook) nil)))
+    (when (null cur)
+      (return-from run-hook-wrapped nil))
+    (unless (listp cur)
+      (setf cur (list cur)))
+    (dolist (fn cur)
+      (when (functionp fn)
+        (let ((v (apply #'funcall wrap-function fn args)))
+          (when v
+            (return-from run-hook-wrapped v)))))
+    nil))
+
+(cl:defun byte-compile-warn (format-string &rest args)
+  "Bring-up stub for ELisp `byte-compile-warn'."
+  (apply #'message (concat (string-to-unibyte "byte-compile-warn: ") format-string) args)
+  nil)
+
+(cl:defun byte-compile-warning-enabled-p (&rest _args)
+  "Bring-up stub for ELisp `byte-compile-warning-enabled-p'."
+  (declare (cl:ignore _args))
+  nil)
 
 (cl:defun add-to-list (list-var element &optional append _compare-fn)
   "Bring-up subset of ELisp `add-to-list'."

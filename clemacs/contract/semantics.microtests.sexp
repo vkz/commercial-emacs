@@ -864,6 +864,81 @@
   :expected "7"
   :emacs :match)
 
+ (:name "buffers-bury-buffer-returns-nil"
+  :expr "(let ((b (get-buffer-create \"*BB*\"))) (switch-to-buffer b) (bury-buffer b))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "hooks-run-hook-wrapped-stops-on-non-nil"
+  :expr "(let ((h 'clemacs-test-hook) (x 0)) (set h (list (lambda () (setq x 1) nil) (lambda () (setq x 2) 'stop) (lambda () (setq x 3) nil))) (list (run-hook-wrapped h (lambda (f) (funcall f))) x))"
+  :expected "(stop 2)"
+  :emacs :match)
+
+ (:name "input-input-pending-p-nil"
+  :expr "(input-pending-p)"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "input-discard-input-nil"
+  :expr "(discard-input)"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "byte-compile-warn-returns-nil"
+  :expr "(byte-compile-warn \"x\")"
+  :expected "nil"
+  :emacs nil)
+
+ (:name "frames-frame-list-length-1"
+  :expr "(= (length (frame-list)) 1)"
+  :expected "t"
+  :emacs :match)
+
+ (:name "frames-frame-char-width-positive"
+  :expr "(and (integerp (frame-char-width)) (> (frame-char-width) 0))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "syntax-parse-partial-sexp-depth-zero"
+  :expr "(with-temp-buffer (insert \"(a (b))\") (car (parse-partial-sexp 1 (point-max))))"
+  :expected "0"
+  :emacs :match)
+
+ (:name "vars-special-variable-p-defvar"
+  :expr "(progn (defvar clemacs-svp 1) (special-variable-p 'clemacs-svp))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "files-file-relative-name-basic"
+  :expr "(file-relative-name \"/tmp/a\" \"/tmp/\")"
+  :expected "\"a\""
+  :emacs :match)
+
+ (:name "coding-encode-coding-string-identity"
+  :expr "(encode-coding-string \"abc\" 'raw-text)"
+  :expected "\"abc\""
+  :emacs :match)
+
+ (:name "buffers-forward-word-basic"
+  :expr "(with-temp-buffer (insert \"aa bb\") (goto-char 1) (forward-word 1) (point))"
+  :expected "3"
+  :emacs :match)
+
+ (:name "buffers-vertical-motion-zero-goes-to-bol"
+  :expr "(with-temp-buffer (insert \"ab\\ncd\") (goto-char 2) (vertical-motion 0) (point))"
+  :expected "1"
+  :emacs :match)
+
+ (:name "commands-command-remapping-nil"
+  :expr "(command-remapping 'foo)"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "buffers-kill-all-local-variables-clears-local"
+  :expr "(with-temp-buffer (setq clemacs-klv 1) (make-local-variable 'clemacs-klv) (setq clemacs-klv 2) (kill-all-local-variables) (local-variable-p 'clemacs-klv))"
+  :expected "nil"
+  :emacs :match)
+
  (:name "windows-minibuffer-selected-window-nil"
   :expr "(minibuffer-selected-window)"
   :expected "nil"

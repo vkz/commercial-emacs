@@ -31,6 +31,19 @@
   "Bring-up stub for ELisp `this-single-command-raw-keys'."
   (this-single-command-keys))
 
+(cl:defun input-pending-p ()
+  "Bring-up stub for the C primitive `input-pending-p'."
+  nil)
+
+(cl:defun discard-input ()
+  "Bring-up stub for the C primitive `discard-input'."
+  nil)
+
+(cl:defun command-remapping (_command &optional _position _keymaps)
+  "Bring-up stub for the C primitive `command-remapping'."
+  (declare (cl:ignore _command _position _keymaps))
+  nil)
+
 (cl:defun internal-event-symbol-parse-modifiers (type)
   "Bring-up stub for the primitive `internal-event-symbol-parse-modifiers'."
   (labels ((split (s)

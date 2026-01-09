@@ -51,6 +51,13 @@ For bring-up, we register the expander in two places:
 (cl:defun %pcase--dontcare-p (pat)
   (and (symbolp pat) (or (eq pat '_) (eq pat t) (eq pat 'pcase--dontcare))))
 
+(cl:defun pcase--trivial-upat-p (upat)
+  "Bring-up shim for upstream `pcase--trivial-upat-p'."
+  (and (symbolp upat)
+       (not (memq upat
+                  (let ((v (and (boundp 'pcase--dontcare-upats) (symbol-value 'pcase--dontcare-upats))))
+                    (if (listp v) v '(t _ pcase--dontcare)))))))
+
 (cl:defun %pcase--comma-form-p (x)
   (and (consp x) (symbolp (car x)) (string= (symbol-name (car x)) ",")))
 

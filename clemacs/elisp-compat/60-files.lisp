@@ -61,6 +61,23 @@ expanded file name string."
 
 (cl:defvar buffer-file-truename nil)
 
+(cl:defun file-symlink-p (filename)
+  "Bring-up subset of the C primitive `file-symlink-p'."
+  (unless (stringp filename)
+    (error "ELISP:FILE-SYMLINK-P expected string, got: ~S" filename))
+  #+sbcl
+  (handler-case
+      (let* ((path (%file-name->cl-string filename))
+             (st (sb-posix:lstat path))
+             (mode (sb-posix:stat-mode st)))
+        (if (sb-posix:s-islnk mode)
+            (string-to-unibyte (sb-posix:readlink path))
+            nil))
+    (sb-posix:syscall-error () nil)
+    (cl:error () nil))
+  #-sbcl
+  nil)
+
 (cl:defun file-name-quote (name &optional _top)
   "Bring-up stub for ELisp `file-name-quote'.
 
@@ -68,6 +85,33 @@ For now, return NAME unchanged.  clemacs does not yet implement file name
 handlers or Tramp-style remote file parsing."
   (declare (cl:ignore _top))
   name)
+
+(cl:defun file-relative-name (filename &optional directory)
+  "Bring-up subset of ELisp `file-relative-name'."
+  (unless (stringp filename)
+    (error "ELISP:FILE-RELATIVE-NAME expected string, got: ~S" filename))
+  (let* ((file (%file-name->cl-string filename))
+         (dir (cond
+               ((and directory (stringp directory)) (%file-name->cl-string directory))
+               ((and (boundp 'default-directory) (stringp (symbol-value 'default-directory)))
+                (%file-name->cl-string (symbol-value 'default-directory)))
+               (t nil))))
+    (cond
+     ((null dir) filename)
+     (t
+      (handler-case
+          (string-to-unibyte
+           (enough-namestring (pathname file)
+                              (uiop:ensure-directory-pathname (pathname dir))))
+        (cl:error () filename))))))
+
+(cl:defmacro with-connection-local-variables (&rest body)
+  "Bring-up stub for `with-connection-local-variables'."
+  `(progn ,@body))
+
+(cl:defun with-connection-local-variables-1 (body-fun)
+  "Bring-up stub for `with-connection-local-variables-1'."
+  (funcall body-fun))
 
 (cl:defun get-load-suffixes ()
   "Bring-up subset of ELisp `get-load-suffixes'.

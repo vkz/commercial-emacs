@@ -1136,6 +1136,36 @@ The \"default\" value is CL's global binding model."
        (t nil))))
   variable)
 
+(cl:defun kill-all-local-variables ()
+  "Bring-up subset of the C primitive `kill-all-local-variables'."
+  (unless (and (boundp '*current-buffer*) (elisp-buffer-p *current-buffer*))
+    (error "ELISP:KILL-ALL-LOCAL-VARIABLES requires a current buffer"))
+  (setf (elisp-buffer-locals *current-buffer*)
+        (make-hash-table :test 'eq))
+  nil)
+
+(defstruct elisp-process
+  (status 'run)
+  (plist nil))
+
+(cl:defun processp (object)
+  "Bring-up subset of ELisp `processp'."
+  (and (elisp-process-p object) t))
+
+(cl:defun process-status (process)
+  "Bring-up subset of the C primitive `process-status'."
+  (cond
+   ((null process) nil)
+   ((elisp-process-p process) (elisp-process-status process))
+   (t (error "ELISP:PROCESS-STATUS expected process, got: ~S" process))))
+
+(cl:defun process-plist (process)
+  "Bring-up subset of the C primitive `process-plist'."
+  (cond
+   ((null process) nil)
+   ((elisp-process-p process) (or (elisp-process-plist process) nil))
+   (t (error "ELISP:PROCESS-PLIST expected process, got: ~S" process))))
+
 (cl:defun default-value (symbol)
   "Stub for ELisp `default-value'."
   (let ((sym (%resolve-variable-alias symbol)))

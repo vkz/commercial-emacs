@@ -115,6 +115,22 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
      (t
       `(cl:defvar ,var ,init ,doc*)))))
 
+(cl:defun special-variable-p (symbol)
+  "Bring-up subset of the C primitive `special-variable-p'."
+  (unless (symbolp symbol)
+    (error "ELISP:SPECIAL-VARIABLE-P expected symbol, got: %S" symbol))
+  #+sbcl
+  (eq (nth-value 0 (sb-cltl2:variable-information symbol)) :special)
+  #-sbcl
+  nil)
+
+(cl:defun version-list-not-zero (lst)
+  "Bring-up subset of ELisp `version-list-not-zero'."
+  (let ((xs lst))
+    (cl:loop while (and xs (zerop (car xs))) do
+      (setf xs (cdr xs)))
+    (if xs (car xs) 0)))
+
 (cl:defmacro dolist (spec &body body)
   "Bring-up subset of ELisp `dolist'."
   (destructuring-bind (var list-form &optional result) spec
