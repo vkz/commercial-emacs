@@ -667,6 +667,23 @@ STREAM may be a buffer."
             (incf col 1))))
     col))
 
+(cl:defun move-to-column (column &optional force)
+  "Bring-up subset of ELisp `move-to-column'."
+  (declare (cl:ignore force))
+  (let ((col (max 0 (or column 0)))
+        (cur 0))
+    (beginning-of-line)
+    (loop while (and (< cur col) (not (eolp))) do
+      (let ((c (char-after)))
+        (cond
+         ((null c) (return))
+         ((= c (char-code #\Tab))
+          (incf cur (- tab-width (mod cur tab-width))))
+         (t
+          (incf cur 1))))
+      (forward-char 1)))
+  (current-column))
+
 (cl:defun string-width (string &optional _from _to _buffer)
   "Bring-up subset of ELisp `string-width'."
   (declare (cl:ignore _from _to _buffer))
@@ -1984,6 +2001,16 @@ for upstream ERT's `ert--make-xrefs-region'."
       (elisp-buffer (elisp-buffer-name buf))
       (null nil))))
 
+(cl:defun buffer-file-name (&optional buffer)
+  "Bring-up subset of the C primitive `buffer-file-name'."
+  (let ((buf (or buffer *current-buffer*)))
+    (cond
+     ((null buf) nil)
+     ((not (elisp-buffer-p buf))
+      (error "ELISP:BUFFER-FILE-NAME expected buffer, got: ~S" buf))
+     (t
+      (buffer-local-value 'buffer-file-name buf)))))
+
 (cl:defun buffer-modified-p (&optional buffer)
   "Bring-up subset of ELisp `buffer-modified-p'."
   (let ((buf (or buffer *current-buffer*)))
@@ -2017,6 +2044,30 @@ for upstream ERT's `ert--make-xrefs-region'."
 (cl:defvar *selected-frame* *single-frame*)
 
 (cl:defvar frame-internal-parameters nil)
+
+(cl:defvar *frame-parameters*
+  (cl:make-hash-table :test 'eq))
+
+(cl:defun %frame-parameters--key (frame)
+  (cond
+   ((null frame) (selected-frame))
+   ((framep frame) frame)
+   (t frame)))
+
+(cl:defun frame-parameter (frame parameter)
+  "Bring-up subset of the C primitive `frame-parameter' (single-frame)."
+  (let ((plist (gethash (%frame-parameters--key frame) *frame-parameters*)))
+    (plist-get plist parameter)))
+
+(cl:defun modify-frame-parameters (frame alist)
+  "Bring-up subset of ELisp `modify-frame-parameters' (single-frame)."
+  (let* ((key (%frame-parameters--key frame))
+         (plist (gethash key *frame-parameters*)))
+    (dolist (cell alist)
+      (when (consp cell)
+        (setf plist (plist-put plist (car cell) (cdr cell)))))
+    (setf (gethash key *frame-parameters*) plist))
+  nil)
 
 (cl:defvar *terminal-parameters*
   (cl:make-hash-table :test 'eq))
@@ -2133,6 +2184,15 @@ for upstream ERT's `ert--make-xrefs-region'."
 (cl:defun minibuffer-selected-window ()
   "Bring-up subset of ELisp `minibuffer-selected-window' (no minibuffer)."
   nil)
+
+(cl:defun minibuffer-window (&optional frame)
+  "Bring-up subset of ELisp `minibuffer-window' (single-window, no minibuffer)."
+  (declare (cl:ignore frame))
+  *single-window*)
+
+(cl:defun minibuffer-prompt-end ()
+  "Bring-up subset of ELisp `minibuffer-prompt-end' (no minibuffer)."
+  (point-min))
 
 (cl:defun window-minibuffer-p (&optional _window)
   "Bring-up subset of ELisp `window-minibuffer-p' (no minibuffer)."

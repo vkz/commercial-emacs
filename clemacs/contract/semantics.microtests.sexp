@@ -555,6 +555,26 @@
   :expected "nil"
   :emacs :match)
 
+ (:name "buffer-file-name-temp-buffer-nil"
+  :expr "(with-temp-buffer (buffer-file-name))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "directory-file-name-trims-trailing-slash"
+  :expr "(directory-file-name \"/tmp/\")"
+  :expected "\"/tmp\""
+  :emacs :match)
+
+ (:name "move-to-column-basic"
+  :expr "(with-temp-buffer (insert \"abcd\") (goto-char 1) (move-to-column 2) (point))"
+  :expected "3"
+  :emacs :match)
+
+ (:name "frame-parameter-window-system-nil"
+  :expr "(frame-parameter nil 'window-system)"
+  :expected "nil"
+  :emacs :match)
+
  (:name "hash-tables-puthash-basic"
   :expr "(let ((h (make-hash-table :test 'eq))) (puthash 'a 1 h) (gethash 'a h))"
   :expected "1"

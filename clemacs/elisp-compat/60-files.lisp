@@ -317,6 +317,18 @@ FEATURE as provided."
              (t (subseq s (1+ pos))))))
       (if is-unibyte (string-to-unibyte base) base))))
 
+(cl:defun directory-file-name (directory)
+  "Bring-up subset of ELisp `directory-file-name'."
+  (let* ((is-unibyte (unibyte-string-p directory))
+         (s (%file-name->cl-string directory))
+         (out s))
+    ;; Trim trailing directory separators, but keep "/" as-is.
+    (loop while (and (> (length out) 1)
+                     (let ((ch (char out (1- (length out)))))
+                       (or (char= ch #\/) (char= ch #\\))))
+          do (setf out (subseq out 0 (1- (length out)))))
+    (if is-unibyte (string-to-unibyte out) out)))
+
 (cl:defun file-truename (filename)
   "Bring-up subset of the C primitive `file-truename'."
   (let* ((s (%file-name->cl-string filename))
