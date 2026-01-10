@@ -15,6 +15,9 @@
 ;;
 ;; Policy:
 ;; - Prefer :emacs :match when we aim for Emacs-faithful semantics.
+;; - Note: :emacs :match comparisons are batched in a single Emacs process per
+;;   microtest run; keep exprs load/order independent and avoid relying on
+;;   persistent global state across entries.
 ;; - If clemacs intentionally diverges, set :emacs nil and document the decision
 ;;   in `plans/clemacs-compat.md` (dated) and keep :expected as the chosen
 ;;   clemacs behavior.
