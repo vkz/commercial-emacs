@@ -3,6 +3,7 @@ set -euo pipefail
 
 #MISE description="Run elisp-core gate; on failure, generate first-failure startup-check debug report"
 #USAGE flag "-h --help" help="Print help"
+#USAGE flag "--quiet" help="Suppress SBCL warning blocks in output (see CLEMACS_SUPPRESS_WARNING_BLOCKS)" default="false"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
 
 if [[ "${usage_help:-false}" == "true" ]]; then
@@ -14,6 +15,10 @@ project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
 cd "${project_root}"
 
 build_dir="${usage_build_dir}"
+
+if [[ "${usage_quiet:-false}" == "true" ]]; then
+  export CLEMACS_SUPPRESS_WARNING_BLOCKS=1
+fi
 
 set +e
 mise run clemacs:test:contract -- --level elisp-core --build-dir "${build_dir}"
