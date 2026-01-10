@@ -142,6 +142,8 @@ test-keymap-parse-macros
 # More keymap bring-up (subr-tests).
 subr-test-key-valid-p
 subr-test-define-prefix-command
+subr-test-local-key-binding
+subr-test-global-key-binding
 
 # pcase bring-up (pcase-tests).
 pcase-tests-base

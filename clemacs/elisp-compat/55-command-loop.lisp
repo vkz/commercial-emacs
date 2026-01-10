@@ -366,6 +366,16 @@ Outside the minibuffer, we return the last captured minibuffer input."
      ((and global (lookup-key global keys accept-default)))
      (t nil))))
 
+(cl:defun local-key-binding (keys &optional accept-default)
+  "Bring-up subset of ELisp `local-key-binding'."
+  (let ((local (current-local-map)))
+    (and local (lookup-key local keys accept-default))))
+
+(cl:defun global-key-binding (keys &optional accept-default)
+  "Bring-up subset of ELisp `global-key-binding'."
+  (let ((global (current-global-map)))
+    (and global (lookup-key global keys accept-default))))
+
 (cl:defun interactive-form (function)
   "Bring-up subset of ELisp `interactive-form'."
   (labels ((function-name-symbol (fn)

@@ -109,7 +109,7 @@ Done (2026-01-10)
 - Startup checkpoints: uncap `lisp/keymap.el` and raise `lisp/bindings.el` to max-forms=347 in `startup.check` and `startup.editor-core` (bisected at 348; see `build/clemacs/reports/bisect-lisp_bindings_el.md`).
 - Minibuffer input: switch `read-from-minibuffer` from `tty-prompt` to an editable `*Minibuf-0*` buffer (prompt-safe editing, local keymap), with noninteractive defaults and microtests.
 - Upstream ERT: promote `test-keymap-parse-macros` (kbd/key-parse cluster).
-- Blocker (next): `subr-test-{local,global}-key-binding` still fail because `(local-key-binding [menu-bar])` returns nil (repro: `CLEMACS_ERT_DEBUG=1 mise run clemacs:test:ert-upstream-one -- subr-test-local-key-binding`).
+- DONE (2026-01-10): implement `local-key-binding`/`global-key-binding`, ensure `emacs-lisp-mode` provides a `[menu-bar]` prefix keymap, and load enough of `lisp/help.el` for the `help-command` global binding; promoted `subr-test-{local,global}-key-binding`.
 
 1) TTY frame model completeness (`lisp/frame.el` is already uncapped)
    - Extend the minimal single-frame model and accessors like `frame-parameter`,
@@ -137,7 +137,7 @@ High priority (next ROI)
 - Autoload/function-designator robustness: make core helpers accept autoload markers and treat them as callable/inspectable where Emacs does (still high-fanout via `cl-generic`, `bytecomp`, and help/arglist paths).
 - Interactive command pipeline: now have `commandp`, `interactive-form`, `call-interactively`, and `prefix-arg`; next is command history + a minimal keyboard-macro surface (`read-key-sequence-vector`, `read-kbd-macro`, `execute-kbd-macro`) as required by more upstream key/command tests.
 - Minimal TTY frame/window/minibuffer shims: enough of `frame-parameter`, `minibuffer-window`, `minibuffer-prompt-end`, plus staples like `switch-to-buffer`, `buffer-file-name`, `move-to-column` (high fanout in editor-core startup).
-- Minibuffer/completion basics: now have an editable `read-from-minibuffer` backed by `*Minibuf-0*`; next is minibuffer history and tightening key-binding semantics (notably `[menu-bar]` / `local-key-binding`) to unlock more editor-core + upstream tests.
+- Minibuffer/completion basics: now have an editable `read-from-minibuffer` backed by `*Minibuf-0*`; next is minibuffer history and tightening key-binding semantics (notably deeper `[menu-bar]` keymap behavior beyond the prefix map) to unlock more editor-core + upstream tests.
 - Window/buffer motion basics: now have `window-point`/`window-height`/`window-start`/`window-end` + a single-window model; next is enough window-state APIs for `frame.el`/display paths and more accurate window-end/window-start semantics under scrolling.
 - Process/subprocess surface: now have a minimal `process-buffer`/`get-buffer-process`, `call-process-region` + `call-process`, and basic process plists/attrs (`set-process-plist`, `process-attributes`, `emacs-pid`); next is interactive processes (`make-process`/`start-process`), `delete-process`, and filter/sentinel plumbing.
 - Syntax/parse-state core: baseline `parse-partial-sexp` + `syntax-ppss` is in place, and `font-lock.el`/`jit-lock.el` caps are raised; next is addressing the missing primitives those loads expose.
@@ -161,7 +161,7 @@ Gate
 Next actions
 - Expand `clemacs/contract/ert-upstream.tests` monotonically (keep the suite green; use ERT promotions opportunistically when they unblock startup work).
 - Keep `clemacs/contract/ert-upstream.known-fail.tests` dated and explicit (XPASS is a gate failure).
-- Continue keyboard/keymap test promotions; next unlock is `[menu-bar]` keymap / `local-key-binding`/`global-key-binding` semantics (currently blocking `subr-test-{local,global}-key-binding`).
+- DONE (2026-01-10): `[menu-bar]` + `local-key-binding`/`global-key-binding` semantics; promoted `subr-test-{local,global}-key-binding`.
 
 ### Milestone B1-12: inventory closure for `startup.check`
 

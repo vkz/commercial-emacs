@@ -238,6 +238,15 @@ the current point (because it delegates to `parse-partial-sexp')."
   "Bring-up stub for ELisp `emacs-lisp-mode'."
   (setf major-mode 'emacs-lisp-mode)
   (set-syntax-table emacs-lisp-mode-syntax-table)
+  ;; Ensure the local keymap has a `[menu-bar]' prefix keymap so upstream ERT
+  ;; (subr-test-local-key-binding) can probe menu bindings without loading the
+  ;; full major mode machinery yet.
+  (let* ((menu-bar-submap (list 'keymap nil (make-elisp-keymap)))
+         (km (list 'keymap nil (make-elisp-keymap))))
+    (setf (gethash 'menu-bar (elisp-keymap-table (caddr km))) menu-bar-submap)
+    (cond
+     ((fboundp 'use-local-map) (use-local-map km))
+     (t (setf (cl:symbol-value 'local-map) km))))
   (lisp-mode-variables)
   nil)
 
