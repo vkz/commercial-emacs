@@ -88,7 +88,7 @@ Status is tracked in `build/clemacs/reports/progress.md`. As of 2026-01-10:
 - Startup manifests:
   - `clemacs/contract/startup.check.files`: entries=100, capped=71, nolimit=27, sum_maxforms=2767
   - `clemacs/contract/startup.editor-core.files`: entries=99, capped=71, nolimit=26, sum_maxforms=2767
-- Upstream ERT bring-up: must-pass=199, known-fail=0.
+- Upstream ERT bring-up: must-pass=201, known-fail=0.
 
 ## Next biggest unlocks (priority order)
 
