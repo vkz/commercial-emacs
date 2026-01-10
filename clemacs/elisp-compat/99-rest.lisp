@@ -1218,6 +1218,7 @@ The \"default\" value is CL's global binding model."
   (name nil)
   (status 'run)
   (buffer nil)
+  (mark nil)
   (plist nil)
   (command nil)
   (uiop-process nil)
@@ -1259,18 +1260,34 @@ The \"default\" value is CL's global binding model."
         (%process--note-output p)
         (cond
          ((functionp sentinel)
-          (ignore-errors (funcall sentinel p event)))
+          (if (bufferp buf)
+              (with-current-buffer buf
+                (ignore-errors (funcall sentinel p event)))
+              (ignore-errors (funcall sentinel p event))))
          ((bufferp buf)
           (with-current-buffer buf
-            (goto-char (point-max))
-            (let ((nm (elisp-process-name p)))
-              (insert (string #\Newline) "Process "
-                      (cond
-                       ((stringp nm) (%elisp-string->cl-string nm))
-                       ((symbolp nm) (symbol-name nm))
-                       (t "?"))
-                      " "
-                      event)))
+            (let* ((m (or (elisp-process-mark p)
+                          (let ((mm (make-marker)))
+                            (set-marker mm (point-max) buf)
+                            (setf (elisp-marker-insertion-type mm) t)
+                            (setf (elisp-process-mark p) mm)
+                            mm)))
+                   (insert-at (or (marker-position m) (point-max)))
+                   (ptm (make-marker)))
+              (set-marker ptm (point) buf)
+              (setf (elisp-marker-insertion-type ptm) nil)
+              (goto-char insert-at)
+              (let ((nm (elisp-process-name p)))
+                (insert (string #\Newline) "Process "
+                        (cond
+                         ((stringp nm) (%elisp-string->cl-string nm))
+                         ((symbolp nm) (symbol-name nm))
+                         (t "?"))
+                        " "
+                        event))
+              (set-marker m (point) buf)
+              (goto-char (marker-position ptm))
+              (set-marker ptm nil)))
           (%process--note-output p)))))
     p))
 
@@ -1298,15 +1315,55 @@ The \"default\" value is CL's global binding model."
       (let ((filter (elisp-process-filter p)))
         (cond
          ((functionp filter)
-          (ignore-errors (funcall filter p chunk)))
+          (let ((buf (elisp-process-buffer p)))
+            (if (bufferp buf)
+                (with-current-buffer buf
+                  (ignore-errors (funcall filter p chunk)))
+                (ignore-errors (funcall filter p chunk)))))
          (t
           (let ((buf (elisp-process-buffer p)))
             (when (bufferp buf)
               (with-current-buffer buf
-                (goto-char (point-max))
-                (insert chunk)))))))
+                (let* ((m (or (elisp-process-mark p)
+                              (let ((mm (make-marker)))
+                                (set-marker mm (point-max) buf)
+                                (setf (elisp-marker-insertion-type mm) t)
+                                (setf (elisp-process-mark p) mm)
+                                mm)))
+                       (insert-at (or (marker-position m) (point-max)))
+                       (pt (point)))
+                  (cond
+                   ((= pt insert-at)
+                    (goto-char insert-at)
+                    (insert chunk)
+                    (set-marker m (point) buf))
+                   (t
+                    (let ((ptm (make-marker)))
+                      (set-marker ptm pt buf)
+                      (setf (elisp-marker-insertion-type ptm) nil)
+                      (goto-char insert-at)
+                      (insert chunk)
+                      (set-marker m (point) buf)
+                      (goto-char (marker-position ptm))
+                      (set-marker ptm nil)))))))))))
       (%process--note-output p)))
   nil)
+
+(cl:defun process-mark (process)
+  "Bring-up subset of the C primitive `process-mark'."
+  (let ((p (%process--normalize process)))
+    (cond
+     ((null p) nil)
+     (t
+      (or (elisp-process-mark p)
+          (let ((buf (elisp-process-buffer p)))
+            (when (bufferp buf)
+              (with-current-buffer buf
+                (let ((m (make-marker)))
+                  (set-marker m (point-max) buf)
+                  (setf (elisp-marker-insertion-type m) t)
+                  (setf (elisp-process-mark p) m)
+                  m)))))))))
 
 (cl:defun %process--start-output-thread (process)
   #+sbcl
@@ -1513,9 +1570,16 @@ The \"default\" value is CL's global binding model."
                                            :output :stream
                                            :error-output :output
                                            :external-format :utf-8))
+           (mark (and (bufferp buf)
+                      (with-current-buffer buf
+                        (let ((m (make-marker)))
+                          (set-marker m (point-max) buf)
+                          (setf (elisp-marker-insertion-type m) t)
+                          m))))
            (p (make-elisp-process :name name
                                   :status 'run
                                   :buffer buf
+                                  :mark mark
                                   :plist nil
                                   :command argv
                                   :uiop-process proc-info

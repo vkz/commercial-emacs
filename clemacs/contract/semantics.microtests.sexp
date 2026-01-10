@@ -1229,6 +1229,11 @@
   :expected "\"hi\\nProcess p finished\\n\""
   :emacs :match)
 
+ (:name "process-mark-advances-with-output"
+  :expr "(with-temp-buffer (let ((p (start-process \"p\" (current-buffer) \"/bin/sh\" \"-c\" \"printf hi\"))) (catch 'done (dotimes (_ 200) (unless (process-live-p p) (throw 'done t)) (accept-process-output p 0.01))) (list (buffer-string) (marker-position (process-mark p)) (point-max))))"
+  :expected "(\"hi\\nProcess p finished\\n\" 23 23)"
+  :emacs :match)
+
  (:name "process-attributes-has-comm"
   :expr "(and (assq 'comm (process-attributes (emacs-pid))) t)"
   :expected "t"
