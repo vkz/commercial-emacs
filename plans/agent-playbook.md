@@ -74,6 +74,7 @@ Common patterns:
 
 - `SB-EXT:SYMBOL-PACKAGE-LOCKED-ERROR` when adding an ELisp compat definition that collides with CL (e.g. `string-trim`)
   - Add the symbol to `clemacs/package.lisp` `defpackage #:elisp` `:shadow`, and qualify host uses as `cl:...` (e.g. `cl:string-trim`) where needed.
+- When writing CL-level helpers in the `ELISP` package, qualify `cl:format` (since `format` is an ELisp function) and use `~%` or `(string #\Newline)` for newlines (CL does not treat `\"\\n\"` as a newline escape).
 - SBCL's `cl:dolist` expansion may insert `SB-EXT:TRULY-THE (member ...)` for literal lists, which breaks when the elements are themselves lists; prefer `ELISP::DOLIST` (shadowed in `clemacs/package.lisp`) for ELisp code and compat helpers.
 
 - CL string ops vs ELisp strings (common pitfall)
