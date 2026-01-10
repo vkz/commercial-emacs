@@ -90,6 +90,63 @@ Status is tracked in `build/clemacs/reports/progress.md`. As of 2026-01-10:
   - `clemacs/contract/startup.editor-core.files`: entries=99, capped=71, nolimit=26, sum_maxforms=2767
 - Upstream ERT bring-up: must-pass=201, known-fail=0.
 
+## Next iteration (priority: usable interactive clemacs)
+
+Goal: `mise run clemacs:tty:run` is a usable terminal editor (open/edit/save/quit, M-x),
+and common workflows don’t crash (errors are surfaced, not fatal).
+
+Top 10 next tasks (ROI ordered; all TODO)
+
+1) TTY startup manifest (editor slice)
+   - Add a dedicated TTY startup manifest (e.g. `clemacs/contract/startup.tty-editor.files`).
+   - Include only what is needed for interactive editing + M-x (keep it small; grow monotonically).
+   - Gate: `CLEMACS_TTY_STARTUP_LEVEL=tty-editor mise run clemacs:test:tty` stays green.
+
+2) Stop poisoning shipped keymaps in the TTY loop
+   - Make `clemacs-tty-setup` avoid overriding bindings in shipped `global-map`/`ctl-x-map`.
+   - Keep bring-up bindings only when using the fallback bring-up maps.
+   - Gate: with `CLEMACS_TTY_STARTUP_LEVEL=subr`, the current PTY test still passes; with
+     `CLEMACS_TTY_STARTUP_LEVEL=tty-editor`, `C-x C-s` runs `save-buffer` (not clemacs-only stubs).
+
+3) “Visit file” vertical slice: `find-file` (C-x C-f)
+   - Ensure `find-file` prompts via minibuffer and visits into the current buffer/window.
+   - Implement safe stubs for `normal-mode`/`hack-local-variables` if needed to avoid crashes.
+   - Gate: add/extend a PTY test that types `C-x C-f`, enters a path, edits, saves, quits.
+
+4) “Save file” vertical slice: `save-buffer` (C-x C-s)
+   - Ensure `buffer-file-name`/`default-directory` and write path semantics are Emacs-shaped enough.
+   - Prefer using shipped `save-buffer` path once the startup manifest is in place.
+   - Gate: `C-x C-s` works after visiting a file; buffer modified flag clears.
+
+5) M-x: `execute-extended-command` + completion
+   - Ensure M-x command selection works end-to-end: completing-read → commandp → call-interactively.
+   - Add command history plumbing so repeat M-x is stable (`command-history`, `extended-command-history`).
+   - Gate: PTY test can run `M-x save-buffers-kill-terminal` and exit cleanly.
+
+6) Minibuffer history (core UX)
+   - Implement `add-to-history` / `history-add-new-input` (and the minimal history variables) so
+     minibuffer prompts don’t regress or lose state.
+   - Bind M-p/M-n in the minibuffer local map for history navigation (minimal subset).
+   - Gate: PTY test demonstrates M-p recalls last minibuffer input.
+
+7) Keyboard macro surface (unblocks upstream key/command tests)
+   - Implement `read-key-sequence-vector`, `read-kbd-macro`, `execute-kbd-macro` (minimal).
+   - Gate: PTY test can define a tiny macro and replay it without crashing.
+
+8) Timing + yielding
+   - Implement `sit-for`/`sleep-for` (and tighten `input-pending-p` behavior) so libraries that
+     pace UI work don’t hard error under clemacs.
+   - Gate: load the TTY startup manifest without undefined-function warnings for these.
+
+9) Crash shield / error surfacing in the TTY loop
+   - Improve error handling so failures show a message in the echo area (and optionally log to a file),
+     while keeping the terminal in a sane state.
+   - Gate: a forced `(error ...)` during a command does not kill the session; it returns to the loop.
+
+10) Interactive subprocesses (next workflow unlock after M-x)
+   - Implement minimal `make-process`/`start-process` + `delete-process`, plus filter/sentinel plumbing.
+   - Gate: M-x `shell-command` (or a small dedicated smoke command) can run and show output.
+
 ## Next biggest unlocks (priority order)
 
 These are the next high-leverage targets because they remove high-fanout caps
