@@ -84,14 +84,14 @@ Quick try path (macOS)
 P0: Put clemacs in users' hands (alpha)
 - DONE (2026-01-10): Add a short tester quickstart (clone + `mise` + run command + how to report bugs), plus supported/unsupported feature list (`clemacs/TESTER-QUICKSTART.md`).
 - DONE (2026-01-10): Make `clemacs:emacs:run` default to `--startup-level tty-editor` and update `emacs --help` to list `tty-editor`.
-- TODO: Implement minimal `--batch` behavior (load startup manifest, run `--eval` forms, exit nonzero on error); document unsupported flags.
-- TODO: Implement minimal init loading and opt-outs (`-Q` and `-q` Emacs-shaped behavior, even if partial).
+- DONE (2026-01-10): Implement minimal `--batch` behavior (load startup manifest, run `--eval` forms, exit nonzero on error); document unsupported flags.
+- DONE (2026-01-10): Implement minimal init loading and opt-outs (`-Q` and `-q` Emacs-shaped behavior, even if partial).
 - DONE (2026-01-10): Add an "issue bundle" helper task (not Emacs' built-in bug reporter) that captures: `progress.md`, `first-failure.*`, `stamps/*`, plus a repro command line (`mise run clemacs:report:issue-bundle`).
 
 P1: Usable terminal editor UX (stability + core workflows)
-- TODO: Inventory the top interactive workflows that still crash (use `clemacs:test:tty` as the gate) and implement the missing primitives in clusters.
-- TODO: Decide and implement the minimal multi-window surface (split, other-window, delete-window) needed for common help/minibuffer workflows.
-- TODO: Implement an isearch/query-replace vertical slice (enough for real editing), or explicitly document it as missing for alpha.
+- DONE (2026-01-10): Inventory the top interactive workflows that still crash (use `clemacs:test:tty` as the gate) and implement the missing primitives in clusters.
+- DONE (2026-01-10): Decide and implement the minimal multi-window surface (split, other-window, delete-window) needed for common help/minibuffer workflows.
+- DONE (2026-01-10): Implement an isearch/query-replace vertical slice (enough for real editing), or explicitly document it as missing for alpha.
 
 P2: Load more shipped `lisp/` under clemacs (monotonic)
 - TODO: Keep growing `clemacs/contract/startup.{smoke,tty-editor,check,editor-core}.files` following pdump order; bisect early when checkpoints get unstable.

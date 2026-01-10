@@ -2311,6 +2311,128 @@ for upstream ERT's `ert--make-xrefs-region'."
         (goto-char (1+ idx))
         (point))))))
 
+(cl:defvar isearch-string nil)
+
+(cl:defun %clemacs--string-empty-p (s)
+  (and (stringp s) (cl:<= (length s) 0)))
+
+(cl:defun %clemacs--isearch-read (prompt)
+  (let ((s (read-from-minibuffer (string-to-unibyte prompt))))
+    (if (and (stringp s) (not (%clemacs--string-empty-p s)))
+        s
+        nil)))
+
+(cl:defun isearch-forward (&optional _regexp-p _no-recursive-edit)
+  "Bring-up isearch slice: prompt for a literal string and search forward.
+
+This is intentionally not a full incremental isearch implementation yet; it is
+enough to support core terminal editing workflows (C-s / C-r)."
+  (declare (cl:ignore _regexp-p _no-recursive-edit))
+  (let* ((reusep (and (boundp 'last-command) (eq last-command 'isearch-forward)
+                      (stringp isearch-string) (not (%clemacs--string-empty-p isearch-string))))
+         (needle (or (and reusep isearch-string)
+                     (%clemacs--isearch-read "I-search: "))))
+    (when (null needle)
+      (return-from isearch-forward nil))
+    (setf isearch-string needle)
+    (if (search-forward needle nil t)
+        t
+        (progn
+          (ding)
+          (ignore-errors (message "Failing I-search: %s" needle))
+          nil))))
+
+(cl:defun isearch-backward (&optional _regexp-p _no-recursive-edit)
+  "Bring-up isearch slice: prompt for a literal string and search backward."
+  (declare (cl:ignore _regexp-p _no-recursive-edit))
+  (let* ((reusep (and (boundp 'last-command) (eq last-command 'isearch-backward)
+                      (stringp isearch-string) (not (%clemacs--string-empty-p isearch-string))))
+         (needle (or (and reusep isearch-string)
+                     (%clemacs--isearch-read "I-search backward: "))))
+    (when (null needle)
+      (return-from isearch-backward nil))
+    (setf isearch-string needle)
+    (if (search-backward needle nil t 1)
+        t
+        (progn
+          (ding)
+          (ignore-errors (message "Failing I-search backward: %s" needle))
+          nil))))
+
+(cl:defun %clemacs--query-replace-confirm (from to)
+  (let ((prompt
+          (string-to-unibyte
+           (cl:format nil "Replace ~A with ~A? (y or n) "
+                      (%elisp-string->cl-string from)
+                      (%elisp-string->cl-string to)))))
+    (cond
+     ((and (boundp 'noninteractive) noninteractive) t)
+     (t
+      (let ((ans (read-from-minibuffer prompt)))
+        (and (stringp ans)
+             (not (%clemacs--string-empty-p ans))
+             (let ((ch (char (%elisp-string->cl-string ans) 0)))
+               (or (char= ch #\y) (char= ch #\Y)))))))))
+
+(cl:defun query-replace (from to &optional _delimited start end _backward _region-noncontiguous-p)
+  "Bring-up subset of ELisp `query-replace' (literal string, TTY-only prompts)."
+  (declare (cl:ignore _delimited _backward _region-noncontiguous-p))
+  (let* ((from (or from (%clemacs--isearch-read "Query replace: ")))
+         (to (or to (%clemacs--isearch-read
+                     (cl:format nil "Query replace ~A with: " (and from (%elisp-string->cl-string from))))))
+         (start (or start (point)))
+         (limit (or end (point-max))))
+    (when (or (null from) (null to))
+      (return-from query-replace 0))
+    (goto-char start)
+    (let ((count 0))
+      (loop while (and (< (point) limit)
+                       (search-forward from limit t))
+            do
+              (let* ((ms (match-beginning 0))
+                     (me (match-end 0)))
+                (when (and ms me)
+                  (goto-char ms)
+                  (if (%clemacs--query-replace-confirm from to)
+                      (progn
+                        (replace-match to nil t)
+                        (incf count)
+                        (setf limit (point-max)))
+                      (goto-char me)))))
+      (ignore-errors (message "Replaced %d occurrence%s" count (if (= count 1) "" "s")))
+      count)))
+
+(cl:defun replace-string (from to &optional delimited start end backward _region-noncontiguous-p)
+  "Bring-up subset of ELisp `replace-string' (literal string)."
+  (declare (cl:ignore delimited backward _region-noncontiguous-p))
+  (let* ((from (or from (%clemacs--isearch-read "Replace string: ")))
+         (to (or to (%clemacs--isearch-read
+                     (cl:format nil "Replace string ~A with: "
+                                (and from (%elisp-string->cl-string from))))))
+         (start (or start (point)))
+         (limit (or end (point-max))))
+    (when (or (null from) (null to))
+      (when (and (boundp 'noninteractive) noninteractive)
+        (error "ELISP:REPLACE-STRING noninteractive needs FROM and TO"))
+      (return-from replace-string 0))
+    (goto-char start)
+    (let ((count 0))
+      (loop while (and (< (point) limit)
+                       (search-forward from limit t))
+            do
+              (replace-match to nil t)
+              (incf count)
+              (setf limit (point-max)))
+      (ignore-errors (message "Replaced %d occurrence%s" count (if (= count 1) "" "s")))
+      count)))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Ensure these show up as commands in `M-x` completions.
+  (ignore-errors (function-put 'isearch-forward 'interactive-form '(interactive)))
+  (ignore-errors (function-put 'isearch-backward 'interactive-form '(interactive)))
+  (ignore-errors (function-put 'query-replace 'interactive-form '(interactive (list nil nil))))
+  (ignore-errors (function-put 'replace-string 'interactive-form '(interactive (list nil nil)))))
+
 (cl:defun isearch-search ()
   "Bring-up stub for `isearch-search'.
 
@@ -2585,6 +2707,7 @@ Interactive incremental search is not supported yet."
 (cl:defvar *minibuffer-window*
   (make-elisp-window :buffer nil
                      :start 1))
+(cl:defvar *windows* (list *single-window*))
 (cl:defvar *selected-window* *single-window*)
 (cl:defvar *single-frame* (make-elisp-frame :selected-window *single-window*))
 (cl:defvar *selected-frame* *single-frame*)
@@ -2715,7 +2838,8 @@ Interactive incremental search is not supported yet."
 (cl:defun frame-root-window (&optional frame)
   "Bring-up subset of the C primitive `frame-root-window' (single-frame)."
   (declare (cl:ignore frame))
-  *single-window*)
+  (or (and (consp *windows*) (car *windows*))
+      *single-window*))
 
 (cl:defun tty-top-frame (&optional frame)
   "Bring-up subset of ELisp `tty-top-frame' (single-frame)."
@@ -2752,8 +2876,21 @@ Interactive incremental search is not supported yet."
 (cl:defun window-live-p (window)
   "Bring-up subset of ELisp `window-live-p'."
   (and (elisp-window-p window)
-       (or (eq window *single-window*)
-           (eq window *minibuffer-window*))))
+       (or (eq window *minibuffer-window*)
+           (and (consp *windows*) (cl:member window *windows* :test #'eq) t))))
+
+(cl:defun window-list (&optional _frame minibuffer _start-window)
+  "Bring-up subset of ELisp `window-list'."
+  (declare (cl:ignore _frame _start-window))
+  (append (or *windows* nil)
+          (when minibuffer (list (minibuffer-window)))))
+
+(cl:defun one-window-p (&optional no-minibuffer _all-frames)
+  "Bring-up subset of ELisp `one-window-p'."
+  (declare (cl:ignore _all-frames))
+  (and (= (length (or *windows* nil)) 1)
+       (or (not no-minibuffer)
+           (not (active-minibuffer-window)))))
 
 (cl:defun window-buffer (&optional window)
   "Bring-up subset of ELisp `window-buffer'."
@@ -2822,6 +2959,22 @@ Interactive incremental search is not supported yet."
         (setf (elisp-window-start window) p*)
         p*))))
 
+(cl:defun window-vscroll (&optional window _pixels-p)
+  "Bring-up stub for the C primitive `window-vscroll' (TTY)."
+  (declare (cl:ignore _pixels-p))
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-VSCROLL expected live window, got: ~S" w))
+    0))
+
+(cl:defun set-window-vscroll (window vscroll &optional _pixels-p)
+  "Bring-up stub for the C primitive `set-window-vscroll' (TTY)."
+  (declare (cl:ignore vscroll _pixels-p))
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:SET-WINDOW-VSCROLL expected live window, got: ~S" w))
+    0))
+
 (cl:defun get-buffer-window (&optional buffer-or-name _frame)
   "Bring-up subset of ELisp `get-buffer-window' (single-window)."
   (declare (cl:ignore _frame))
@@ -2829,7 +2982,7 @@ Interactive incremental search is not supported yet."
                   (and buffer-or-name (error "ELISP:GET-BUFFER-WINDOW no such buffer: ~S"
                                              buffer-or-name))
                   (current-buffer)))
-         (wins (list *single-window* *minibuffer-window*)))
+         (wins (append (or *windows* nil) (list *minibuffer-window*))))
     (dolist (win wins nil)
       (when (and (window-live-p win) (eq (elisp-window-buffer win) buf))
         (return-from get-buffer-window win)))))
@@ -2925,11 +3078,16 @@ Interactive incremental search is not supported yet."
 
 (cl:defun exit-minibuffer ()
   "Bring-up subset of ELisp `exit-minibuffer' (TTY)."
-  (if (and (boundp '*clemacs-minibuffer-active-p*)
-           *clemacs-minibuffer-active-p*
-           (boundp '+clemacs-minibuffer-exit-tag+))
-      (cl:throw +clemacs-minibuffer-exit-tag+ (minibuffer-contents))
-      (error "ELISP:EXIT-MINIBUFFER not in minibuffer")))
+  (let ((in-minibuffer-p
+          (or (and (boundp '*clemacs-minibuffer-active-p*)
+                   *clemacs-minibuffer-active-p*)
+              (and (boundp '*clemacs-minibuffer-buffer*)
+                   (bufferp *clemacs-minibuffer-buffer*)
+                   (eq (current-buffer) *clemacs-minibuffer-buffer*)))))
+    (if (and in-minibuffer-p
+             (boundp '+clemacs-minibuffer-exit-tag+))
+        (cl:throw +clemacs-minibuffer-exit-tag+ (minibuffer-contents))
+        (error "ELISP:EXIT-MINIBUFFER not in minibuffer"))))
 
 (cl:defun select-window (window &optional _norecord)
   "Bring-up subset of ELisp `select-window'."
@@ -2943,34 +3101,163 @@ Interactive incremental search is not supported yet."
       (set-buffer buf)))
   window)
 
+(cl:defun set-window-buffer (window buffer-or-name &optional _keep-margins)
+  "Bring-up subset of the C primitive `set-window-buffer'."
+  (declare (cl:ignore _keep-margins))
+  (unless (window-live-p window)
+    (error "ELISP:SET-WINDOW-BUFFER expected live window, got: ~S" window))
+  (let ((buf (or (and buffer-or-name (get-buffer buffer-or-name))
+                 (and (stringp buffer-or-name) (get-buffer-create buffer-or-name))
+                 (and (bufferp buffer-or-name) buffer-or-name)
+                 (error "ELISP:SET-WINDOW-BUFFER invalid buffer: ~S" buffer-or-name))))
+    (setf (elisp-window-buffer window) buf
+          (elisp-window-start window) (with-current-buffer buf (point-min)))
+    (when (eq window (selected-window))
+      (set-buffer buf))
+    nil))
+
+(cl:defun split-window (&optional window _size _side _pixelwise)
+  "Bring-up subset of ELisp `split-window' (no layout; window list only)."
+  (declare (cl:ignore _size _side _pixelwise))
+  (let* ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:SPLIT-WINDOW expected live window, got: ~S" w))
+    (when (eq w (minibuffer-window))
+      (error "ELISP:SPLIT-WINDOW cannot split minibuffer window"))
+    (let* ((buf (window-buffer w))
+           (start (window-start w))
+           (new (make-elisp-window :buffer buf :start start))
+           (wins (or *windows* nil))
+           (pos (or (cl:position w wins :test #'eq) 0)))
+      (setf *windows*
+            (append (subseq wins 0 (min (1+ pos) (length wins)))
+                    (list new)
+                    (subseq wins (min (1+ pos) (length wins)))))
+      new)))
+
+(cl:defun split-window-below (&optional _size window-to-split)
+  "Bring-up subset of ELisp `split-window-below' (calls `split-window')."
+  (declare (cl:ignore _size))
+  (split-window (or window-to-split (selected-window)) nil 'below nil))
+
+(cl:defun split-window-right (&optional _size window-to-split)
+  "Bring-up subset of ELisp `split-window-right' (calls `split-window')."
+  (declare (cl:ignore _size))
+  (split-window (or window-to-split (selected-window)) nil 'right nil))
+
+(cl:defun delete-window (&optional window)
+  "Bring-up subset of ELisp `delete-window' (no layout; window list only)."
+  (let* ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:DELETE-WINDOW expected live window, got: ~S" w))
+    (when (eq w (minibuffer-window))
+      (error "ELISP:DELETE-WINDOW cannot delete minibuffer window"))
+    (let ((wins (or *windows* nil)))
+      (when (<= (length wins) 1)
+        (error "ELISP:DELETE-WINDOW cannot delete the sole window"))
+      (let* ((pos (cl:position w wins :test #'eq))
+             (wins* (cl:remove w wins :test #'eq)))
+        (setf *windows* wins*)
+        (when (eq w (selected-window))
+          (let* ((n (length wins*))
+                 (idx (if (and pos (>= pos n)) (max 0 (1- n)) (or pos 0))))
+            (select-window (nth idx wins*) 'norecord)))
+        nil))))
+
+(cl:defun delete-other-windows (&optional window)
+  "Bring-up subset of ELisp `delete-other-windows' (window list only)."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:DELETE-OTHER-WINDOWS expected live window, got: ~S" w))
+    (when (eq w (minibuffer-window))
+      (error "ELISP:DELETE-OTHER-WINDOWS cannot keep only the minibuffer window"))
+    (setf *windows* (list w))
+    (select-window w 'norecord)
+    nil))
+
+(cl:defun other-window (&optional count _all-frames _interactive)
+  "Bring-up subset of ELisp `other-window' (window list only)."
+  (declare (cl:ignore _all-frames _interactive))
+  (let* ((n (or (and (integerp count) count) 1))
+         (wins (or *windows* nil)))
+    (when (null wins)
+      (return-from other-window (selected-window)))
+    (let* ((pos (or (cl:position (selected-window) wins :test #'eq) 0))
+           (len (length wins))
+           (idx (mod (+ pos n) len))
+           (w (nth idx wins)))
+      (select-window w 'norecord))))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Ensure these show up as commands in `M-x` completions.
+  (ignore-errors (function-put 'split-window 'interactive-form '(interactive)))
+  (ignore-errors (function-put 'split-window-below 'interactive-form '(interactive)))
+  (ignore-errors (function-put 'split-window-right 'interactive-form '(interactive)))
+  (ignore-errors (function-put 'delete-window 'interactive-form '(interactive)))
+  (ignore-errors (function-put 'delete-other-windows 'interactive-form '(interactive)))
+  (ignore-errors (function-put 'other-window 'interactive-form '(interactive))))
+
 (cl:defun display-buffer (buffer-or-name &optional _action _frame)
-  "Bring-up subset of ELisp `display-buffer' (single-window)."
+  "Bring-up subset of ELisp `display-buffer' (TTY; minimal window list)."
   (declare (cl:ignore _action _frame))
   (let ((buf (or (get-buffer buffer-or-name)
                  (and (stringp buffer-or-name) (get-buffer-create buffer-or-name))
                  (error "ELISP:DISPLAY-BUFFER invalid buffer: ~S" buffer-or-name))))
-    (setf (elisp-window-buffer *single-window*) buf)
-    (setf (elisp-window-start *single-window*) (with-current-buffer buf (point-min)))
-    (when (eq (selected-window) *single-window*)
-      (set-buffer buf))
-    *single-window*))
+    (let* ((wins (or *windows* nil))
+           (target
+             (or (cl:find-if (lambda (w) (and (window-live-p w) (not (eq w (selected-window))))) wins)
+                 (when (or (null wins) (= (length wins) 1))
+                   (split-window (selected-window))))))
+      (unless (and target (window-live-p target))
+        (setf target (selected-window)))
+      (set-window-buffer target buf)
+      target)))
 
 (defstruct elisp-window-configuration
-  (current-buffer nil))
+  (windows nil)
+  (selected-index 0))
 
 (cl:defun current-window-configuration ()
   "Bring-up stub for ELisp `current-window-configuration'."
-  (make-elisp-window-configuration :current-buffer (window-buffer (selected-window))))
+  (let* ((wins (or *windows* nil))
+         (sel (selected-window))
+         (sel-idx (or (cl:position sel wins :test #'eq) 0))
+         (snap
+           (mapcar (lambda (w)
+                     (list (window-buffer w) (window-start w)))
+                   wins)))
+    (make-elisp-window-configuration :windows snap :selected-index sel-idx)))
 
 (cl:defun set-window-configuration (config)
   "Bring-up stub for ELisp `set-window-configuration'."
   (unless (elisp-window-configuration-p config)
     (error "ELISP:SET-WINDOW-CONFIGURATION expected window configuration, got: ~S" config))
-  (let ((buf (elisp-window-configuration-current-buffer config)))
-    (when buf
-      (setf (elisp-window-buffer *single-window*) buf)
-      (set-buffer buf)))
-  t)
+  (let* ((snap (or (elisp-window-configuration-windows config) nil))
+         (need (max 1 (length snap)))
+         (wins (or *windows* nil))
+         (seed (or (and (consp wins) (car wins)) *single-window*))
+         (seed-buf (elisp-window-buffer seed))
+         (seed-start (or (elisp-window-start seed) (point-min))))
+    (when (null wins)
+      (setf wins (list *single-window*)))
+    (loop while (< (length wins) need) do
+      (setf wins (append wins (list (make-elisp-window :buffer seed-buf :start seed-start)))))
+    (setf wins (subseq wins 0 need))
+    (setf *windows* wins)
+
+    ;; Apply buffers/starts.
+    (loop for w in wins
+          for cell in snap do
+            (destructuring-bind (buf start) cell
+              (when buf
+                (setf (elisp-window-buffer w) buf))
+              (when start
+                (setf (elisp-window-start w) start))))
+
+    (let* ((idx (or (elisp-window-configuration-selected-index config) 0))
+           (idx* (max 0 (min idx (1- (length wins))))))
+      (select-window (nth idx* wins) 'norecord))
+    t))
 
 (cl:defun pop-to-buffer (buffer-or-name &optional _action _norecord)
   "Bring-up stub for ELisp `pop-to-buffer'."
@@ -2985,14 +3272,18 @@ Interactive incremental search is not supported yet."
   (switch-to-buffer buffer-or-name))
 
 (cl:defun switch-to-buffer (buffer-or-name &optional _norecord _force-same-window)
-  "Bring-up subset of ELisp `switch-to-buffer' (single-window)."
+  "Bring-up subset of ELisp `switch-to-buffer'."
   (declare (cl:ignore _norecord _force-same-window))
-  (pop-to-buffer buffer-or-name))
+  (let ((w (selected-window)))
+    (set-window-buffer w buffer-or-name)
+    (window-buffer w)))
 
 (cl:defun switch-to-buffer-other-window (buffer-or-name &optional _norecord)
-  "Bring-up stub for ELisp `switch-to-buffer-other-window' (no windows)."
+  "Bring-up subset of ELisp `switch-to-buffer-other-window'."
   (declare (cl:ignore _norecord))
-  (switch-to-buffer buffer-or-name))
+  (let ((w (display-buffer buffer-or-name)))
+    (select-window w 'norecord)
+    (window-buffer w)))
 
 (cl:defun buffer-size (&optional buffer)
   "Bring-up subset of the C primitive `buffer-size'."

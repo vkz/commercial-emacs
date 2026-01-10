@@ -50,6 +50,7 @@
 (cl:defvar local-map nil)
 (cl:defvar help-form nil)
 (cl:defvar line-spacing nil)
+(cl:defvar auto-window-vscroll t)
 (cl:defvar xterm-mouse-mode nil)
 (cl:defvar minibuffer-default-prompt-format nil)
 (cl:defvar *clemacs-minibuffer-active-p* nil)

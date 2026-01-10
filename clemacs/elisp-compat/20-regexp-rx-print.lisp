@@ -314,6 +314,32 @@ This is used for ELisp `looking-at', which must not search forward past point."
               (setf (char out i) (%elisp-code->char (aref codes i))))
             out)))))
 
+(cl:defun regexp-opt (strings &optional paren)
+  "Bring-up subset of ELisp `regexp-opt'.
+
+Return a regexp that matches any string in STRINGS, quoting each element.
+When PAREN is non-nil, wrap the result in a non-capturing group \\(?:...\\)."
+  (unless (listp strings)
+    (error "ELISP:REGEXP-OPT expects list STRINGS, got: %S" strings))
+  (let ((parts nil))
+    (dolist (s strings)
+      (unless (stringp s)
+        (error "ELISP:REGEXP-OPT expected string element, got: %S" s))
+      (push (regexp-quote s) parts))
+    (let* ((parts (nreverse parts))
+           (sep (string-to-unibyte "\\|"))
+           (body
+             (cond
+              ((null parts) (string-to-unibyte ""))
+              (t
+               (let ((out (list (first parts))))
+                 (dolist (p (rest parts))
+                   (setf out (append out (list sep p))))
+                 (apply #'concat out))))))
+      (if paren
+          (concat (string-to-unibyte "\\(?:") body (string-to-unibyte "\\)"))
+          body))))
+
 (cl:defun %rx--regexp-quote (s)
   "Very small subset of Emacs's `regexp-quote'."
   (let ((s (%elisp-string->cl-string s)))

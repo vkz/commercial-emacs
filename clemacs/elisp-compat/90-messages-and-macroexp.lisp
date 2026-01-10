@@ -1,7 +1,10 @@
 (in-package #:elisp)
 
+(cl:defvar *clemacs-current-message* nil)
+
 (cl:defun message (format-string &rest args)
   (let ((s (apply #'format format-string args)))
+    (setf *clemacs-current-message* (and (stringp s) s))
     (let ((log-max
             (if (boundp 'message-log-max)
                 (symbol-value 'message-log-max)
@@ -30,6 +33,10 @@
                       (when (and (integerp idx) (<= 0 idx))
                         (delete-region (point-min) (+ idx 2)))))))))))
     s))
+
+(cl:defun current-message ()
+  "Bring-up subset of the C primitive `current-message'."
+  *clemacs-current-message*)
 
 (cl:defun minibuffer-message (format-string &rest args)
   "Bring-up subset of the C primitive `minibuffer-message'."

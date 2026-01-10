@@ -149,6 +149,38 @@ Runtime
   - Test breadcrumbs:
     - `clemacs/contract/semantics.microtests.sexp` (`keymaps-key-parse-m-p-esc-prefix`)
 
+- 2026-01-10: Reinstall clemacs `command-execute` after startup (TTY)
+  - Decision: for the clemacs TTY loop, reinstall `clemacs-command-execute` as
+    `command-execute` after loading the startup manifest.
+  - Rationale: upstream `lisp/` can redefine `command-execute` in ways that
+    assume Emacs' C command loop; clemacs needs stable updates to
+    `last-command`/`this-command` so key-repeat and minibuffer-driven flows
+    behave predictably (notably `C-s` repeat and `M-%` query-replace).
+  - Test breadcrumbs:
+    - `clemacs/contract/semantics.microtests.sexp` (`command-execute-updates-last-command`; `:emacs nil` since programmatic `command-execute` doesn't update these vars in Emacs)
+    - `clemacs:test:tty` (PTY-driven TTY edit/save/search/replace loop)
+
+- 2026-01-10: Minimal multi-window model (TTY; window list only)
+  - Decision: clemacs implements a minimal window surface (`split-window`,
+    `other-window`, `delete-window`, `delete-other-windows`, `display-buffer`)
+    as a simple list of live windows, without modeling Emacs' window tree or
+    layout/size constraints yet.
+  - Rationale: unblocks common help/minibuffer workflows that expect a second
+    window and basic window selection, without pulling in the full window
+    manager during bring-up.
+  - Test breadcrumbs: `clemacs/contract/semantics.microtests.sexp`
+    (`windows-split-other-delete-basic`).
+
+- 2026-01-10: Minimal isearch/query-replace slice (TTY; non-incremental)
+  - Decision: clemacs provides `isearch-forward`/`isearch-backward` as simple
+    minibuffer-prompted literal searches (not full incremental isearch yet).
+    `query-replace` is a literal-string loop; in `noninteractive` mode it
+    replaces all occurrences without prompting.
+  - Rationale: provides core "real editing" workflows early (search + replace)
+    while we iterate on the full incremental isearch UI/state machine later.
+  - Test breadcrumbs: `clemacs/contract/semantics.microtests.sexp`
+    (`query-replace-noninteractive-replaces-all`).
+
 ## Compiler/codegen notes (for later)
 
 These are constraints the eventual ELisp→CL compiler must preserve; if a new

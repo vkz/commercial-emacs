@@ -923,30 +923,48 @@ Defines a CLOS generic function, and (when BODY is provided) a default method."
         (%plist-put-preserve (symbol-plist symbol) prop value))
   value)
 
-(cl:defvar *elisp-function-properties* (cl:make-hash-table :test 'eq))
-
 (cl:defun function-put (function prop value)
-  "Bring-up subset of the C primitive `function-put'."
+  "Bring-up subset of the C primitive `function-put'.
+
+Emacs stores function properties on the function symbol's plist (shared with
+symbol properties).  clemacs follows that behavior so upstream `byte-run.el'
+aliases (e.g. `function-put' -> `put') remain compatible."
   (unless (symbolp function)
     (error "ELISP:FUNCTION-PUT expects a symbol, got: ~S" function))
   (unless (symbolp prop)
     (error "ELISP:FUNCTION-PUT expects a symbol property key, got: ~S" prop))
-  (let* ((plist (gethash function *elisp-function-properties*))
-         (plist* (%plist-put-preserve plist prop value)))
-    (setf (gethash function *elisp-function-properties*) plist*)
-    value))
+  (put function prop value))
 
-(cl:defun function-get (function prop &optional default)
-  "Bring-up subset of the C primitive `function-get'."
-  (unless (symbolp function)
-    (error "ELISP:FUNCTION-GET expects a symbol, got: ~S" function))
+(cl:defun function-get (f prop &optional autoload)
+  "Bring-up subset of the C primitive `function-get'.
+
+This matches the shape of Emacs's implementation in `lisp/subr.el`: follow
+function indirections while looking for PROP on the symbol plist.  When
+AUTOLOAD is non-nil and F is an autoload, attempt to load it."
+  (unless (symbolp f)
+    (error "ELISP:FUNCTION-GET expects a symbol, got: ~S" f))
   (unless (symbolp prop)
     (error "ELISP:FUNCTION-GET expects a symbol property key, got: ~S" prop))
-  (let ((plist (gethash function *elisp-function-properties*)))
-    (loop for (k v) on plist by #'cddr do
-      (when (eq k prop)
-        (return v))
-      finally (return default))))
+  (let ((val nil)
+        (cur f))
+    (loop
+      (when (not (symbolp cur))
+        (return val))
+      (setf val (get cur prop))
+      (when val
+        (return val))
+      (unless (fboundp cur)
+        (return nil))
+      (let ((fundef (symbol-function cur)))
+        (cond
+         ((and autoload (consp fundef) (eq (car fundef) 'autoload)
+               (or (not (eq autoload 'macro))
+                   (and (consp (cdr fundef)) (eq (cadr fundef) 'macro))))
+          (let ((loaded (autoload-do-load fundef cur (and (eq autoload 'macro) 'macro))))
+            (when (not (equal loaded fundef))
+              (setf fundef loaded))))
+         (t nil))
+        (setf cur fundef)))))
 
 (cl:defun getenv (var)
   "Bring-up subset of ELisp `getenv'."

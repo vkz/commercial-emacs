@@ -132,12 +132,15 @@ def run_pty(*, level, tty_path, data, expect_file_bytes):
 
     if expect_file_bytes is not None:
         if not os.path.exists(tty_path):
+            sys.stderr.write(buf.decode("utf-8", "replace"))
             raise SystemExit("tty test failed: output file not written")
 
         content = open(tty_path, "rb").read()
         if content != expect_file_bytes:
+            sys.stderr.write(buf.decode("utf-8", "replace"))
             sys.stderr.write("tty test unexpected file contents: %r\n" % (content,))
             raise SystemExit(1)
+    return bytes(buf)
 
 
 # 1) Bring-up gate (`subr`): minimal edit/save/quit with local keymap stubs.
@@ -175,6 +178,18 @@ try:
     data2 += b"\n"
     data2 += b"abX\nline2c"
     data2 += bytes([24, 19])  # C-x C-s (save-buffer)
+    # Search/replace slice: C-r / C-s and M-% query-replace.
+    data2 += bytes([18])  # C-r (isearch-backward)
+    data2 += b"line2\n"
+    data2 += bytes([19])  # C-s (isearch-forward)
+    data2 += b"c\n"
+    data2 += bytes([19])  # C-s again (repeat; may fail, should not crash)
+    data2 += bytes([27, 60])  # M-< (beginning-of-buffer)
+    data2 += bytes([27, 37])  # M-% (query-replace)
+    data2 += b"line2\n"
+    data2 += b"LINE2\n"
+    data2 += b"y\n"
+    data2 += bytes([24, 19])  # C-x C-s (save-buffer)
     # Minibuffer history: M-x save-buffer, then M-x M-p RET recalls it.
     data2 += bytes([27, ord("x")])  # M-x (ESC x)
     data2 += b"save-buffer\n"
@@ -191,10 +206,14 @@ try:
     # Crash shield gate: an unknown command error returns to the loop.
     data2 += bytes([27, ord("x")])  # M-x (ESC x)
     data2 += b"clemacs-definitely-not-a-command\n"
+    # Basic multi-window surface: split/other/delete.
+    data2 += bytes([24, 50])  # C-x 2 (split-window-below)
+    data2 += bytes([24, ord("o")])  # C-x o (other-window)
+    data2 += bytes([24, 48])  # C-x 0 (delete-window)
     data2 += bytes([27, ord("x")])  # M-x (ESC x)
     data2 += b"save-buffers-kill-terminal\n"
 
-    run_pty(
+    out2 = run_pty(
         level="tty-editor",
         tty_path="",
         data=bytes(data2),
@@ -202,7 +221,8 @@ try:
     )
     # `save-buffer` should have written OUTFILE.
     content = open(outfile2, "rb").read()
-    if content != b"abX\nline2c":
+    if content != b"abX\nLINE2c":
+        sys.stderr.write(out2.decode("utf-8", "replace"))
         sys.stderr.write("tty-editor unexpected file contents: %r\n" % (content,))
         raise SystemExit(1)
 finally:

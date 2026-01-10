@@ -7,6 +7,25 @@
 
 (defvar *tty-unread-bytes* nil)
 
+(defun %tty-trace-log-path ()
+  (let ((p (uiop:getenv "CLEMACS_TTY_TRACE_LOG")))
+    (and p (not (string= p "")) p)))
+
+(defun %tty-trace-log (fmt &rest args)
+  (let ((path (%tty-trace-log-path)))
+    (when path
+      (ignore-errors
+        (multiple-value-bind (sec min hour day month year)
+            (decode-universal-time (get-universal-time) 0)
+          (with-open-file (out path
+                               :direction :output
+                               :if-exists :append
+                               :if-does-not-exist :create)
+            (format out "~4,'0D-~2,'0D-~2,'0DT~2,'0D:~2,'0D:~2,'0DZ "
+                    year month day hour min sec)
+            (apply #'format out fmt args)
+            (terpri out)))))))
+
 (defun %tty-read-byte ()
   (if (consp *tty-unread-bytes*)
       (let ((b (car *tty-unread-bytes*)))
@@ -367,6 +386,13 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
                                    nil)))
                             (setf keys (elisp::read-key-sequence nil))
                             (setf cmd (elisp::key-binding keys t))
+                            (%tty-trace-log "keys=~S cmd=~S buf=~S pt=~S last=~S this=~S"
+                                            keys
+                                            cmd
+                                            (ignore-errors (elisp::buffer-name (elisp::current-buffer)))
+                                            (ignore-errors (elisp::point))
+                                            (ignore-errors elisp::last-command)
+                                            (ignore-errors elisp::this-command))
                             (if (and cmd (not (integerp cmd)) (not (elisp::keymapp cmd)))
                                 (elisp::command-execute cmd)
                                 (tty-write-string "\a")))))

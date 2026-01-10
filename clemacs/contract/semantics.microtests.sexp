@@ -188,6 +188,11 @@
   :emacs nil
   :notes "clemacs TTY currently represents Meta as an ESC prefix (esc-map).")
 
+ (:name "windows-split-other-delete-basic"
+  :expr "(progn (delete-other-windows) (split-window) (and (= (length (window-list)) 2) (progn (other-window 1) (window-live-p (selected-window))) (progn (delete-window) (= (length (window-list)) 1)) t))"
+  :expected "t"
+  :emacs nil)
+
  (:name "keymaps-bindings--define-key-defines-key"
   :expr "(let ((m (make-sparse-keymap))) (bindings--define-key m [load] 'foo) (eq (lookup-key m [load]) 'foo))"
   :expected "t"
@@ -217,6 +222,26 @@
   :expr "(get-text-property 0 'foo \"abc\")"
   :expected "nil"
   :emacs :match)
+
+ (:name "query-replace-noninteractive-replaces-all"
+  :expr "(with-temp-buffer (insert \"a a\") (goto-char (point-min)) (let ((noninteractive t)) (query-replace \"a\" \"b\" nil (point-min) (point-max))) (buffer-string))"
+  :expected "\"b b\""
+  :emacs nil)
+
+ (:name "interactive-form-query-replace-clemacs"
+  :expr "(interactive-form 'query-replace)"
+  :expected "(interactive (list nil nil))"
+  :emacs nil)
+
+ (:name "interactive-form-execute-kbd-macro-clemacs"
+  :expr "(interactive-form 'execute-kbd-macro)"
+  :expected "(interactive (list nil current-prefix-arg))"
+  :emacs nil)
+
+ (:name "commandp-execute-kbd-macro-clemacs"
+  :expr "(commandp 'execute-kbd-macro)"
+  :expected "t"
+  :emacs nil)
 
  (:name "text-props-get-text-property-string-propertize"
   :expr "(let ((s (propertize \"a\" 'foo 1))) (get-text-property 0 'foo s))"
@@ -1213,6 +1238,12 @@
   :expr "(event-apply-modifier ?a 'control 26 \"C-\")"
   :expected "1"
   :emacs :match)
+
+ (:name "command-execute-updates-last-command"
+  :expr "(progn (fset 'clemacs--cmd (lambda () 'ok)) (function-put 'clemacs--cmd 'interactive-form '(interactive)) (setq last-command nil this-command nil) (command-execute 'clemacs--cmd) (list last-command this-command))"
+  :expected "(clemacs--cmd clemacs--cmd)"
+  :emacs nil
+  :notes "In Emacs, `command-execute' does not necessarily update `last-command' / `this-command' when invoked programmatically outside the main command loop.  clemacs uses this behavior to keep TTY key-repeat semantics stable during bring-up (see plans/clemacs-compat.md).")
 
  (:name "call-process-region-cat-inserts"
   :expr "(with-temp-buffer (insert \"abc\") (call-process-region (point-min) (point-max) \"cat\" nil t) (buffer-string))"

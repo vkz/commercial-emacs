@@ -37,6 +37,13 @@ Outside the minibuffer, we return the last captured minibuffer input."
        (point-max))))
    (t (or *clemacs-last-minibuffer-contents* (string-to-unibyte "")))))
 
+(cl:defun minibuffer-contents-no-properties ()
+  "Bring-up subset of the C primitive `minibuffer-contents-no-properties' (TTY).
+
+For now, clemacs does not model minibuffer text properties distinctly, so this
+is equivalent to `minibuffer-contents'."
+  (minibuffer-contents))
+
 (cl:defun this-single-command-keys ()
   "Bring-up stub for ELisp `this-single-command-keys'."
   (or *clemacs-this-command-keys* (cl:make-array 0)))
@@ -133,6 +140,39 @@ Outside the minibuffer, we return the last captured minibuffer input."
   (unless nodisp
     (ignore-errors (redisplay)))
   (sleep-for seconds milliseconds))
+
+(cl:defstruct (clemacs-timer
+               (:constructor %make-clemacs-timer (id)))
+  "Internal clemacs timer token for `run-at-time' stubs."
+  (id 0 :type integer)
+  (canceled-p nil :type boolean))
+
+(cl:defvar *clemacs--next-timer-id* 0)
+
+(cl:defun timerp (object)
+  "Bring-up subset of ELisp `timerp'."
+  (typep object 'clemacs-timer))
+
+(cl:defun cancel-timer (timer)
+  "Bring-up subset of ELisp `cancel-timer'.
+
+clemacs does not execute async timers yet; this only marks TIMER as canceled."
+  (cond
+   ((null timer) nil)
+   ((timerp timer)
+    (setf (clemacs-timer-canceled-p timer) t)
+    nil)
+   (t
+    (error "ELISP:CANCEL-TIMER expected timer or nil, got: %S" timer))))
+
+(cl:defun run-at-time (time repeat function &rest args)
+  "Bring-up subset of ELisp `run-at-time'.
+
+Return an opaque timer token.  clemacs does not execute async timers yet, but
+callers (notably `execute-extended-command') expect this function to exist and
+return something cancelable."
+  (declare (cl:ignore time repeat function args))
+  (%make-clemacs-timer (incf *clemacs--next-timer-id*)))
 
 (cl:defun command-remapping (_command &optional _position _keymaps)
   "Bring-up stub for the C primitive `command-remapping'."
@@ -599,21 +639,32 @@ Outside the minibuffer, we return the last captured minibuffer input."
        (t
         (funcall command))))))
 
-(cl:defun command-execute (command &optional _record-flag _keys _special)
-  "Bring-up subset of ELisp `command-execute'."
+(cl:defun clemacs-command-execute (command &optional _record-flag _keys _special)
+  "Bring-up subset of ELisp `command-execute' used by the clemacs TTY loop."
   (declare (cl:ignore _record-flag _keys _special))
   (when (null command)
-    (return-from command-execute nil))
-  (setf last-command this-command)
-  (setf this-command command)
+    (return-from clemacs-command-execute nil))
   (let ((saved-prefix-arg prefix-arg))
-    ;; Emacs command loop behavior: `prefix-arg' is for the *next* command.
-    ;; Promote it to `current-prefix-arg' at dispatch, then clear it.
-    (setf prefix-arg nil)
-    (setf current-prefix-arg saved-prefix-arg)
-    (unwind-protect
-        (call-interactively command)
-      (setf current-prefix-arg nil))))
+     ;; Emacs command loop behavior: `prefix-arg' is for the *next* command.
+     ;; Promote it to `current-prefix-arg' at dispatch, then clear it.
+     (setf this-command command)
+     (setf prefix-arg nil)
+     (setf current-prefix-arg saved-prefix-arg)
+     (unwind-protect
+         (call-interactively command)
+       ;; After a command finishes, `last-command' should name the command that
+       ;; was just executed (even if the command invoked minibuffer reads that
+       ;; executed their own internal commands).
+      (setf current-prefix-arg nil)
+      (setf last-command command)
+      (setf this-command command))))
+
+(cl:defun command-execute (command &optional record-flag keys special)
+  "Compatibility wrapper for `command-execute' in clemacs.
+
+Upstream lisp/ may redefine `command-execute'.  The clemacs TTY loop reinstalls
+`clemacs-command-execute' at startup to keep command-loop semantics stable."
+  (clemacs-command-execute command record-flag keys special))
 
 (cl:defun read-event (&optional _prompt _inherit-input-method _seconds)
   "Bring-up subset of ELisp `read-event'.
@@ -932,7 +983,7 @@ intentionally small but Emacs-shaped enough for core completion/help paths."
                                      (cmd (key-binding keys t)))
                                 (cond
                                  ((and cmd (not (integerp cmd)) (not (keymapp cmd)))
-                                  (command-execute cmd))
+                                  (clemacs-command-execute cmd))
                                  (t (ding)))))))))))
             (setf *clemacs-last-minibuffer-contents* result)
             (when histvar
@@ -1119,9 +1170,18 @@ Only supports START as a string.  Ignores \";;\" comments to end of line."
                (cmd (key-binding keys t)))
           (cond
            ((and cmd (not (integerp cmd)) (not (keymapp cmd)))
-            (command-execute cmd))
+            (clemacs-command-execute cmd))
            (t (ding)))))))
     nil)
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Ensure this shows up as a command in `M-x` completions.
+  ;; Interactive call passes NIL for MACRO (so we prompt) and uses the current
+  ;; prefix arg for COUNT.
+  (ignore-errors
+    (function-put 'execute-kbd-macro
+                  'interactive-form
+                  '(interactive (list nil current-prefix-arg)))))
 
 (cl:defun negative-argument (&optional _arg)
   "Bring-up subset of ELisp `negative-argument'.
@@ -1342,5 +1402,51 @@ The first non-argument event is pushed back onto `unread-command-events'."
 
       ;; Default.
       (define-key global t 'clemacs-tty-self-insert-command))
+
+    ;; Even when running with shipped keymaps, we intentionally do not load the
+    ;; full upstream `isearch.el` / `window.el` yet (those are large and have
+    ;; many dependencies). Ensure the core "alpha UX" keybindings exist anyway
+    ;; by wiring them to the clemacs bring-up shims when missing.
+    (unless bringup-p
+      (labels ((ensure (map key def)
+                 (when (and map (keymapp map))
+                   (let ((v (ignore-errors (lookup-key map key nil))))
+                     ;; `lookup-key' can return an integer IDX to indicate a
+                     ;; partially-matched prefix.  Treat that as "missing" for
+                     ;; bring-up keybinding ensures.
+                     (when (or (null v) (integerp v))
+                       (define-key map key def))))))
+        ;; Search / replace.
+        (ensure global (vector 19) 'isearch-forward)   ; C-s
+        (ensure global (vector 18) 'isearch-backward)  ; C-r
+        (ensure global (vector 27 37) 'query-replace)  ; M-% (ESC %)
+
+        ;; Meta prefix: prefer an explicit `esc-map' keymap and keep it wired to
+        ;; the ESC prefix (27), so M- bindings work in a TTY stream.
+        (let* ((esc
+                 (cond
+                  ((and (boundp 'esc-map) (keymapp (symbol-value 'esc-map)))
+                   (symbol-value 'esc-map))
+                  (t
+                   (let ((m (make-sparse-keymap)))
+                     (set 'esc-map m)
+                     m)))))
+          (ensure global (vector 27) esc)               ; ESC prefix
+          (ensure esc (vector 37) 'query-replace)       ; %
+          (ensure esc (vector 120) 'execute-extended-command) ; x (M-x)
+          (when (fboundp 'beginning-of-buffer)
+            (ensure esc (vector 60) 'beginning-of-buffer)))   ; < (M-<)
+
+        ;; Window ops.
+        (ensure ctl-x (vector 50) 'split-window-below) ; C-x 2
+        (ensure ctl-x (vector 48) 'delete-window)      ; C-x 0
+        (ensure ctl-x (vector 111) 'other-window)))    ; C-x o
+
+    ;; `lisp/simple.el` and friends can redefine `command-execute`.  For clemacs'
+    ;; TTY bring-up, keep command dispatch semantics stable by reinstalling our
+    ;; shim.
+    (when (fboundp 'clemacs-command-execute)
+      (setf (cl:symbol-function 'command-execute)
+            (cl:symbol-function 'clemacs-command-execute)))
 
     t))
