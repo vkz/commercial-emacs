@@ -187,6 +187,7 @@ failure, a useful debug flag, a missing helper task):
 - Add exactly **one** new bullet to this playbook **or** add exactly **one** new
   helper task/subcommand. Keep it minimal and high-signal.
 - When writing multi-line `git commit -m` messages in zsh, use `$'...'` quoting so newlines are real newlines (not literal `\\n`), otherwise the repo hooks may flag line/word-length issues.
+- To view clemacs' `emacs --help`, run `build/clemacs/bin/emacs --help` (the `clemacs:emacs:run` task consumes `--help`).
 - If SBCL reports “unmatched close parenthesis” in a large `clemacs/elisp-compat/*.lisp`, isolate the suspect defun chunk and compare `(` vs `)` counts (quick Python one-liner) to locate the extra `)`.
 - If a runtime `UNBOUND-VARIABLE` points at an unexpected name (often a local var), `pprint` the raw defun as *read* (plain `sbcl` + `cl:read`) to catch misplaced parens that turned a would-be `labels` binding into an executed form.
 - If `with-current-buffer`/`save-current-buffer` behaves strangely, check for macro variable capture: compatibility macros must use `gensym`d locals (avoid plain names like `buf`), since dynamic binding can shadow user vars and silently break `set-buffer` targets.
