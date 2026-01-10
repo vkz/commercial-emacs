@@ -41,6 +41,8 @@ Related/background (useful when debating architecture, but not the day-to-day pl
 - `plans/emacl.md`: Option A ("emacl") alternative (C-hosted Emacs, embed SBCL).
 - `plans/cl.md`: earlier design discussion and rationale snapshots.
 
+You must update `plan.md` clearly marking every finished task as DONE.
+
 ## Golden acceptance criteria (while trimming / assimilating)
 
 After any trimming/refactor iteration:
