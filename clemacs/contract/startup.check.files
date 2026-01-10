@@ -76,7 +76,7 @@ lisp/international/charprop.el -
 # pdump: characters.
 lisp/international/characters.el 20
 
-# pdump: legacy encodings (temporarily skipped; see lisp.allowed-skip.files).
+# pdump: legacy encodings (intentionally skipped; UTF-8 only; see lisp.allowed-skip.files).
 lisp/international/cp51932.el 1
 lisp/international/eucjp-ms.el 1
 

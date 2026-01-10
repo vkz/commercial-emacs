@@ -25,6 +25,13 @@ Source of truth for "current status" remains:
 - 2026-01-09: implemented high-fanout bring-up shims driven by the elisp-core gate (minibuffer/completion basics, single-window primitives incl. `window-end`, backquote/pcase forward refs, basic file modes/permissions, simple process/call-process-region surface, and sexp/point/key helpers), plus microtests + compat notes to keep the contract green.
 - 2026-01-09: implemented a baseline `parse-partial-sexp` + `syntax-ppss` scanner (Emacs-shaped enough for indentation/isearch callers) and uncapped `lisp/emacs-lisp/syntax.el` in the clemacs startup manifests.
 
+## Plan hygiene (archived)
+
+- DONE (2026-01-10): Trimmed `plan.md` to keep the active TODO list short; P0/P1 alpha checklist stays archived here.
+- DONE (2026-01-10): Promoted the clemacs alpha try path by default (`clemacs:emacs:run` defaults + `emacs --help`), so testers don't need to discover flags manually.
+- DONE (2026-01-10): Defined and gated the "alpha UX" contract via `mise run clemacs:test:tty` (visit/edit/save, M-x, search/replace slice, basic window ops, crash shield).
+- DONE (2026-01-10): Autoload/function-designator robustness is "good enough for bring-up" (autoload markers, `funcall` resolution, `indirect-function` escape hatch for keymaps) with supporting microtests.
+
 ## Feedback-loop improvements (tooling) (archived)
 
 - DONE (2026-01-10): `clemacs:test:micro` supports `--name` / `CLEMACS_MICROTEST_NAME` to run one semantics microtest (or a small subset by substring).

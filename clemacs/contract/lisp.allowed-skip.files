@@ -8,6 +8,9 @@
 lisp/international/cp51932.el
 lisp/international/eucjp-ms.el
 
+# 2026-01-10: UTF-8-only is a hard constraint for clemacs; legacy encodings and
+# input-method catalogs (LEIM) must not gate bring-up/milestones.
+
 # 2026-01-08: Start bringing up nadvice under startup manifests (see
 # startup.*.files max-forms checkpoints); keep this list for intentionally
 # out-of-scope files only.

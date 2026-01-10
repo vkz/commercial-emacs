@@ -64,3 +64,17 @@ lisp/case-table.el 1
 lisp/international/mule-cmds.el 6
 lisp/international/charprop.el -
 lisp/international/characters.el 20
+
+# pdump: legacy encodings (intentionally skipped; UTF-8 only; see lisp.allowed-skip.files).
+lisp/international/cp51932.el 1
+lisp/international/eucjp-ms.el 1
+
+# pdump: composite, indent.
+lisp/composite.el 1
+lisp/indent.el -
+
+# pdump: cl-generic.
+lisp/emacs-lisp/cl-generic.el -
+
+# pdump: simple.
+lisp/simple.el -

@@ -671,6 +671,22 @@
   :emacs :match
   :notes "Emacs returns `t` when queried on an autoload placeholder; cl-generic calls this during method definition/defalias.")
 
+ (:name "indirect-function-follows-symbol-alias-chain"
+  :expr "(progn (defun clemacs--ifc () 7) (fset 'clemacs--ifb 'clemacs--ifc) (fset 'clemacs--ifa 'clemacs--ifb) (funcall (indirect-function 'clemacs--ifa)))"
+  :expected "7"
+  :emacs :match)
+
+ (:name "indirect-function-circular-noerror"
+  :expr "(progn (fset 'clemacs--ifca 'clemacs--ifcb) (fset 'clemacs--ifcb 'clemacs--ifca) (indirect-function 'clemacs--ifca t))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "indirect-function-keymap-returns-itself"
+  :expr "(let ((k (make-sparse-keymap))) (eq (indirect-function k) k))"
+  :expected "t"
+  :emacs nil
+  :notes "clemacs extension: some upstream callers scan bindings via `indirect-function` and pass concrete keymaps; treat keymaps as already-indirect during bring-up.")
+
  (:name "interactive-form-commandp-defun"
   :expr "(progn (defun clemacs--it0 () (interactive) 1) (list (interactive-form 'clemacs--it0) (commandp 'clemacs--it0)))"
   :expected "((interactive nil) t)"

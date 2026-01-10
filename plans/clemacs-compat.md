@@ -116,6 +116,15 @@ Runtime
   - Breadcrumbs:
     - Skip entry: `clemacs/contract/lisp.allowed-skip.files` (`lisp/leim/leim-list.el`)
 
+- 2026-01-10: UTF-8-only is a hard constraint (legacy encodings/LEIM are out of scope)
+  - Decision: clemacs is UTF-8 only. Legacy encodings and LEIM/input-method
+    catalogs are intentionally skipped/ignored and must not gate clemacs
+    bring-up or milestones.
+  - Rationale: “run shipped ELisp under the new engine” is the goal; deep
+    compatibility work for legacy encodings belongs upstream.
+  - Breadcrumbs:
+    - Skip entries: `clemacs/contract/lisp.allowed-skip.files` (legacy encodings + LEIM).
+
 - 2026-01-09: `completing-read` returns DEF in batch mode
   - Decision: when `noninteractive` is non-nil, clemacs `completing-read`
     returns the default (DEF) when provided (and errors when REQUIRE-MATCH is

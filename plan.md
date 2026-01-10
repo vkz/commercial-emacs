@@ -41,7 +41,8 @@ These are intentional and should be treated as invariants until the project dire
   - `lisp/x-dnd.el`, `lisp/pgtk-dnd.el`, and `test/lisp/x-dnd-tests.el`
 - Dynamic modules are removed.
 - Native compilation (libgccjit / `.eln`) is removed/disabled.
-- Internationalization beyond UTF-8 is out of scope (no locale/translation work planned for alpha).
+- UTF-8 only: internationalization beyond Unicode/UTF-8 is out of scope.
+  - Legacy encodings and input-method catalogs (LEIM) must not block clemacs bring-up; keep them skipped/ignored.
 
 Baseline acceptance criteria (C-hosted TTY Emacs)
 
@@ -81,30 +82,27 @@ Quick try path (macOS)
 
 ## Roadmap (TODO, priority order)
 
-P0: Put clemacs in users' hands (alpha)
-- DONE (2026-01-10): Add a short tester quickstart (clone + `mise` + run command + how to report bugs), plus supported/unsupported feature list (`clemacs/TESTER-QUICKSTART.md`).
-- DONE (2026-01-10): Make `clemacs:emacs:run` default to `--startup-level tty-editor` and update `emacs --help` to list `tty-editor`.
-- DONE (2026-01-10): Implement minimal `--batch` behavior (load startup manifest, run `--eval` forms, exit nonzero on error); document unsupported flags.
-- DONE (2026-01-10): Implement minimal init loading and opt-outs (`-Q` and `-q` Emacs-shaped behavior, even if partial).
-- DONE (2026-01-10): Add an "issue bundle" helper task (not Emacs' built-in bug reporter) that captures: `progress.md`, `first-failure.*`, `stamps/*`, plus a repro command line (`mise run clemacs:report:issue-bundle`).
-
-P1: Usable terminal editor UX (stability + core workflows)
-- DONE (2026-01-10): Inventory the top interactive workflows that still crash (use `clemacs:test:tty` as the gate) and implement the missing primitives in clusters.
-- DONE (2026-01-10): Decide and implement the minimal multi-window surface (split, other-window, delete-window) needed for common help/minibuffer workflows.
-- DONE (2026-01-10): Implement an isearch/query-replace vertical slice (enough for real editing), or explicitly document it as missing for alpha.
-- DONE (2026-01-10): Reduce TTY bring-up noise by predeclaring a small set of early global vars (`inhibit-point-motion-hooks`, `inhibit-file-name-handlers`, `inhibit-file-name-operation`, `isearch-*`, etc.) and making `clemacs:tty:run` prefer a saved SBCL core + muffle style warnings.
+P0/P1: clemacs alpha + usable TTY editor slice
+- DONE (2026-01-10): See `plans/plan-archive-2026-01-10.md` for the full shipped alpha checklist and details.
 
 P2: Load more shipped `lisp/` under clemacs (monotonic)
 - DONE (2026-01-10): Add the checked-in autoloads snapshot `lisp/ldefs-boot.el` to `clemacs/contract/startup.smoke.files` and bisect/raise its stable checkpoint to 198 forms.
 - DONE (2026-01-10): Fix `lisp/ldefs-boot.el` checkpoint past form 199 by raising `lisp/keymap.el` (smoke) and adding a bring-up `defvar-keymap` macro; advance `startup.smoke.files` to include `jka-cmpr-hook` and `epa-hook`.
 - DONE (2026-01-10): Advance `startup.smoke.files` to include `mule-cmds`, `charprop`, and `characters` (pdump order; monotonic growth).
 - TODO: Keep growing `clemacs/contract/startup.{smoke,tty-editor,check,editor-core}.files` following pdump order; bisect early when checkpoints get unstable.
-- TODO: Improve autoload/function designator robustness (high-fanout for help/arglist, `cl-generic`, and bytecomp callers).
 
 P3: Upstream ERT bring-up (coverage as a guardrail)
 - DONE (2026-01-10): Expand `clemacs/contract/ert-upstream.tests` with a cl-lib cluster (gensym + numeric predicates + helpers), backed by compat fixes and microtests; keep the suite green.
 - TODO: Grow `clemacs/contract/ert-upstream.tests` monotonically, prioritizing suites that overlap P1/P2.
 - TODO: When something must be skipped, record it in `clemacs/contract/ert-upstream.known-fail.tests` with a dated reason (XPASS is a gate failure).
+
+### Top TODOs (keep short)
+
+- TODO: Raise startup manifests in pdump order, skipping legacy encodings/LEIM (UTF-8 only); gate with `mise run clemacs:test:contract -- --level check`.
+- TODO: Use inventory deltas for `startup.check` to implement missing primitives in clusters (help buffers, file-name helpers, process stubs), leaving breadcrumbs (microtests + compat notes) in the same patch.
+- TODO: Promote more upstream ERT tests that overlap the new startup surface; keep must-pass monotonic and known-fail dated/explicit (XPASS is a gate failure).
+- TODO: Keep `clemacs/contract/lisp.allowed-skip.files` strictly “out-of-scope only” (no skipping to get green).
+- TODO: Keep the PTY editor gate (`mise run clemacs:test:tty`) representative of the promised alpha UX, extending it only when the corresponding shipped ELisp is loaded.
 
 ### Milestone B1-8: load the shipped `lisp/` tree under clemacs
 
@@ -164,10 +162,6 @@ Deliverables
 
 Acceptance criteria (promotion gate)
 - Promote clemacs to `mise run run` only when `run:clemacs` is a usable terminal editor and exits cleanly.
-
-Next actions (TODO)
-- TODO: Promote the alpha try path by default (`clemacs:emacs:run` defaults and `--help` text), so testers do not need to discover flags manually.
-- TODO: Define and gate the "alpha UX" contract (what must work in TTY: file visit/save, kill/yank, isearch, basic window ops) and keep it covered by `clemacs:test:tty`.
 
 ## Archive
 
