@@ -83,7 +83,7 @@ and a few batch-friendly flags."
       0)
      ((%arg-has-p args "--help")
       (format stream "usage: emacs [--batch] [--version] [--no-elisp]~%")
-      (format stream "             [--startup-level {smoke|check|editor-core}] [--startup-limit N] [file]~%")
+      (format stream "             [--startup-level {smoke|check|tty-editor|editor-core}] [--startup-limit N] [file]~%")
       (finish-output stream)
       0)
      (batch

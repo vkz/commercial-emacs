@@ -76,17 +76,17 @@ Decision checkpoint (must ask the user)
 Source of truth: `build/clemacs/reports/progress.md` (regenerate via `mise run clemacs:report:progress`).
 
 Quick try path (macOS)
-- `mise run clemacs:emacs:run -- --startup-level tty-editor path/to/file`
+- `mise run clemacs:emacs:run -- path/to/file`
 - Gate: `mise run clemacs:verify`
 
 ## Roadmap (TODO, priority order)
 
 P0: Put clemacs in users' hands (alpha)
-- TODO: Add a short tester quickstart (clone + `mise` + run command + how to report bugs), plus supported/unsupported feature list.
-- TODO: Make `clemacs:emacs:run` default to `--startup-level tty-editor` and update `emacs --help` to list `tty-editor`.
+- DONE (2026-01-10): Add a short tester quickstart (clone + `mise` + run command + how to report bugs), plus supported/unsupported feature list (`clemacs/TESTER-QUICKSTART.md`).
+- DONE (2026-01-10): Make `clemacs:emacs:run` default to `--startup-level tty-editor` and update `emacs --help` to list `tty-editor`.
 - TODO: Implement minimal `--batch` behavior (load startup manifest, run `--eval` forms, exit nonzero on error); document unsupported flags.
 - TODO: Implement minimal init loading and opt-outs (`-Q` and `-q` Emacs-shaped behavior, even if partial).
-- TODO: Add an "issue bundle" helper task (not Emacs' built-in bug reporter) that captures: `progress.md`, `first-failure.*`, `stamps/*`, plus a repro command line.
+- DONE (2026-01-10): Add an "issue bundle" helper task (not Emacs' built-in bug reporter) that captures: `progress.md`, `first-failure.*`, `stamps/*`, plus a repro command line (`mise run clemacs:report:issue-bundle`).
 
 P1: Usable terminal editor UX (stability + core workflows)
 - TODO: Inventory the top interactive workflows that still crash (use `clemacs:test:tty` as the gate) and implement the missing primitives in clusters.

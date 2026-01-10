@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Create a clemacs issue bundle (progress + first-failure + stamps + repro) for bug reports"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--out <path>" help="Output .tar.gz path (default: build-dir/reports/issue-bundle-<timestamp>.tar.gz)"
+#USAGE flag "--repro <cmd>" help="Reproduction command line to include in the bundle"
+#USAGE arg "[args]" var=#true hide=#true
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+report_dir="${project_root}/${build_dir}/reports"
+tmp_dir="${project_root}/${build_dir}/tmp"
+stamp_dir="${project_root}/${build_dir}/stamps"
+mkdir -p "${report_dir}" "${tmp_dir}"
+
+out_path=""
+repro_cmd="${usage_repro:-}"
+repro_args=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      shift
+      ;;
+    --build-dir)
+      shift
+      shift
+      ;;
+    --build-dir=*)
+      shift
+      ;;
+    --out)
+      out_path="$2"
+      shift 2
+      ;;
+    --out=*)
+      out_path="${1#--out=}"
+      shift
+      ;;
+    --repro)
+      repro_cmd="$2"
+      shift 2
+      ;;
+    --repro=*)
+      repro_cmd="${1#--repro=}"
+      shift
+      ;;
+    *)
+      repro_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+now_utc="$(date -u '+%Y%m%dT%H%M%SZ')"
+git_rev="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+
+if [[ -z "${out_path}" ]]; then
+  out_path="${report_dir}/issue-bundle-${now_utc}.tar.gz"
+fi
+
+bundle_root="${tmp_dir}/issue-bundle.${now_utc}"
+rm -rf "${bundle_root}"
+mkdir -p "${bundle_root}/reports" "${bundle_root}/stamps" "${bundle_root}/tmp"
+
+mise run clemacs:report:progress -- --build-dir "${build_dir}" >/dev/null
+
+maybe_copy() {
+  local src="$1"
+  local dst="$2"
+  if [[ -f "${src}" ]]; then
+    mkdir -p "$(dirname "${dst}")"
+    cp -f "${src}" "${dst}"
+  fi
+}
+
+maybe_copy "${report_dir}/progress.md" "${bundle_root}/reports/progress.md"
+maybe_copy "${report_dir}/first-failure.md" "${bundle_root}/reports/first-failure.md"
+maybe_copy "${report_dir}/first-failure.json" "${bundle_root}/reports/first-failure.json"
+
+if compgen -G "${report_dir}/first-failure.*.md" >/dev/null; then
+  cp -f "${report_dir}"/first-failure.*.md "${bundle_root}/reports/"
+fi
+if compgen -G "${report_dir}/first-failure.*.json" >/dev/null; then
+  cp -f "${report_dir}"/first-failure.*.json "${bundle_root}/reports/"
+fi
+
+if compgen -G "${tmp_dir}/first-failure.*.log" >/dev/null; then
+  cp -f "${tmp_dir}"/first-failure.*.log "${bundle_root}/tmp/"
+fi
+if compgen -G "${tmp_dir}/load-debug.*.out" >/dev/null; then
+  cp -f "${tmp_dir}"/load-debug.*.out "${bundle_root}/tmp/"
+fi
+
+if [[ -d "${stamp_dir}" ]]; then
+  cp -f "${stamp_dir}"/* "${bundle_root}/stamps/" 2>/dev/null || true
+fi
+
+{
+  echo "generated_utc=${now_utc}"
+  echo "git=${git_rev}"
+  echo "build_dir=${build_dir}"
+} >"${bundle_root}/meta.txt"
+
+if [[ -z "${repro_cmd}" ]]; then
+  if [[ "${#repro_args[@]}" -gt 0 ]]; then
+    repro_cmd="$(printf '%q ' "${repro_args[@]}")"
+  fi
+fi
+
+{
+  echo "# Repro"
+  echo
+  if [[ -n "${repro_cmd}" ]]; then
+    echo "${repro_cmd}"
+  else
+    echo "(please fill in a repro command line)"
+  fi
+  echo
+  echo "# Suggested reporting flow"
+  echo
+  echo "1) Run: mise run clemacs:report:first-failure-startup-check-debug"
+  echo "2) Run: mise run clemacs:report:issue-bundle -- --repro '<cmd>'"
+  echo "3) Attach the issue bundle .tar.gz to your bug report"
+} >"${bundle_root}/repro.txt"
+
+tar -czf "${out_path}" -C "${bundle_root}" .
+cp -f "${out_path}" "${report_dir}/issue-bundle-latest.tar.gz"
+
+rm -rf "${bundle_root}"
+
+echo "[clemacs:report:issue-bundle] wrote ${out_path}"
+echo "[clemacs:report:issue-bundle] latest ${report_dir}/issue-bundle-latest.tar.gz"

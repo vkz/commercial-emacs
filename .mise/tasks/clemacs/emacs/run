@@ -56,8 +56,18 @@ fi
 
 export CLEMACS_SUBSTRATE_DYLIB="${bin_dir}/libemxsubstrate.dylib"
 
-if [[ "${#emacs_args[@]}" -eq 0 ]]; then
-  emacs_args=(--startup-level editor-core)
+has_startup_level=false
+for a in "${emacs_args[@]}"; do
+  case "${a}" in
+    --startup-level|--startup-level=*)
+      has_startup_level=true
+      break
+      ;;
+  esac
+done
+
+if [[ "${has_startup_level}" == "false" ]]; then
+  emacs_args=(--startup-level tty-editor "${emacs_args[@]}")
 fi
 
 exec "${emacs_bin}" "${emacs_args[@]}"
