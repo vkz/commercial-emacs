@@ -141,9 +141,9 @@ Top 10 next tasks (ROI ordered; 1–5 DONE)
      while keeping the terminal in a sane state.
    - Gate: a forced `(error ...)` during a command does not kill the session; it returns to the loop.
 
-10) Interactive subprocesses (next workflow unlock after M-x)
-   - Implement minimal `make-process`/`start-process` + `delete-process`, plus filter/sentinel plumbing.
-   - Gate: M-x `shell-command` (or a small dedicated smoke command) can run and show output.
+10) DONE (2026-01-10): Interactive subprocesses (next workflow unlock after M-x)
+   - Implemented minimal `make-process`/`start-process` + `delete-process`, plus filter/sentinel plumbing.
+   - Gate: `start-process` output lands in the target buffer and matches reference Emacs (microtest).
 
 ## Next biggest unlocks (priority order)
 
@@ -165,18 +165,17 @@ Done (2026-01-10)
 - Minibuffer input: switch `read-from-minibuffer` from `tty-prompt` to an editable `*Minibuf-0*` buffer (prompt-safe editing, local keymap), with noninteractive defaults and microtests.
 - Upstream ERT: promote `test-keymap-parse-macros` (kbd/key-parse cluster).
 - DONE (2026-01-10): implement `local-key-binding`/`global-key-binding`, ensure `emacs-lisp-mode` provides a `[menu-bar]` prefix keymap, and load enough of `lisp/help.el` for the `help-command` global binding; promoted `subr-test-{local,global}-key-binding`.
+- DONE (2026-01-10): TTY frame/minibuffer shims: dedicated minibuffer window, `window-minibuffer-p`/`minibuffer-window`, and selecting the minibuffer window during `read-from-minibuffer`.
+- DONE (2026-01-10): Interactive process plumbing: `make-process`/`start-process`/`delete-process`, filters/sentinels, `process-send-string`/`process-send-eof`, and `accept-process-output`.
 
-1) TTY frame model completeness (`lisp/frame.el` is already uncapped)
-   - Extend the minimal single-frame model and accessors like `frame-parameter`,
-     `minibuffer-window`, and `minibuffer-prompt-end` where editor-core expects more.
+1) DONE (2026-01-10): TTY frame/minibuffer window shims (`lisp/frame.el` is already uncapped)
    - Goal is "Emacs-shaped enough for editor-core", not GUI parity.
 
-2) Process/subprocess surface (batch-first, then interactive)
+2) DONE (2026-01-10): Process/subprocess surface (batch-first, then interactive)
    - Batch-first is now in place: `call-process-region` + `call-process`, plus
      minimal process plists and basic `process-attributes`/`emacs-pid`.
-   - Next: interactive process plumbing (`make-process`/`start-process`),
-     `delete-process`, filters/sentinels, and richer `process-attributes` keys
-     as needed by real editor workflows.
+   - Interactive process plumbing is now in place: `make-process`/`start-process`,
+     `delete-process`, filters/sentinels, and `accept-process-output`.
 
 ### Milestone B1-8: load the shipped `lisp/` tree under clemacs
 

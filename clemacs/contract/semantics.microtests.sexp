@@ -1019,6 +1019,16 @@
   :expected "nil"
   :emacs :match)
 
+ (:name "windows-active-minibuffer-window-nil"
+  :expr "(active-minibuffer-window)"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "windows-window-minibuffer-p-minibuffer-window-t"
+  :expr "(window-minibuffer-p (minibuffer-window))"
+  :expected "t"
+  :emacs :match)
+
  (:name "windows-minibufferp-nil"
   :expr "(minibufferp)"
   :expected "nil"
@@ -1212,6 +1222,11 @@
  (:name "call-process-echo-inserts"
   :expr "(with-temp-buffer (list (call-process \"/usr/bin/printf\" nil t nil \"hi\") (buffer-string)))"
   :expected "(0 \"hi\")"
+  :emacs :match)
+
+ (:name "start-process-sh-printf-inserts"
+  :expr "(with-temp-buffer (let ((p (start-process \"p\" (current-buffer) \"/bin/sh\" \"-c\" \"printf hi\"))) (catch 'done (dotimes (_ 200) (unless (process-live-p p) (throw 'done t)) (accept-process-output p 0.01))) (buffer-string)))"
+  :expected "\"hi\\nProcess p finished\\n\""
   :emacs :match)
 
  (:name "process-attributes-has-comm"

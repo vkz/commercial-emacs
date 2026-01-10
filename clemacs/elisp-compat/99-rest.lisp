@@ -1215,9 +1215,118 @@ The \"default\" value is CL's global binding model."
     `(progn ,@(nreverse forms))))
 
 (defstruct elisp-process
+  (name nil)
   (status 'run)
   (buffer nil)
-  (plist nil))
+  (plist nil)
+  (command nil)
+  (uiop-process nil)
+  (input-stream nil)
+  (output-stream nil)
+  (filter nil)
+  (sentinel nil)
+  (exit-status nil)
+  (output-generation 0))
+
+(cl:defun %process--normalize (process)
+  (cond
+   ((null process) nil)
+   ((elisp-process-p process) process)
+   (t (error "ELISP:PROCESS expected process, got: ~S" process))))
+
+(cl:defun %process--note-output (process)
+  (when (elisp-process-p process)
+    (cl:incf (elisp-process-output-generation process)))
+  nil)
+
+(cl:defun %process--ensure-exit-status (process)
+  (let ((p (%process--normalize process)))
+    (when (and p
+               (eq (elisp-process-status p) 'run)
+               (elisp-process-uiop-process p)
+               (not (uiop:process-alive-p (elisp-process-uiop-process p))))
+      (let* ((proc-info (elisp-process-uiop-process p))
+             (code (uiop:wait-process proc-info))
+             (event
+               (if (and (integerp code) (zerop code))
+                   (cl:format nil "finished~%")
+                   (cl:format nil "exited abnormally with code ~D~%"
+                              (or code -1))))
+             (sentinel (elisp-process-sentinel p))
+             (buf (elisp-process-buffer p)))
+        (setf (elisp-process-exit-status p) code
+              (elisp-process-status p) 'exit)
+        (%process--note-output p)
+        (cond
+         ((functionp sentinel)
+          (ignore-errors (funcall sentinel p event)))
+         ((bufferp buf)
+          (with-current-buffer buf
+            (goto-char (point-max))
+            (let ((nm (elisp-process-name p)))
+              (insert (string #\Newline) "Process "
+                      (cond
+                       ((stringp nm) (%elisp-string->cl-string nm))
+                       ((symbolp nm) (symbol-name nm))
+                       (t "?"))
+                      " "
+                      event)))
+          (%process--note-output p)))))
+    p))
+
+(cl:defun %process--resolve-buffer (buffer-or-name)
+  (cond
+   ((null buffer-or-name) nil)
+   ((or (eq buffer-or-name t) (and (integerp buffer-or-name) (zerop buffer-or-name)))
+    (current-buffer))
+   ((stringp buffer-or-name) (get-buffer-create buffer-or-name))
+   ((bufferp buffer-or-name) buffer-or-name)
+   (t
+    (error "ELISP:PROCESS buffer expected nil/t/0/string/buffer, got: ~S"
+           buffer-or-name))))
+
+(cl:defun %process--arg->string (a)
+  (cond
+   ((null a) nil)
+   ((stringp a) (%elisp-string->cl-string a))
+   ((symbolp a) (symbol-name a))
+   (t (prin1-to-string a))))
+
+(cl:defun %process--dispatch-output (process chunk)
+  (let ((p (%process--normalize process)))
+    (when (and p chunk (> (length chunk) 0))
+      (let ((filter (elisp-process-filter p)))
+        (cond
+         ((functionp filter)
+          (ignore-errors (funcall filter p chunk)))
+         (t
+          (let ((buf (elisp-process-buffer p)))
+            (when (bufferp buf)
+              (with-current-buffer buf
+                (goto-char (point-max))
+                (insert chunk)))))))
+      (%process--note-output p)))
+  nil)
+
+(cl:defun %process--start-output-thread (process)
+  #+sbcl
+  (let* ((p (%process--normalize process))
+         (stream (and p (elisp-process-output-stream p))))
+    (when (and p stream)
+      (sb-thread:make-thread
+       (lambda ()
+         (unwind-protect
+             (let ((buf (cl:make-string 4096)))
+               (loop
+                 (let ((n (cl:read-sequence buf stream)))
+                   (when (<= n 0)
+                     (return))
+                   (%process--dispatch-output p (cl:subseq buf 0 n)))))
+           (ignore-errors (cl:close stream))
+           (ignore-errors (%process--ensure-exit-status p))))
+       :name (cl:format nil "clemacs-process-output[~A]" (or (elisp-process-name p) "?")))))
+  #-sbcl
+  nil)
 
 (cl:defun processp (object)
   "Bring-up subset of ELisp `processp'."
@@ -1227,8 +1336,42 @@ The \"default\" value is CL's global binding model."
   "Bring-up subset of the C primitive `process-status'."
   (cond
    ((null process) nil)
-   ((elisp-process-p process) (elisp-process-status process))
+   ((elisp-process-p process)
+    (%process--ensure-exit-status process)
+    (elisp-process-status process))
    (t (error "ELISP:PROCESS-STATUS expected process, got: ~S" process))))
+
+(cl:defun process-live-p (process)
+  "Bring-up subset of ELisp `process-live-p'."
+  (let ((p (%process--normalize process)))
+    (and p
+         (eq (process-status p) 'run)
+         t)))
+
+(cl:defun process-name (process)
+  "Bring-up subset of the C primitive `process-name'."
+  (let ((p (%process--normalize process)))
+    (cond
+     ((null p) nil)
+     (t (or (elisp-process-name p) (string-to-unibyte ""))))))
+
+(cl:defun process-id (process)
+  "Bring-up subset of the C primitive `process-id'."
+  (let ((p (%process--normalize process)))
+    (cond
+     ((null p) nil)
+     ((integerp (elisp-process-exit-status p)) nil)
+     ((and (elisp-process-uiop-process p)
+           (uiop:process-alive-p (elisp-process-uiop-process p)))
+      (uiop:process-info-pid (elisp-process-uiop-process p)))
+     (t nil))))
+
+(cl:defun process-command (process)
+  "Bring-up subset of the C primitive `process-command'."
+  (let ((p (%process--normalize process)))
+    (cond
+     ((null p) nil)
+     (t (or (elisp-process-command p) nil)))))
 
 (cl:defun process-plist (process)
   "Bring-up subset of the C primitive `process-plist'."
@@ -1254,6 +1397,147 @@ The \"default\" value is CL's global binding model."
    (t (error "ELISP:PROCESS-BUFFER expected process, got: ~S" process))))
 
 (cl:defvar *elisp-process-list* nil)
+
+(cl:defun process-list ()
+  "Bring-up subset of the C primitive `process-list'."
+  (remove nil
+          (mapcar (lambda (p) (and (elisp-process-p p) p))
+                  *elisp-process-list*)))
+
+(cl:defun process-filter (process)
+  "Bring-up subset of the C primitive `process-filter'."
+  (let ((p (%process--normalize process)))
+    (and p (elisp-process-filter p))))
+
+(cl:defun set-process-filter (process filter)
+  "Bring-up subset of the C primitive `set-process-filter'."
+  (let ((p (%process--normalize process)))
+    (unless (and p (or (null filter) (functionp filter)))
+      (error "ELISP:SET-PROCESS-FILTER expected process + function/nil, got: ~S ~S"
+             process filter))
+    (setf (elisp-process-filter p) filter)
+    filter))
+
+(cl:defun process-sentinel (process)
+  "Bring-up subset of the C primitive `process-sentinel'."
+  (let ((p (%process--normalize process)))
+    (and p (elisp-process-sentinel p))))
+
+(cl:defun set-process-sentinel (process sentinel)
+  "Bring-up subset of the C primitive `set-process-sentinel'."
+  (let ((p (%process--normalize process)))
+    (unless (and p (or (null sentinel) (functionp sentinel)))
+      (error "ELISP:SET-PROCESS-SENTINEL expected process + function/nil, got: ~S ~S"
+             process sentinel))
+    (setf (elisp-process-sentinel p) sentinel)
+    sentinel))
+
+(cl:defun process-send-string (process string)
+  "Bring-up subset of the C primitive `process-send-string'."
+  (let ((p (%process--normalize process)))
+    (unless (and p (stringp string))
+      (error "ELISP:PROCESS-SEND-STRING expected process + string, got: ~S ~S"
+             process string))
+    (let ((s (elisp-process-input-stream p)))
+      (unless (streamp s)
+        (error "ELISP:PROCESS-SEND-STRING no input stream for process: ~S" p))
+      (write-string (%elisp-string->cl-string string) s)
+      (finish-output s))
+    nil))
+
+(cl:defun process-send-eof (&optional process)
+  "Bring-up subset of the C primitive `process-send-eof'."
+  (let ((p (%process--normalize process)))
+    (when p
+      (let ((s (elisp-process-input-stream p)))
+        (when (streamp s)
+          (ignore-errors (cl:close s))
+          (setf (elisp-process-input-stream p) nil))))
+    nil))
+
+(cl:defun accept-process-output (&optional process seconds millis _just-this-one)
+  "Bring-up subset of the C primitive `accept-process-output'."
+  (declare (cl:ignore _just-this-one))
+  (let* ((p (%process--normalize process))
+         (timeout (+
+                   (or (and seconds (%num seconds)) 0)
+                   (if (and millis (integerp millis))
+                       (/ millis 1000.0)
+                       0)))
+         (deadline (+ (get-internal-real-time)
+                      (truncate (* internal-time-units-per-second timeout))))
+         (start-gen (and p (elisp-process-output-generation p))))
+    (loop
+      (when (null p)
+        (when (>= (get-internal-real-time) deadline)
+          (return-from accept-process-output nil))
+        (cl:sleep 0.01)
+        (return-from accept-process-output nil))
+      (process-status p)
+      (when (not (process-live-p p))
+        (return-from accept-process-output t))
+      (when (and start-gen
+                 (/= start-gen (elisp-process-output-generation p)))
+        (return-from accept-process-output t))
+      (when (>= (get-internal-real-time) deadline)
+        (return-from accept-process-output nil))
+      (cl:sleep 0.01))))
+
+(cl:defun delete-process (process)
+  "Bring-up subset of the C primitive `delete-process'."
+  (let ((p (%process--normalize process)))
+    (when p
+      (let ((proc-info (elisp-process-uiop-process p)))
+        (when (and proc-info (uiop:process-alive-p proc-info))
+          (ignore-errors (uiop:terminate-process proc-info :urgent t))))
+      (ignore-errors (%process--ensure-exit-status p))
+      (setf *elisp-process-list* (delq p *elisp-process-list*)))
+    nil))
+
+(cl:defun make-process (&rest plist)
+  "Bring-up subset of the C primitive `make-process'."
+  (let* ((name (plist-get plist :name))
+         (_coding (plist-get plist :coding))
+         (_noquery (plist-get plist :noquery))
+         (buffer (plist-get plist :buffer))
+         (command (plist-get plist :command)))
+    (declare (cl:ignore _coding _noquery))
+    (unless (stringp name)
+      (error "ELISP:MAKE-PROCESS expected :name string, got: ~S" name))
+    (unless (and (listp command) (consp command))
+      (error "ELISP:MAKE-PROCESS expected :command non-empty list, got: ~S" command))
+    (let* ((argv (remove nil (mapcar #'%process--arg->string command)))
+           (buf (%process--resolve-buffer buffer))
+           (proc-info (uiop:launch-program argv
+                                           :input :stream
+                                           :output :stream
+                                           :error-output :output
+                                           :external-format :utf-8))
+           (p (make-elisp-process :name name
+                                  :status 'run
+                                  :buffer buf
+                                  :plist nil
+                                  :command argv
+                                  :uiop-process proc-info
+                                  :input-stream (uiop:process-info-input proc-info)
+                                  :output-stream (uiop:process-info-output proc-info)
+                                  :filter nil
+                                  :sentinel nil
+                                  :exit-status nil
+                                  :output-generation 0)))
+      (push p *elisp-process-list*)
+      (%process--start-output-thread p)
+      p)))
+
+(cl:defun start-process (name buffer program &rest program-args)
+  "Bring-up subset of the C primitive `start-process'."
+  (unless (stringp name)
+    (error "ELISP:START-PROCESS expected string NAME, got: ~S" name))
+  (unless (stringp program)
+    (error "ELISP:START-PROCESS expected string PROGRAM, got: ~S" program))
+  (make-process :name name
+                :buffer buffer
+                :command (cons program program-args)))
 
 (cl:defun get-buffer-process (&optional buffer-or-name)
   "Bring-up subset of ELisp `get-buffer-process'."

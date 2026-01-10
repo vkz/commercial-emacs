@@ -115,10 +115,12 @@
                  (dotimes (i (length v))
                    (when (> i 0) (write-char #\Space s))
                    (write-string (p1 (aref v i)) s))
-                 (write-char #\] s)))
+               (write-char #\] s)))
               (t
-               (elisp::%elisp-string->cl-string
-                (elisp:prin1-to-string v))))))
+               (let ((elisp::print-escape-newlines t)
+                     (elisp::print-escape-control-characters t))
+                 (elisp::%elisp-string->cl-string
+                  (elisp:prin1-to-string v)))))))
     (p1 value)))
 
 (defun %elisp-eval-1 (string)
