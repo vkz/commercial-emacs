@@ -188,6 +188,9 @@ try:
     data2 += bytes([27, ord("x")])  # M-x (ESC x)
     data2 += b"execute-kbd-macro\n"
     data2 += b"C-a C-e\n"
+    # Crash shield gate: an unknown command error returns to the loop.
+    data2 += bytes([27, ord("x")])  # M-x (ESC x)
+    data2 += b"clemacs-definitely-not-a-command\n"
     data2 += bytes([27, ord("x")])  # M-x (ESC x)
     data2 += b"save-buffers-kill-terminal\n"
 

@@ -51,6 +51,19 @@
 (defparameter +tty-elisp-event-up+ (cl:intern "UP" (find-package "ELISP")))
 (defparameter +tty-elisp-event-down+ (cl:intern "DOWN" (find-package "ELISP")))
 
+(defun %tty-echo-line ()
+  (handler-case
+      (let* ((buf (elisp::messages-buffer))
+             (txt (and (elisp::bufferp buf) (elisp::elisp-buffer-text buf))))
+        (when (and (stringp txt) (> (length txt) 0))
+          (let* ((end (length txt))
+                 (end (if (and (> end 0) (char= (aref txt (1- end)) #\Newline))
+                          (1- end)
+                          end))
+                 (nl (or (position #\Newline txt :end end :from-end t) -1)))
+            (subseq txt (1+ nl) end))))
+    (error () nil)))
+
 (defun %tty-read-event ()
   "Return a minimal Emacs-style event for the clemacs TTY loop.
 
@@ -151,7 +164,8 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
                         (let ((bn (elisp::buffer-name buf)))
                           (if bn (elisp::%elisp-string->cl-string bn) "<buffer>"))
                         "<buffer>")))
-      (setf (aref (grid-frame-lines frame) 1) "")
+      (setf (aref (grid-frame-lines frame) 1)
+            (or (%tty-echo-line) ""))
 
       (let* ((idx (max 0 (min (1- (elisp::elisp-buffer-point buf)) (length text))))
              (cursor-line (%line-number-at line-starts idx))
@@ -359,15 +373,28 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
                     (clemacs-quit ()
                       (return 0))
                     (error (e)
-                      (cond
-                       ((typep e 'elisp::elisp-signal)
-                        (let ((sym (ignore-errors (elisp::elisp-signal-symbol e)))
-                              (data (ignore-errors (elisp::elisp-signal-data e))))
-                          (format *error-output*
-                                  "[clemacs] tty command error: (signal ~S ~S)~%"
-                                  sym data)))
-                       (t
-                        (format *error-output* "[clemacs] tty command error: ~A~%" e)))
+                      (let ((log (uiop:getenv "CLEMACS_TTY_ERROR_LOG")))
+                        (labels ((log-line (s)
+                                   (when (and log (not (string= log "")))
+                                     (ignore-errors
+                                       (multiple-value-bind (sec min hour day month year)
+                                           (decode-universal-time (get-universal-time) 0)
+                                         (with-open-file (out log
+                                                              :direction :output
+                                                              :if-exists :append
+                                                              :if-does-not-exist :create)
+                                           (format out "~4,'0D-~2,'0D-~2,'0DT~2,'0D:~2,'0D:~2,'0DZ ~A~%"
+                                                   year month day hour min sec s)))))))
+                          (cond
+                           ((typep e 'elisp::elisp-signal)
+                            (let ((sym (ignore-errors (elisp::elisp-signal-symbol e)))
+                                  (data (ignore-errors (elisp::elisp-signal-data e))))
+                              (ignore-errors (elisp::message "Error: %S" (list sym data)))
+                              (log-line (format nil "(signal ~S ~S) keys=~S cmd=~S"
+                                                sym data keys cmd))))
+                           (t
+                            (ignore-errors (elisp::message "Error: %s" e))
+                            (log-line (format nil "~A keys=~S cmd=~S" e keys cmd))))))
                       (let ((dbg (uiop:getenv "CLEMACS_TTY_DEBUG_ERRORS")))
                         (when (and dbg (not (string= dbg "")))
                           (format *error-output* "[clemacs] tty debug: keys=~S cmd=~S this-command=~S~%"
