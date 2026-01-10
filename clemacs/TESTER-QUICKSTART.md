@@ -19,6 +19,7 @@ Useful flags:
 - `--startup-level tty-editor` (interactive bring-up slice; this is what testers want)
 - `--startup-level editor-core` (deeper load; more likely to hit missing pieces)
 - `--no-elisp` (run the TTY loop without loading shipped ELisp; for substrate/TTY triage)
+- `-Q` / `-q` (skip user init; clemacs init loading is minimal but supports clean vs user-init runs)
 
 ## What to expect
 
@@ -31,7 +32,7 @@ Supported (today):
 Known missing/incomplete:
 
 - GUI features (removed in this fork)
-- Full init-file compatibility (Emacs-shaped `-Q` / `-q` is not complete yet)
+- Full init-file compatibility beyond the basics (clemacs only loads a user init file; site init is not implemented yet)
 - Many shipped ELisp packages and workflows are still being brought up
 
 ## Reporting bugs
