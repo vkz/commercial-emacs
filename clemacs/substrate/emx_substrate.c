@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <sys/select.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -96,6 +97,42 @@ emx_status emx_tty_exit_raw(void)
     {
       (void)tcsetattr(STDIN_FILENO, TCSAFLUSH, &emx_tty_orig);
       emx_tty_raw = false;
+    }
+
+  return EMX_STATUS_OK;
+}
+
+emx_status emx_tty_input_pending(uint8_t *out)
+{
+  if (out == NULL)
+    return EMX_STATUS_EINVAL;
+
+  *out = 0;
+
+  if (!isatty(STDIN_FILENO))
+    return EMX_STATUS_OK;
+
+  fd_set readfds;
+  FD_ZERO(&readfds);
+  FD_SET(STDIN_FILENO, &readfds);
+
+  struct timeval tv;
+  tv.tv_sec = 0;
+  tv.tv_usec = 0;
+
+  int r = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv);
+  if (r < 0)
+    return EMX_STATUS_EINVAL;
+
+  if (r > 0 && FD_ISSET(STDIN_FILENO, &readfds))
+    {
+      /* select(2) reports readability at EOF; treat that as "no pending input"
+         for ELisp's input-pending-p. */
+      int n = 0;
+      if (ioctl(STDIN_FILENO, FIONREAD, &n) == 0 && n <= 0)
+        *out = 0;
+      else
+        *out = 1;
     }
 
   return EMX_STATUS_OK;

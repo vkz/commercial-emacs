@@ -68,13 +68,71 @@ Outside the minibuffer, we return the last captured minibuffer input."
   (setf unread-command-events (cons ev (or unread-command-events nil)))
   nil)
 
-(cl:defun input-pending-p ()
-  "Bring-up stub for the C primitive `input-pending-p'."
+(cl:defun %clemacs--tty-unread-bytes-present-p ()
+  (let* ((pkg (cl:find-package "CLEMACS"))
+         (sym (and pkg (cl:find-symbol "*TTY-UNREAD-BYTES*" pkg))))
+    (and sym
+         (cl:boundp sym)
+         (consp (symbol-value sym))
+         t)))
+
+(cl:defun %clemacs--tty-unread-bytes-clear ()
+  (let* ((pkg (cl:find-package "CLEMACS"))
+         (sym (and pkg (cl:find-symbol "*TTY-UNREAD-BYTES*" pkg))))
+    (when (and sym (cl:boundp sym))
+      (set sym nil)))
   nil)
+
+(cl:defun input-pending-p (&optional _check-timers)
+  "Bring-up subset of the C primitive `input-pending-p'."
+  (declare (cl:ignore _check-timers))
+  ;; In noninteractive batch (clemacs contract/micro tests), Emacs reports no
+  ;; pending user input.
+  (when (and (boundp 'noninteractive) (symbol-value 'noninteractive))
+    (return-from input-pending-p nil))
+  (or (and (consp unread-command-events) t)
+      (%clemacs--tty-unread-bytes-present-p)
+      (handler-case
+          (and (clemacs::tty-input-pending-p) t)
+        (cl:error () nil))))
 
 (cl:defun discard-input ()
   "Bring-up stub for the C primitive `discard-input'."
+  (setf unread-command-events nil)
+  (%clemacs--tty-unread-bytes-clear)
+  (handler-case
+      (loop while (clemacs::tty-input-pending-p) do
+        (ignore-errors (clemacs::tty-read-byte)))
+    (cl:error () nil))
   nil)
+
+(cl:defun %clemacs--sleep-with-input-break (seconds)
+  (let* ((secs (or (and seconds (%num seconds)) 0))
+         (deadline (+ (get-internal-real-time)
+                      (truncate (* internal-time-units-per-second (max 0 secs))))))
+    (loop
+      (when (input-pending-p)
+        (return-from %clemacs--sleep-with-input-break nil))
+      (when (>= (get-internal-real-time) deadline)
+        (return-from %clemacs--sleep-with-input-break t))
+      (let* ((remaining (- deadline (get-internal-real-time)))
+             (sleep-secs (min 0.05 (/ remaining internal-time-units-per-second))))
+        (when (plusp sleep-secs)
+          (cl:sleep sleep-secs))))))
+
+(cl:defun sleep-for (seconds &optional milliseconds)
+  "Bring-up subset of the C primitive `sleep-for'."
+  (let ((secs (+ (or (and seconds (%num seconds)) 0)
+                (if (and milliseconds (integerp milliseconds))
+                    (/ milliseconds 1000.0)
+                    0))))
+    (%clemacs--sleep-with-input-break secs)))
+
+(cl:defun sit-for (seconds &optional nodisp milliseconds)
+  "Bring-up subset of the C primitive `sit-for'."
+  (unless nodisp
+    (ignore-errors (redisplay)))
+  (sleep-for seconds milliseconds))
 
 (cl:defun command-remapping (_command &optional _position _keymaps)
   "Bring-up stub for the C primitive `command-remapping'."

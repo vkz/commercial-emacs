@@ -44,6 +44,8 @@
   (out :pointer))
 (cffi:defcfun ("emx_tty_enter_raw" %emx-tty-enter-raw) :int32)
 (cffi:defcfun ("emx_tty_exit_raw" %emx-tty-exit-raw) :int32)
+(cffi:defcfun ("emx_tty_input_pending" %emx-tty-input-pending) :int32
+  (out :pointer))
 (cffi:defcfun ("emx_tty_read_byte" %emx-tty-read-byte) :int32
   (out :pointer))
 (cffi:defcfun ("emx_tty_write" %emx-tty-write) :int32
@@ -88,6 +90,12 @@
   (cffi:with-foreign-object (out :uint8)
     (%check-substrate-status (%emx-tty-read-byte out))
     (cffi:mem-ref out :uint8)))
+
+(defun tty-input-pending-p ()
+  (ensure-substrate-loaded)
+  (cffi:with-foreign-object (out :uint8)
+    (%check-substrate-status (%emx-tty-input-pending out))
+    (not (zerop (cffi:mem-ref out :uint8)))))
 
 (defun tty-write-string (s)
   (ensure-substrate-loaded)
