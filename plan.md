@@ -97,10 +97,12 @@ P1: Usable terminal editor UX (stability + core workflows)
 P2: Load more shipped `lisp/` under clemacs (monotonic)
 - DONE (2026-01-10): Add the checked-in autoloads snapshot `lisp/ldefs-boot.el` to `clemacs/contract/startup.smoke.files` and bisect/raise its stable checkpoint to 198 forms.
 - DONE (2026-01-10): Fix `lisp/ldefs-boot.el` checkpoint past form 199 by raising `lisp/keymap.el` (smoke) and adding a bring-up `defvar-keymap` macro; advance `startup.smoke.files` to include `jka-cmpr-hook` and `epa-hook`.
+- DONE (2026-01-10): Advance `startup.smoke.files` to include `mule-cmds`, `charprop`, and `characters` (pdump order; monotonic growth).
 - TODO: Keep growing `clemacs/contract/startup.{smoke,tty-editor,check,editor-core}.files` following pdump order; bisect early when checkpoints get unstable.
 - TODO: Improve autoload/function designator robustness (high-fanout for help/arglist, `cl-generic`, and bytecomp callers).
 
 P3: Upstream ERT bring-up (coverage as a guardrail)
+- DONE (2026-01-10): Expand `clemacs/contract/ert-upstream.tests` with a cl-lib cluster (gensym + numeric predicates + helpers), backed by compat fixes and microtests; keep the suite green.
 - TODO: Grow `clemacs/contract/ert-upstream.tests` monotonically, prioritizing suites that overlap P1/P2.
 - TODO: When something must be skipped, record it in `clemacs/contract/ert-upstream.known-fail.tests` with a dated reason (XPASS is a gate failure).
 

@@ -59,3 +59,8 @@ lisp/jka-cmpr-hook.el 1
 lisp/epa-hook.el 1
 lisp/international/mule-util.el 1
 lisp/case-table.el 1
+
+# pdump: mule-cmds, charprop, characters.
+lisp/international/mule-cmds.el 6
+lisp/international/charprop.el -
+lisp/international/characters.el 20

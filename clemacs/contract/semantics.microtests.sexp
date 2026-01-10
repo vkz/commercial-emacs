@@ -72,6 +72,21 @@
   :expected "\"first?\""
   :emacs :match)
 
+ (:name "reader-symbol-name-preserves-uninterned-case"
+  :expr "(symbol-name (make-symbol \"AbC\"))"
+  :expected "\"AbC\""
+  :emacs :match)
+
+ (:name "reader-float-inf-self-eq"
+  :expr "(= 1.0e+INF 1.0e+INF)"
+  :expected "t"
+  :emacs :match)
+
+ (:name "reader-float-nan-not-eq"
+  :expr "(= 0.0e+NaN 0.0e+NaN)"
+  :expected "nil"
+  :emacs :match)
+
  (:name "pcase-pred-fun-form-appends-expval"
   :expr "(pcase \"abc\" ((pred (string-match \"a\")) t) (_ nil))"
   :expected "t"

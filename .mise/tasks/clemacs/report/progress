@@ -58,6 +58,7 @@ summarize_manifest() {
 startup_smoke="clemacs/contract/startup.smoke.files"
 startup_check="clemacs/contract/startup.check.files"
 startup_editor="clemacs/contract/startup.editor-core.files"
+startup_tty="clemacs/contract/startup.tty-editor.files"
 
 ert_upstream_tests="clemacs/contract/ert-upstream.tests"
 ert_known_fail="clemacs/contract/ert-upstream.known-fail.tests"
@@ -68,6 +69,7 @@ ert_known_fail_count="$(count_noncomment_lines "${ert_known_fail}")"
 startup_smoke_summary="$(summarize_manifest "${startup_smoke}")"
 startup_check_summary="$(summarize_manifest "${startup_check}")"
 startup_editor_summary="$(summarize_manifest "${startup_editor}")"
+startup_tty_summary="$(summarize_manifest "${startup_tty}")"
 
 mise run clemacs:inventory:used-startup-check -- --build-dir "${build_dir}" >/dev/null
 
@@ -132,6 +134,7 @@ stamp_check_summary="$(stamp_summary "${stamp_check}")"
   echo "- \`${startup_smoke}\`: ${startup_smoke_summary}"
   echo "- \`${startup_check}\`: ${startup_check_summary}"
   echo "- \`${startup_editor}\`: ${startup_editor_summary}"
+  echo "- \`${startup_tty}\`: ${startup_tty_summary}"
   echo
   echo "## Upstream ERT bring-up"
   echo

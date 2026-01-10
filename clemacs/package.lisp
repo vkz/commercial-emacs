@@ -52,12 +52,13 @@
 	           #:make-string
 	           #:string
 	           #:string-trim
-	           #:load
-	           #:+ #:-
-	           #:ignore
-	           #:1+ #:1-
-	           #:append
-	           #:dolist
+	   #:load
+	   #:+ #:-
+	   #:logand
+	   #:ignore
+	   #:1+ #:1-
+	   #:append
+	   #:dolist
 	           #:member
 	           #:typep
 	           #:mapcar

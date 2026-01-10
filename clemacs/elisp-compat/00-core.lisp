@@ -91,6 +91,26 @@
 (cl:defvar isearch-success nil)
 (cl:defvar isearch-error nil)
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; The CL reader does not parse Emacs's special float syntax (e.g.
+  ;; 0.0e+NaN, 1.0e+INF), so these tokens read as symbols.  Bind a small set of
+  ;; those symbols to SBCL float constants so upstream libraries/tests that use
+  ;; these literals don't trip UNBOUND-VARIABLE during bring-up.
+  ;;
+  ;; NOTE: This is intentionally minimal and can be generalized later if/when
+  ;; we start bringing up float-heavy test suites.
+  #+sbcl
+  (labels ((bind-special-float-literal (name value)
+             (let ((sym (cl:intern name (find-package "ELISP"))))
+               (cl:proclaim (list 'cl:special sym))
+               (setf (cl:symbol-value sym) value)
+               sym)))
+    (bind-special-float-literal "1.0E+INF" sb-ext:double-float-positive-infinity)
+    (bind-special-float-literal "-1.0E+INF" sb-ext:double-float-negative-infinity)
+    (let ((qnan (sb-kernel:make-double-float #x7ff80000 0)))
+      (cl:dolist (name '("0.0E+NAN" "-0.0E+NAN" "2.0E+NAN" "3.0E+NAN"))
+        (bind-special-float-literal name qnan)))))
+
 (cl:defmacro bound-and-true-p (var)
   "Bring-up subset of ELisp `bound-and-true-p'."
   `(and (cl:boundp ',var) ,var))
@@ -188,7 +208,12 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
 (cl:defun symbol-name (sym)
   "ELisp-ish SYMBOL-NAME that returns lowercase names by default."
   (let* ((pkg (cl:symbol-package sym))
-         (base (string-downcase (cl:symbol-name sym)))
+         (raw (cl:symbol-name sym))
+         ;; Most upstream ELisp source uses lowercase symbol spellings, but the
+         ;; CL reader uppercases them.  Downcase interned symbols to approximate
+         ;; ELisp, while preserving the case of uninterned symbols created via
+         ;; `make-symbol' / `gensym'.
+         (base (if (null pkg) raw (string-downcase raw)))
          (name
            (cond
             ;; In Emacs, (symbol-name :foo) => \":foo\".
@@ -526,6 +551,17 @@ and evaluate the (already CL-shaped) FORM."
   (unless (and (integerp x) (integerp y))
     (error "ELISP:% expects integers, got: ~S ~S" x y))
   (cl:rem x y))
+
+(cl:defun logand (&rest args)
+  "Bring-up subset of ELisp `logand'.
+
+In upstream ELisp, type errors are reported as `wrong-type-argument'.  Provide
+an ELisp-shaped wrapper so callers like `cl-oddp'/'cl-evenp' signal the expected
+error type when given non-integers."
+  (cl:dolist (a args)
+    (unless (integerp a)
+      (signal 'wrong-type-argument (list 'integerp a))))
+  (cl:apply #'cl:logand args))
 
 (defconstant +char-table-size+ 65536)
 

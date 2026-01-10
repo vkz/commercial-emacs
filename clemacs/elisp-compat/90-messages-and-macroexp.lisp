@@ -1572,6 +1572,30 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
   (apply #'message (concat (string-to-unibyte "byte-compile-warn: ") format-string) args)
   nil)
 
+(cl:defun byte-compile (form)
+  "Bring-up subset of ELisp `byte-compile'.
+
+For now, supports the limited shape exercised by upstream `cl-lib-tests.el`:
+byte-compiling a quoted (lambda ...) form to ensure macroexpansion happens
+before runtime."
+  (cond
+   ((and (consp form) (eq (car form) 'lambda))
+    (let ((expanded (macroexpand-all form)))
+      (cond
+       ;; Some macroexpansion paths can yield (cl:function (lambda ...)) already.
+       ;; Avoid wrapping it again (FUNCTION #'(LAMBDA ...)) which SBCL rejects.
+       ((and (consp expanded)
+             (eq (car expanded) 'cl:function)
+             (consp (cdr expanded))
+             (null (cddr expanded)))
+        (cl:eval expanded))
+       (t
+        (cl:eval `(cl:function ,expanded))))))
+   ((and (symbolp form) (fboundp form))
+    (byte-compile (symbol-function form)))
+   (t
+    (error "ELISP:BYTE-COMPILE unsupported FORM: ~S" form))))
+
 (cl:defun byte-compile-warning-enabled-p (&rest _args)
   "Bring-up stub for ELisp `byte-compile-warning-enabled-p'."
   (declare (cl:ignore _args))

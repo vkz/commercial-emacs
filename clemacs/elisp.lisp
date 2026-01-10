@@ -1,6 +1,14 @@
 (in-package #:elisp)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; SBCL traps some IEEE floating-point exceptions by default (notably NaN
+  ;; comparisons).  Emacs Lisp expects IEEE behavior without trapping, so
+  ;; disable FP traps during clemacs bring-up.
+  #+sbcl
+  (ignore-errors
+    (sb-int:set-floating-point-modes :traps nil)))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
   ;; Emacs Lisp uses a variety of DECLARE properties for edebug/indentation,
   ;; docstrings, and metadata.  When we translate ELisp to CL forms, preserve
   ;; these declarations as no-ops to keep compiler output quiet while loading

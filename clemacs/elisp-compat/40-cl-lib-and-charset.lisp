@@ -482,14 +482,20 @@ TYPE is a type descriptor as accepted by `cl-typep', which see."
                  collect (if (eq k :test) test-fn v))))
     (apply #'cl:position item sequence remapped-args)))
 
+(cl:defvar cl--gensym-counter 0)
+
 (cl:defun cl-gensym (&optional prefix)
   "Bring-up subset of cl-lib's `cl-gensym'."
-  (let ((p (cond
-            ((null prefix) "G")
-            ((stringp prefix) prefix)
-            ((symbolp prefix) (symbol-name prefix))
-            (t (cl:error "ELISP:CL-GENSYM unsupported prefix: ~S" prefix)))))
-    (gensym (string-upcase (%elisp-string->cl-string p)))))
+  (let* ((p (cond
+             ((null prefix) "G")
+             ((stringp prefix) prefix)
+             ((symbolp prefix) (symbol-name prefix))
+             (t (cl:error "ELISP:CL-GENSYM unsupported prefix: ~S" prefix))))
+         (p* (%elisp-string->cl-string p))
+         (n cl--gensym-counter)
+         (nm (cl:format nil "~A~D" p* n)))
+    (setf cl--gensym-counter (1+ cl--gensym-counter))
+    (make-symbol nm)))
 
 (cl:defun cl-coerce (object type)
   "Bring-up subset of cl-lib's `cl-coerce'.

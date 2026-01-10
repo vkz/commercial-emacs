@@ -230,3 +230,17 @@ cl-lib-test-remove-if-not
 cl-lib-test-remove
 cl-lib-keyword-names-versus-values
 cl-lib-empty-keyargs
+
+# 2026-01-10: Expand cl-lib bring-up (gensym + numeric predicates + helpers).
+cl-lib-test-set-functions
+cl-lib-test-gensym
+cl-lib-test-coerce-to-vector
+cl-lib-test-string-position
+cl-lib-test-mismatch
+cl-lib-test-incf
+cl-lib-test-decf
+cl-lib-test-plusp
+cl-lib-test-minusp
+cl-lib-test-oddp
+cl-lib-test-evenp
+cl-digit-char-p
