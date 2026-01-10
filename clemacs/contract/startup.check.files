@@ -179,3 +179,7 @@ lisp/international/ucs-normalize.el 1
 
 # pdump: leim-list (noerror upstream).
 lisp/leim/leim-list.el -
+
+# bring-up: comint/shell (first slice; caps will rise over time).
+lisp/comint.el 60
+lisp/shell.el 80

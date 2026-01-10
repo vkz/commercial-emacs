@@ -1003,6 +1003,8 @@ We currently preserve:
 
 (cl:defvar *pp-to-string-orig* nil)
 (cl:defvar *pp-to-string-shim* nil)
+(cl:defvar *define-key-after-orig* nil)
+(cl:defvar *define-key-after-shim* nil)
 
 (cl:defun %pp--whitespace-only-line-p (s start end)
   (and (< start end)
@@ -1051,6 +1053,32 @@ causes upstream ERT's `ert--pp-with-indentation-and-newline' to fail."
     (setf (fdefinition 'pp-to-string) *pp-to-string-shim*))
   nil)
 
+(cl:defun %install-define-key-after-shim ()
+  "Wrap `define-key-after' to avoid list-keymap internals during bring-up.
+
+Upstream `lisp/subr.el`'s `define-key-after` implementation walks list-keymap
+internals.  clemacs keymaps are backed by CL structures, so the upstream list
+walk can misinterpret the backing object as an alist tail and crash loads
+(notably in `lisp/shell.el`).
+
+This shim preserves the surface behavior of `define-key-after` but ignores the
+ordering constraint (AFTER): we delegate to `define-key`."
+  (when (and (fboundp 'define-key-after)
+             (not (and *define-key-after-shim*
+                       (eq (fdefinition 'define-key-after) *define-key-after-shim*))))
+    (setf *define-key-after-orig* (fdefinition 'define-key-after))
+    (setf *define-key-after-shim*
+          (lambda (keymap key definition &optional _after)
+            (declare (cl:ignore _after))
+            (let ((km keymap))
+              (when (and (consp km)
+                         (stringp (car km))
+                         (keymapp (cdr km)))
+                (setf km (cdr km)))
+              (define-key km key definition))))
+    (setf (fdefinition 'define-key-after) *define-key-after-shim*))
+  nil)
+
 (cl:defun %maybe-install-post-load-shims (path)
   (let* ((p (and path (pathname path)))
          (name (and p (pathname-name p)))
@@ -1062,6 +1090,12 @@ causes upstream ERT's `ert--pp-with-indentation-and-newline' to fail."
   (let* ((p (and path (pathname path)))
          (name (and p (pathname-name p)))
          (type (and p (pathname-type p))))
+    ;; `define-key-after' in `lisp/subr.el` assumes list-keymap internals; use a
+    ;; clemacs-safe shim after loading `subr.el`.
+    (when (and (stringp name) (stringp type)
+               (string= (string-downcase name) "subr")
+               (string= (string-downcase type) "el"))
+      (%install-define-key-after-shim))
     ;; Keep `macroexpand-all' stack-safe under SBCL.  `lisp/emacs-lisp/macroexp.el`
     ;; defines a full-featured expander, but it can blow the control stack while
     ;; bringing up larger preloads (e.g. lisp-mode's `let-when-compile`).  Use

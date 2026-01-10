@@ -131,19 +131,22 @@ Top 10 next tasks (ROI ordered; 1–5 DONE)
    - Implemented `read-key-sequence-vector`, `read-kbd-macro`, `execute-kbd-macro` (minimal).
    - Gate: `mise run clemacs:test:tty` replays a tiny macro without crashing.
 
-8) Timing + yielding
-   - Implement `sit-for`/`sleep-for` (and tighten `input-pending-p` behavior) so libraries that
-     pace UI work don’t hard error under clemacs.
-   - Gate: load the TTY startup manifest without undefined-function warnings for these.
+8) DONE (2026-01-10): Timing + yielding
+   - Implemented `sit-for`/`sleep-for` and tightened `input-pending-p` (TTY-aware; noninteractive stays nil).
 
-9) Crash shield / error surfacing in the TTY loop
-   - Improve error handling so failures show a message in the echo area (and optionally log to a file),
-     while keeping the terminal in a sane state.
-   - Gate: a forced `(error ...)` during a command does not kill the session; it returns to the loop.
+
+9) DONE (2026-01-10): Crash shield / error surfacing in the TTY loop
+   - Errors now surface via `message` (shown on the TTY header line) and the loop keeps running.
+   - Optional logging: set `CLEMACS_TTY_ERROR_LOG` to append errors to a file.
+   - Gate: `mise run clemacs:test:tty` injects an unknown command error and continues.
 
 10) DONE (2026-01-10): Interactive subprocesses (next workflow unlock after M-x)
    - Implemented minimal `make-process`/`start-process` + `delete-process`, plus filter/sentinel plumbing.
    - Gate: `start-process` output lands in the target buffer and matches reference Emacs (microtest).
+
+11) DONE (2026-01-10): Start loading comint/shell (first slice)
+   - Added capped `lisp/comint.el` + `lisp/shell.el` to `startup.check`, `startup.editor-core`, and `startup.tty-editor`.
+   - Fixed the first fallout in menu/keymap plumbing so early `shell.el` keymap setup can load.
 
 ## Next biggest unlocks (priority order)
 

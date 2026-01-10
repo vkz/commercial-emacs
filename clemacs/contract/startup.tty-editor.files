@@ -41,3 +41,7 @@ lisp/frame.el -
 lisp/files.el -
 lisp/emacs-lisp/cl-generic.el -
 lisp/simple.el -
+
+# bring-up: comint/shell (first slice; caps will rise over time).
+lisp/comint.el 60
+lisp/shell.el 80

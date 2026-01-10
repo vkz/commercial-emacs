@@ -86,6 +86,60 @@
     (list 'keymap nil out)))
 
 (defparameter system-type 'darwin)
+(cl:defvar password-word-equivalents
+  '("password" "passcode" "passphrase" "pass phrase" "pin"
+    "decryption key" "encryption key"
+    "암호"
+    "パスワード"
+    "ପ୍ରବେଶ ସଙ୍କେତ"
+    "ពាក្យសម្ងាត់"
+    "adgangskode"
+    "contraseña"
+    "contrasenya"
+    "geslo"
+    "hasło"
+    "heslo"
+    "iphasiwedi"
+    "jelszó"
+    "lösenord"
+    "lozinka"
+    "mật khẩu"
+    "mot de passe"
+    "parola"
+    "pasahitza"
+    "passord"
+    "passwort"
+    "pasvorto"
+    "salasana"
+    "senha"
+    "slaptažodis"
+    "wachtwoord"
+    "كلمة السر"
+    "ססמה"
+    "лозинка"
+    "пароль"
+    "गुप्तशब्द"
+    "शब्दकूट"
+    "પાસવર્ડ"
+    "సంకేతపదము"
+    "ਪਾਸਵਰਡ"
+    "ಗುಪ್ತಪದ"
+    "கடவுச்சொல்"
+    "അടയാളവാക്ക്"
+    "গুপ্তশব্দ"
+    "পাসওয়ার্ড"
+    "රහස්පදය"
+    "密码"
+    "密碼")
+  "Bring-up default for `password-word-equivalents' (normally from mule-conf.el).")
+
+(cl:defvar password-colon-equivalents
+  (list #x003a #xFF1A #xFE55 #xFE13 #x17D6)
+  "Bring-up default for `password-colon-equivalents' (normally from mule-conf.el).")
+
+(cl:defvar menu-bar-final-items nil
+  "Bring-up stub for the C variable `menu-bar-final-items'.")
+
 (cl:defun system-name ()
   "Bring-up subset of ELisp `system-name'."
   (or (ignore-errors (uiop:hostname))

@@ -1264,6 +1264,13 @@ Supports the common pattern of a self-referential closure (used by ERT)."
                       (setf binding d presentp t))))
                 (unless presentp
                     (return-from lookup-key nil)))
+              ;; Menu entries are often stored as (\"Label\" . KEYMAP).  Treat
+              ;; these as keymaps for both traversal and retrieval, matching
+              ;; how upstream `lookup-key' behaves for menu-bar submaps.
+              (when (and (consp binding)
+                         (or (cl:stringp (car binding)) (unibyte-string-p (car binding)))
+                         (keymapp (cdr binding)))
+                (setf binding (cdr binding)))
               (if (= idx len)
                   (return-from lookup-key binding)
                   (cond
@@ -1296,6 +1303,10 @@ Supports the common pattern of a self-referential closure (used by ERT)."
         (cond
          ((and presentp (keymapp next))
           (setf km (%keymap-resolve next)))
+         ((and presentp (consp next)
+               (or (cl:stringp (car next)) (unibyte-string-p (car next)))
+               (keymapp (cdr next)))
+          (setf km (%keymap-resolve (cdr next))))
          (t
           (let ((child (make-elisp-keymap)))
             (setf (gethash ev (elisp-keymap-table km)) child)
