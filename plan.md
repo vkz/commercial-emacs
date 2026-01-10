@@ -51,20 +51,12 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
 
 ## Recent progress
 
-- Completed and superseded items are archived in `plans/plan-archive-2026-01-06.md`.
-- Upstream ERT bring-up is unblocked and green as of 2026-01-06 (see archive for details).
-- `startup.check.files` advanced with next TTY-relevant pdump candidates and higher caps (see archive for details).
-- 2026-01-07: added `clemacs:loop:elisp-core` (one-command high-signal loop) and extended the playbook for non-loader failures.
-- 2026-01-07: split `clemacs/elisp-compat.lisp` into `clemacs/elisp-compat/*.lisp` modules (thin REPL loader retained); updated loader/compat shims and advanced `startup.check.files` (see `plans/plan-archive-2026-01-07.md`).
-- 2026-01-07: raised `startup.check.files` caps for deeper TTY startup loads (`lisp/files.el` 250, `lisp/ls-lisp.el` 600, `lisp/disp-table.el` 800) and unblocked file/path helpers needed by early `lisp/files.el` + `lisp/loaddefs.el`.
-- 2026-01-08: brought up more upstream ERT under clemacs (rx/seq) via `clemacs/contract/ert-upstream.load.files` + promoted a small must-pass slice in `clemacs/contract/ert-upstream.tests`.
-- 2026-01-08: added `clemacs:test:ert-upstream-one` support for `ert-upstream.load.files` so newly-loaded upstream tests can be triaged individually.
-- 2026-01-08: started “real editor core” command routing in `clemacs/tty.lisp` (minimal ELisp-style command loop: keymaps + `read-key-sequence` + `key-binding` + `command-execute`) with bring-up stubs in `clemacs/elisp-compat/55-command-loop.lisp`.
-- 2026-01-08: aligned keymap semantics so `keymapp` treats symbols with function-cell keymaps as keymaps; added a focused microtest in `clemacs/contract/semantics.microtests.sexp`.
-- 2026-01-08: enabled `\\C-` string escapes in the ELisp reader so shipped keymaps using strings like `\"\\C-x\"` bind correctly; the clemacs TTY loop now loads a minimal startup set (backquote + subr) by default to use the shipped `global-map`/prefixes.
-- 2026-01-08: promoted a few more rx/seq upstream ERT tests (monotonic) after adding keyboard/command-loop bring-up stubs.
-- 2026-01-09: implemented high-fanout bring-up shims driven by the elisp-core gate (minibuffer/completion basics, single-window primitives incl. `window-end`, backquote/pcase forward refs, basic file modes/permissions, simple process/call-process-region surface, and sexp/point/key helpers), plus microtests + compat notes to keep the contract green.
-- 2026-01-09: implemented a baseline `parse-partial-sexp` + `syntax-ppss` scanner (Emacs-shaped enough for indentation/isearch callers) and uncapped `lisp/emacs-lisp/syntax.el` in the clemacs startup manifests.
+- Current status snapshot: `build/clemacs/reports/progress.md` (regenerate via `mise run clemacs:report:progress`).
+- Completed/superseded items are archived in:
+  - `plans/plan-archive-2026-01-06.md`
+  - `plans/plan-archive-2026-01-07.md`
+  - `plans/plan-archive-2026-01-10.md`
+- Latest milestone: DONE (2026-01-10): clemacs TTY "alpha" (open/edit/save/quit + M-x) and a runnable clemacs `emacs` executable (details in `plans/plan-archive-2026-01-10.md`).
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 
@@ -78,107 +70,35 @@ Decision checkpoint (must ask the user)
 - If/when we hit a point where clemacs must diverge from upstream ELisp syntax or semantics beyond
   mechanical rewrites, stop and ask for an explicit decision with concrete examples and tradeoffs.
 
-## Milestones (TODO)
+## Current snapshot
 
-## Feedback-loop improvements (tooling)
+Source of truth: `build/clemacs/reports/progress.md` (regenerate via `mise run clemacs:report:progress`).
 
-- DONE (2026-01-10): `clemacs:test:micro` supports `--name` / `CLEMACS_MICROTEST_NAME` to run one semantics microtest (or a small subset by substring).
-- DONE (2026-01-10): Batch reference-Emacs comparisons for `:emacs :match` microtests (single Emacs run per microtest run); set `CLEMACS_REFERENCE_EMACS_BATCH=0` to disable.
+Quick try path (macOS)
+- `mise run clemacs:emacs:run -- --startup-level tty-editor path/to/file`
+- Gate: `mise run clemacs:verify`
 
-## Current snapshot (2026-01-10)
+## Roadmap (TODO, priority order)
 
-Status is tracked in `build/clemacs/reports/progress.md`. As of 2026-01-10:
+P0: Put clemacs in users' hands (alpha)
+- TODO: Add a short tester quickstart (clone + `mise` + run command + how to report bugs), plus supported/unsupported feature list.
+- TODO: Make `clemacs:emacs:run` default to `--startup-level tty-editor` and update `emacs --help` to list `tty-editor`.
+- TODO: Implement minimal `--batch` behavior (load startup manifest, run `--eval` forms, exit nonzero on error); document unsupported flags.
+- TODO: Implement minimal init loading and opt-outs (`-Q` and `-q` Emacs-shaped behavior, even if partial).
+- TODO: Add a "bugreport bundle" helper task that captures: `progress.md`, `first-failure.*`, `stamps/*`, plus a repro command line.
 
-- clemacs contract gates are green: `smoke`, `elisp-core`, and `check`.
-- Startup manifests:
-  - `clemacs/contract/startup.check.files`: entries=100, capped=71, nolimit=27, sum_maxforms=2767
-  - `clemacs/contract/startup.editor-core.files`: entries=99, capped=71, nolimit=26, sum_maxforms=2767
-- Upstream ERT bring-up: must-pass=201, known-fail=0.
+P1: Usable terminal editor UX (stability + core workflows)
+- TODO: Inventory the top interactive workflows that still crash (use `clemacs:test:tty` as the gate) and implement the missing primitives in clusters.
+- TODO: Decide and implement the minimal multi-window surface (split, other-window, delete-window) needed for common help/minibuffer workflows.
+- TODO: Implement an isearch/query-replace vertical slice (enough for real editing), or explicitly document it as missing for alpha.
 
-## Next iteration (priority: usable interactive clemacs)
+P2: Load more shipped `lisp/` under clemacs (monotonic)
+- TODO: Keep growing `clemacs/contract/startup.{smoke,tty-editor,check,editor-core}.files` following pdump order; bisect early when checkpoints get unstable.
+- TODO: Improve autoload/function designator robustness (high-fanout for help/arglist, `cl-generic`, and bytecomp callers).
 
-Goal: `mise run clemacs:tty:run` is a usable terminal editor (open/edit/save/quit, M-x),
-and common workflows don’t crash (errors are surfaced, not fatal).
-
-Top 10 next tasks (ROI ordered; 1–5 DONE)
-
-1) DONE (2026-01-10): TTY startup manifest (editor slice)
-   - Added `clemacs/contract/startup.tty-editor.files` and set the TTY loop default startup
-     level to `tty-editor`.
-   - Gate: `mise run clemacs:test:tty` is green.
-
-2) DONE (2026-01-10): Stop poisoning shipped keymaps in the TTY loop
-   - `clemacs-tty-setup` only installs bring-up keymaps for `CLEMACS_TTY_STARTUP_LEVEL=subr|none`;
-     `tty-editor` uses shipped `global-map`/`ctl-x-map` without clobbering.
-   - Gate: `mise run clemacs:test:tty` exercises both `subr` and `tty-editor` scenarios and is green.
-
-3) DONE (2026-01-10): “Visit file” vertical slice: `find-file` (C-x C-f)
-   - `C-x C-f` works in the `tty-editor` PTY test (visit → edit → save).
-
-4) DONE (2026-01-10): “Save file” vertical slice: `save-buffer` (C-x C-s)
-   - `C-x C-s` works after visiting a file; PTY test asserts written contents.
-
-5) DONE (2026-01-10): M-x: `execute-extended-command` + completion
-   - `M-x save-buffers-kill-terminal` works end-to-end in the PTY test and exits cleanly.
-
-6) DONE (2026-01-10): Minibuffer history (core UX)
-   - Implemented `add-to-history` / `history-add-new-input`, plus the minimal minibuffer history
-     variables to preserve interactive state.
-   - Added M-p/M-n history navigation in the minibuffer local map.
-   - Gate: `mise run clemacs:test:tty` demonstrates M-p recalling last minibuffer input.
-
-7) DONE (2026-01-10): Keyboard macro surface (unblocks upstream key/command tests)
-   - Implemented `read-key-sequence-vector`, `read-kbd-macro`, `execute-kbd-macro` (minimal).
-   - Gate: `mise run clemacs:test:tty` replays a tiny macro without crashing.
-
-8) DONE (2026-01-10): Timing + yielding
-   - Implemented `sit-for`/`sleep-for` and tightened `input-pending-p` (TTY-aware; noninteractive stays nil).
-
-
-9) DONE (2026-01-10): Crash shield / error surfacing in the TTY loop
-   - Errors now surface via `message` (shown on the TTY header line) and the loop keeps running.
-   - Optional logging: set `CLEMACS_TTY_ERROR_LOG` to append errors to a file.
-   - Gate: `mise run clemacs:test:tty` injects an unknown command error and continues.
-
-10) DONE (2026-01-10): Interactive subprocesses (next workflow unlock after M-x)
-   - Implemented minimal `make-process`/`start-process` + `delete-process`, plus filter/sentinel plumbing.
-   - Gate: `start-process` output lands in the target buffer and matches reference Emacs (microtest).
-
-11) DONE (2026-01-10): Start loading comint/shell (first slice)
-   - Added capped `lisp/comint.el` + `lisp/shell.el` to `startup.check`, `startup.editor-core`, and `startup.tty-editor`.
-   - Fixed the first fallout in menu/keymap plumbing so early `shell.el` keymap setup can load.
-
-## Next biggest unlocks (priority order)
-
-These are the next high-leverage targets because they remove high-fanout caps
-in `clemacs/contract/startup.*.files` and unblock large portions of shipped
-editor-core ELisp.
-
-Done (2026-01-09)
-- Uncapped `lisp/emacs-lisp/nadvice.el` in `startup.check` and `startup.editor-core` manifests.
-- Uncapped `lisp/minibuffer.el` in `startup.check` and `startup.editor-core` manifests.
-- Started a buffer-backed minibuffer model (`read-from-minibuffer` populates ` *Minibuf-0*`; `exit-minibuffer`/`delete-minibuffer-contents` are no longer hard errors).
-- Baseline syntax scanning: `parse-partial-sexp` + `syntax-ppss` (and uncapped `lisp/emacs-lisp/syntax.el` in `startup.check`/`startup.editor-core`).
-- Process/subprocess surface (batch-first): `call-process`, `set-process-plist`, `emacs-pid`, `process-attributes` (plus microtests).
-- Raised `lisp/font-lock.el` and `lisp/jit-lock.el` caps to 200 in `startup.check`/`startup.editor-core`.
-
-Done (2026-01-10)
-- Command-loop prefix args: add `prefix-arg` plumbing, `unread-command-events` pushback in `read-event`, and minimal `universal-argument`/`digit-argument`/`negative-argument` for the clemacs TTY loop.
-- Startup checkpoints: uncap `lisp/keymap.el` and raise `lisp/bindings.el` to max-forms=347 in `startup.check` and `startup.editor-core` (bisected at 348; see `build/clemacs/reports/bisect-lisp_bindings_el.md`).
-- Minibuffer input: switch `read-from-minibuffer` from `tty-prompt` to an editable `*Minibuf-0*` buffer (prompt-safe editing, local keymap), with noninteractive defaults and microtests.
-- Upstream ERT: promote `test-keymap-parse-macros` (kbd/key-parse cluster).
-- DONE (2026-01-10): implement `local-key-binding`/`global-key-binding`, ensure `emacs-lisp-mode` provides a `[menu-bar]` prefix keymap, and load enough of `lisp/help.el` for the `help-command` global binding; promoted `subr-test-{local,global}-key-binding`.
-- DONE (2026-01-10): TTY frame/minibuffer shims: dedicated minibuffer window, `window-minibuffer-p`/`minibuffer-window`, and selecting the minibuffer window during `read-from-minibuffer`.
-- DONE (2026-01-10): Interactive process plumbing: `make-process`/`start-process`/`delete-process`, filters/sentinels, `process-send-string`/`process-send-eof`, and `accept-process-output`.
-
-1) DONE (2026-01-10): TTY frame/minibuffer window shims (`lisp/frame.el` is already uncapped)
-   - Goal is "Emacs-shaped enough for editor-core", not GUI parity.
-
-2) DONE (2026-01-10): Process/subprocess surface (batch-first, then interactive)
-   - Batch-first is now in place: `call-process-region` + `call-process`, plus
-     minimal process plists and basic `process-attributes`/`emacs-pid`.
-   - Interactive process plumbing is now in place: `make-process`/`start-process`,
-     `delete-process`, filters/sentinels, and `accept-process-output`.
+P3: Upstream ERT bring-up (coverage as a guardrail)
+- TODO: Grow `clemacs/contract/ert-upstream.tests` monotonically, prioritizing suites that overlap P1/P2.
+- TODO: When something must be skipped, record it in `clemacs/contract/ert-upstream.known-fail.tests` with a dated reason (XPASS is a gate failure).
 
 ### Milestone B1-8: load the shipped `lisp/` tree under clemacs
 
@@ -190,21 +110,13 @@ Gate
 - `mise run clemacs:load:lisp -- --level smoke` loads an explicit list of ELisp files and exits 0.
 - The list is data in-repo and grows monotonically (no deleting to get green).
 
-High priority (next ROI)
-- Autoload/function-designator robustness: make core helpers accept autoload markers and treat them as callable/inspectable where Emacs does (still high-fanout via `cl-generic`, `bytecomp`, and help/arglist paths).
-- Interactive command pipeline: now have `commandp`, `interactive-form`, `call-interactively`, and `prefix-arg`; next is command history + a minimal keyboard-macro surface (`read-key-sequence-vector`, `read-kbd-macro`, `execute-kbd-macro`) as required by more upstream key/command tests.
-- Minimal TTY frame/window/minibuffer shims: enough of `frame-parameter`, `minibuffer-window`, `minibuffer-prompt-end`, plus staples like `switch-to-buffer`, `buffer-file-name`, `move-to-column` (high fanout in editor-core startup).
-- Minibuffer/completion basics: now have an editable `read-from-minibuffer` backed by `*Minibuf-0*`; next is minibuffer history and tightening key-binding semantics (notably deeper `[menu-bar]` keymap behavior beyond the prefix map) to unlock more editor-core + upstream tests.
-- Window/buffer motion basics: now have `window-point`/`window-height`/`window-start`/`window-end` + a single-window model; next is enough window-state APIs for `frame.el`/display paths and more accurate window-end/window-start semantics under scrolling.
-- Process/subprocess surface: now have a minimal `process-buffer`/`get-buffer-process`, `call-process-region` + `call-process`, and basic process plists/attrs (`set-process-plist`, `process-attributes`, `emacs-pid`); next is interactive processes (`make-process`/`start-process`), `delete-process`, and filter/sentinel plumbing.
-- Syntax/parse-state core: baseline `parse-partial-sexp` + `syntax-ppss` is in place, and `font-lock.el`/`jit-lock.el` caps are raised; next is addressing the missing primitives those loads expose.
+Status
+- See `build/clemacs/reports/progress.md` for current manifest sizes and contract stamps.
 
-Next actions
-- Grow `clemacs/contract/startup.{smoke,check,editor-core}.files` monotonically, following pdump order.
-- For `startup.check.files`, only add TTY-relevant candidates (ignore GUI/W32 files) and raise caps gradually.
-- Default cap strategy: take bigger jumps and bisect early (rule of thumb: `lisp/loaddefs.el` +1000; most other files +300–800; if the failure location is unclear, bisect immediately: `mise run clemacs:bisect:file -- --file <lisp/.../foo.el> --manifest clemacs/contract/startup.check.files`).
-- After each bump: run `mise run clemacs:test:contract -- --level elisp-core`.
-- On failure: run `mise run clemacs:report:first-failure-startup-check-debug` and implement the single top offender before moving on.
+Next actions (TODO)
+- TODO: Grow `clemacs/contract/startup.{smoke,tty-editor,check,editor-core}.files` monotonically, following pdump order.
+- TODO: On failure, follow the port loop: `mise run clemacs:loop:elisp-core` -> `mise run clemacs:report:first-failure-startup-check-debug` -> implement the single top offender -> leave breadcrumbs -> repeat.
+- TODO: Keep `clemacs/contract/lisp.allowed-skip.files` small and dated; prefer implementing missing primitives over skipping.
 
 ### Milestone B1-9: run upstream ERT suites under clemacs
 
@@ -215,10 +127,9 @@ Deliverables
 Gate
 - `mise run clemacs:test:contract -- --level check` fails on regressions.
 
-Next actions
-- Expand `clemacs/contract/ert-upstream.tests` monotonically (keep the suite green; use ERT promotions opportunistically when they unblock startup work).
-- Keep `clemacs/contract/ert-upstream.known-fail.tests` dated and explicit (XPASS is a gate failure).
-- DONE (2026-01-10): `[menu-bar]` + `local-key-binding`/`global-key-binding` semantics; promoted `subr-test-{local,global}-key-binding`.
+Next actions (TODO)
+- TODO: Expand `clemacs/contract/ert-upstream.tests` monotonically (keep the suite green; use ERT promotions opportunistically when they unblock startup work).
+- TODO: Keep `clemacs/contract/ert-upstream.known-fail.tests` dated and explicit (XPASS is a gate failure).
 
 ### Milestone B1-12: inventory closure for `startup.check`
 
@@ -230,11 +141,14 @@ Deliverables
 Gate
 - `mise run clemacs:test:contract -- --level elisp-core` stays green while raising checkpoints.
 
-Next actions
-- Use inventory deltas to implement primitives in clusters (next likely: help buffers, file-name helpers, process stubs).
-- Treat each new startup failure as an inventory item: implement/stub and add breadcrumbs (microtests, compat notes, contract updates) in the same patch.
+Next actions (TODO)
+- TODO: Use inventory deltas to implement primitives in clusters (next likely: help buffers, file-name helpers, process stubs).
+- TODO: Treat each new startup failure as an inventory item: implement/stub and add breadcrumbs (microtests, compat notes, contract updates) in the same patch.
 
 ### Milestone B1-14: clemacs "real editor core" boot
+
+Status
+- DONE (2026-01-10): interactive TTY editor loop (open/edit/save/quit + M-x), plus a buildable clemacs `emacs` executable; details in `plans/plan-archive-2026-01-10.md`.
 
 Deliverables
 - `mise run run:clemacs` starts an interactive editor loop that:
@@ -245,9 +159,9 @@ Deliverables
 Acceptance criteria (promotion gate)
 - Promote clemacs to `mise run run` only when `run:clemacs` is a usable terminal editor and exits cleanly.
 
-Next actions (high-leverage)
-- Switch the clemacs TTY loop from the bring-up keymap to shipped `current-global-map` by loading a curated startup manifest during TTY startup (default `CLEMACS_TTY_STARTUP_LEVEL=smoke`), with an option to keep the minimal bring-up startup (`CLEMACS_TTY_STARTUP_LEVEL=subr`) while debugging.
-- Add minimal keyboard/command-loop stubs needed by shipped ELisp and upstream ERT loads (e.g. `key-parse`, `this-single-command-keys`, event symbol parsing/modifiers), keeping behavior intentionally small but Emacs-shaped.
+Next actions (TODO)
+- TODO: Promote the alpha try path by default (`clemacs:emacs:run` defaults and `--help` text), so testers do not need to discover flags manually.
+- TODO: Define and gate the "alpha UX" contract (what must work in TTY: file visit/save, kill/yank, isearch, basic window ops) and keep it covered by `clemacs:test:tty`.
 
 ## Archive
 
@@ -257,3 +171,4 @@ Next actions (high-leverage)
 - `plans/dev-002.md` (dev-setup checklist before trimming on 2026-01-05)
 - `plans/plan-archive-2026-01-06.md` (archived DONE items through 2026-01-06)
 - `plans/plan-archive-2026-01-07.md` (archived DONE items through 2026-01-07)
+- `plans/plan-archive-2026-01-10.md` (archived DONE items through 2026-01-10)
