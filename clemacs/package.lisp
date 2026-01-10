@@ -37,7 +37,9 @@
 
 (defpackage #:clemacs.test
   (:use #:cl)
-  (:export #:run-smoke))
+  (:export
+   #:run-micro
+   #:run-smoke))
 
 (defpackage #:elisp
 	  (:use #:cl)

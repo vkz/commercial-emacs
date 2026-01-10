@@ -2,6 +2,7 @@
 
 (fiveam:def-suite clemacs-smoke)
 (fiveam:in-suite clemacs-smoke)
+(fiveam:def-suite clemacs-micro :in clemacs-smoke)
 
 (defun %project-root ()
   (uiop:ensure-directory-pathname
@@ -16,6 +17,8 @@
       "emacs"))
 
 (defun %maybe-emacs-prin1 (expr)
+  (when (uiop:getenv "CLEMACS_SKIP_REFERENCE_EMACS")
+    (return-from %maybe-emacs-prin1 :disabled))
   (multiple-value-bind (out err code)
       (handler-case
           (uiop:run-program
@@ -122,9 +125,10 @@
         (let ((value (%elisp-eval-1 expr)))
           (fiveam:is (string= (%clemacs-prin1 value) expected))
           (let ((emacs-out (%maybe-emacs-prin1 expr)))
-            (if emacs-out
-                (fiveam:is (string= emacs-out expected))
-                (fiveam:skip "emacs not on PATH"))))))))
+            (cond
+             ((eq emacs-out :disabled) nil)
+             (emacs-out (fiveam:is (string= emacs-out expected)))
+             (t (fiveam:skip "emacs not on PATH")))))))))
 
 (fiveam:test elisp-reader-backquote
   (let* ((form (%elisp-read-1 "`(a ,b ,@c)")))
@@ -164,7 +168,15 @@
     (with-open-file (in path :direction :input :external-format :utf-8)
       (read in))))
 
+(fiveam:in-suite clemacs-micro)
 (fiveam:test elisp-semantics-microtests
+  ;; Keep microtests load-order independent: some entries exercise the shipped
+  ;; backquote DSL (symbols like `|`| and `|,|`) which needs `backquote.el`
+  ;; loaded to define the expander.
+  (let* ((project-root (%project-root))
+         (backquote-el (merge-pathnames #p"lisp/emacs-lisp/backquote.el" project-root)))
+    (unless (fboundp 'elisp::backquote)
+      (elisp::load-elisp-file backquote-el)))
   (dolist (test (%read-semantics-microtests))
     (let* ((name (getf test :name))
            (expr (getf test :expr))
@@ -183,11 +195,23 @@
                    name expected clemacs-out expr)
         (when (eql emacs :match)
           (let ((emacs-out (%maybe-emacs-prin1 expr)))
-            (if emacs-out
-                (fiveam:is (string= emacs-out clemacs-out)
-                           "~A: clemacs != emacs: ~S vs ~S for expr: ~A"
-                           name clemacs-out emacs-out expr)
-                (fiveam:skip "reference Emacs not available (set CLEMACS_REFERENCE_EMACS)"))))))))
+            (cond
+             ((eq emacs-out :disabled) nil)
+             (emacs-out
+              (fiveam:is (string= emacs-out clemacs-out)
+                         "~A: clemacs != emacs: ~S vs ~S for expr: ~A"
+                         name clemacs-out emacs-out expr))
+             (t
+              (fiveam:skip "reference Emacs not available (set CLEMACS_REFERENCE_EMACS)")))))))))
+
+(defun run-micro (&key (stream *standard-output*))
+  (let ((fiveam:*test-dribble* stream))
+    (multiple-value-bind (ok failed skipped)
+        (fiveam:run! 'clemacs-micro)
+      (declare (ignore failed skipped))
+      (format stream "clemacs micro: ~:[FAIL~;ok~]~%" ok)
+      (finish-output stream)
+      (if ok 0 1))))
 
 (defun run-smoke (&key (stream *standard-output*))
   (let ((fiveam:*test-dribble* stream))

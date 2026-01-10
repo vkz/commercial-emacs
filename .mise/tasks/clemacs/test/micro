@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-#MISE description="Run clemacs smoke tests (CL-level, fast)"
+#MISE description="Run clemacs ELisp semantics microtests only (fastest loop)"
 #USAGE flag "-h --help" help="Print help"
 #USAGE flag "--no-emacs" help="Skip reference Emacs comparisons (faster)" default="false"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
@@ -24,16 +24,6 @@ if [[ "${usage_no_emacs:-false}" == "true" ]]; then
   export CLEMACS_SKIP_REFERENCE_EMACS=1
 fi
 
-if [[ -z "${CLEMACS_REFERENCE_EMACS:-}" ]]; then
-  if [[ -x "/opt/homebrew/bin/emacs" ]]; then
-    export CLEMACS_REFERENCE_EMACS="/opt/homebrew/bin/emacs"
-  elif [[ -x "/usr/local/bin/emacs" ]]; then
-    export CLEMACS_REFERENCE_EMACS="/usr/local/bin/emacs"
-  elif command -v emacs >/dev/null 2>&1; then
-    export CLEMACS_REFERENCE_EMACS="$(command -v emacs)"
-  fi
-fi
-
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/substrate/build"
 
@@ -50,4 +40,4 @@ clemacs_sbcl_eval \
   "${deps_dir}" \
   "${qlot_bin}" \
   "${sbcl_dynamic_space}" \
-  --eval '(uiop:quit (clemacs.test:run-smoke))'
+  --eval '(uiop:quit (clemacs.test:run-micro))'
