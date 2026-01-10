@@ -172,6 +172,7 @@ Canonical bring-up loop, debugging flags, and \"first failure\" interpretation l
 Short version:
 - Gate: `mise run clemacs:test:contract -- --level elisp-core`
 - If it fails: `mise run clemacs:report:first-failure -- --mode startup-check --debug`
+- Fastest semantics loop (microtests): `mise run clemacs:test:micro -- --name <substr>` (or set `CLEMACS_MICROTEST_NAME=<substr>`; add `--no-emacs` to skip ref-Emacs comparisons).
 
 ### Repo-local Codex skills
 

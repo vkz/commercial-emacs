@@ -80,6 +80,11 @@ Decision checkpoint (must ask the user)
 
 ## Milestones (TODO)
 
+## Feedback-loop improvements (tooling)
+
+- DONE (2026-01-10): `clemacs:test:micro` supports `--name` / `CLEMACS_MICROTEST_NAME` to run one semantics microtest (or a small subset by substring).
+- DONE (2026-01-10): Batch reference-Emacs comparisons for `:emacs :match` microtests (single Emacs run per microtest run); set `CLEMACS_REFERENCE_EMACS_BATCH=0` to disable.
+
 ## Current snapshot (2026-01-10)
 
 Status is tracked in `build/clemacs/reports/progress.md`. As of 2026-01-10:

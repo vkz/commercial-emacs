@@ -103,6 +103,8 @@ Then choose one:
 
 - **Raising startup checkpoints (default strategy)**
   - Default to bigger cap jumps to maintain pace (rule of thumb: `loaddefs.el` +1000; most other files +300–800), then run `mise run clemacs:loop:elisp-core`.
+  - To quickly reproduce a failure in a prefix of the startup manifest without editing manifests, use `--limit`:
+    - `mise run clemacs:test:startup-check -- --limit <n>`
   - If it fails, do not “creep” in tiny increments: bisect immediately when the failing point is unclear or too far into the file:
     - `mise run clemacs:bisect:file -- --file <lisp/.../foo.el> --manifest clemacs/contract/startup.check.files`
   - Set the manifest checkpoint to the reported “max passing max-forms”, fix only the top offender from `build/clemacs/reports/first-failure.startup-check.md`, then repeat with another big jump.
@@ -117,13 +119,19 @@ Then choose one:
   - Add/adjust a semantic microtest in `clemacs/contract/semantics.microtests.sexp`.
   - If intentionally diverging from Emacs, set `:emacs nil` and record a dated
     rationale in `plans/clemacs-compat.md` (“Semantic decisions (dated)”).
-  - If using `:emacs :match`, tests run a reference Emacs in `-Q --batch` mode
-    (not `gxeval`); the binary is taken from `CLEMACS_REFERENCE_EMACS` or falls
-    back to `emacs` on `PATH`. For ad-hoc probing without shell-escaping, use
+  - Fastest loop for one microtest (or a small subset by substring):
+    - `mise run clemacs:test:micro -- --name <substr>`
+    - Equivalent: `CLEMACS_MICROTEST_NAME=<substr> mise run clemacs:test:micro`
+    - Add `--no-emacs` to skip reference Emacs comparisons while iterating.
+  - If using `:emacs :match`, microtests run a reference Emacs in `-Q --batch`
+    mode (not `gxeval`) and batch all `:match` exprs into a single Emacs run.
+    Set `CLEMACS_REFERENCE_EMACS_BATCH=0` to disable batching.
+    The binary is taken from `CLEMACS_REFERENCE_EMACS` or falls back to `emacs`
+    on `PATH`. For ad-hoc probing without shell-escaping, use:
     `mise run clemacs:ref-emacs:eval <<'EL' ... EL`.
   - For interactive probing, use the `emacs` skill via `gxeval -s wip ...`.
   - If a `:emacs :match` microtest errors with `reference Emacs failed`, use the reported `expr:` string to locate the entry in `clemacs/contract/semantics.microtests.sexp` and decide whether to update clemacs semantics or mark the test `:emacs nil` with a dated compat note.
-  - If `ELISP-SEMANTICS-MICROTESTS` fails with an unexpected error, re-run `mise run clemacs:test:smoke` and use the reported microtest name + `expr:` to iterate.
+  - If `ELISP-SEMANTICS-MICROTESTS` fails with an unexpected error, use the reported microtest name + `expr:` to iterate via `mise run clemacs:test:micro -- --name <substr>`.
 
 - **Checkpoint seems unstable / flaky**
   - Bisect to a stable checkpoint (in manifest context):

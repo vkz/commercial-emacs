@@ -36,7 +36,7 @@ fi
 
 echo "CLEMACS_REFERENCE_EMACS=${raw:-<unset>}"
 echo "Resolved reference Emacs (${source}): ${resolved}"
-echo "Note: :emacs :match microtests run '${resolved} -Q --batch --eval ...' (not gxeval)."
+echo "Note: :emacs :match microtests run '${resolved} -Q --batch -l <tmp>.el' (not gxeval); microtests batch all :match exprs per run (set CLEMACS_REFERENCE_EMACS_BATCH=0 to disable)."
 echo "Note: ad-hoc eval without shell escaping: mise run clemacs:ref-emacs:eval <<'EL' ... EL"
 echo "Note: interactive probing uses: gxeval -s wip -e '(...)'"
 
