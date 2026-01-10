@@ -96,6 +96,7 @@ P1: Usable terminal editor UX (stability + core workflows)
 
 P2: Load more shipped `lisp/` under clemacs (monotonic)
 - DONE (2026-01-10): Add the checked-in autoloads snapshot `lisp/ldefs-boot.el` to `clemacs/contract/startup.smoke.files` and bisect/raise its stable checkpoint to 198 forms.
+- DONE (2026-01-10): Fix `lisp/ldefs-boot.el` checkpoint past form 199 by raising `lisp/keymap.el` (smoke) and adding a bring-up `defvar-keymap` macro; advance `startup.smoke.files` to include `jka-cmpr-hook` and `epa-hook`.
 - TODO: Keep growing `clemacs/contract/startup.{smoke,tty-editor,check,editor-core}.files` following pdump order; bisect early when checkpoints get unstable.
 - TODO: Improve autoload/function designator robustness (high-fanout for help/arglist, `cl-generic`, and bytecomp callers).
 
