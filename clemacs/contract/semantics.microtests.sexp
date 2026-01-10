@@ -112,6 +112,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "core-vars-files-and-inhibit-boundp"
+  :expr "(mapcar #'boundp '(inhibit-point-motion-hooks inhibit-file-name-handlers inhibit-file-name-operation buffer-undo-list default-frame-alist shell-file-name command-history))"
+  :expected "(t t t t t t t)"
+  :emacs :match)
+
  (:name "rx-bos-any-unibyte"
   :expr "(rx bos (any \"/:\"))"
   :expected "\"\\\\`[/:]\""

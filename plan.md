@@ -92,8 +92,10 @@ P1: Usable terminal editor UX (stability + core workflows)
 - DONE (2026-01-10): Inventory the top interactive workflows that still crash (use `clemacs:test:tty` as the gate) and implement the missing primitives in clusters.
 - DONE (2026-01-10): Decide and implement the minimal multi-window surface (split, other-window, delete-window) needed for common help/minibuffer workflows.
 - DONE (2026-01-10): Implement an isearch/query-replace vertical slice (enough for real editing), or explicitly document it as missing for alpha.
+- DONE (2026-01-10): Reduce TTY bring-up noise by predeclaring a small set of early global vars (`inhibit-point-motion-hooks`, `inhibit-file-name-handlers`, `inhibit-file-name-operation`, `isearch-*`, etc.) and making `clemacs:tty:run` prefer a saved SBCL core + muffle style warnings.
 
 P2: Load more shipped `lisp/` under clemacs (monotonic)
+- DONE (2026-01-10): Add the checked-in autoloads snapshot `lisp/ldefs-boot.el` to `clemacs/contract/startup.smoke.files` and bisect/raise its stable checkpoint to 198 forms.
 - TODO: Keep growing `clemacs/contract/startup.{smoke,tty-editor,check,editor-core}.files` following pdump order; bisect early when checkpoints get unstable.
 - TODO: Improve autoload/function designator robustness (high-fanout for help/arglist, `cl-generic`, and bytecomp callers).
 

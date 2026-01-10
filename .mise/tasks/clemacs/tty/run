@@ -17,13 +17,8 @@ cd "${project_root}"
 build_dir="${usage_build_dir}"
 mkdir -p "${build_dir}"
 
-export XDG_CACHE_HOME="${project_root}/${build_dir}/xdg-cache"
-export XDG_CONFIG_HOME="${project_root}/${build_dir}/xdg-config"
-export XDG_DATA_HOME="${project_root}/${build_dir}/xdg-data"
-
-home_dir="${project_root}/${build_dir}/home"
-mkdir -p "${home_dir}"
-export HOME="${home_dir}"
+source "${project_root}/.mise/tasks/clemacs/lib/sbcl.sh"
+clemacs_setup_xdg_and_home "${project_root}" "${build_dir}"
 
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/substrate/build"
@@ -31,6 +26,7 @@ usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/substra
 deps_dir="${project_root}/${build_dir}/deps"
 qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
 substrate_dylib="${project_root}/${build_dir}/substrate/libemxsubstrate.dylib"
+core_path="${project_root}/${build_dir}/clemacs.core"
 sbcl_dynamic_space="${CLEMACS_SBCL_DYNAMIC_SPACE_SIZE:-4096}"
 
 export CLEMACS_SUBSTRATE_DYLIB="${substrate_dylib}"
@@ -49,14 +45,28 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-cd "${deps_dir}"
-"${qlot_bin}" exec sbcl \
-  --dynamic-space-size "${sbcl_dynamic_space}" \
-  --noinform \
-  --no-sysinit \
-  --no-userinit \
-  --disable-debugger \
-  --eval '(require :asdf)' \
-  --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
-  --eval '(asdf:load-system :clemacs)' \
-  --eval '(uiop:quit (clemacs:tty-main :path (uiop:getenv "CLEMACS_TTY_PATH")))'
+clemacs_ensure_core "${project_root}" "${build_dir}" "${core_path}"
+
+common_args=(
+  --dynamic-space-size "${sbcl_dynamic_space}"
+  --noinform
+  --no-sysinit
+  --no-userinit
+  --disable-debugger
+  --eval '(declaim (sb-ext:muffle-conditions style-warning sb-ext:compiler-note))'
+  --eval '(setf *compile-verbose* nil *load-verbose* nil)'
+)
+
+use_core="${CLEMACS_USE_CORE:-1}"
+if [[ "${use_core}" != "0" && -f "${core_path}" ]]; then
+  sbcl --core "${core_path}" "${common_args[@]}" \
+    --eval '(uiop:quit (clemacs:tty-main :path (uiop:getenv "CLEMACS_TTY_PATH")))'
+else
+  cd "${deps_dir}"
+  "${qlot_bin}" exec sbcl \
+    "${common_args[@]}" \
+    --eval '(require :asdf)' \
+    --eval "(asdf:load-asd #p\"${project_root}/clemacs/clemacs.asd\")" \
+    --eval '(asdf:load-system :clemacs)' \
+    --eval '(uiop:quit (clemacs:tty-main :path (uiop:getenv "CLEMACS_TTY_PATH")))'
+fi

@@ -113,6 +113,7 @@ Then choose one:
 
 - **Missing primitive / unbound variable**
   - Implement or shim the primitive (prefer `clemacs/elisp-compat.lisp` first).
+  - If SBCL warns about an ELisp global being an “undefined variable” during startup (e.g. a C-defined var like `inhibit-point-motion-hooks`), predeclare it early in `clemacs/elisp-compat/00-core.lisp` and add a small `boundp` microtest.
   - When writing CL-level helpers inside the `ELISP` package (e.g. setf expanders), qualify CL names like `cl:values` to avoid `ELISP::` resolution bugs.
   - Add a microtest if semantics are non-obvious.
   - Keep manifests monotonic: do not delete entries to get green.

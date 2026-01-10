@@ -71,6 +71,26 @@
 (cl:defvar temporary-file-directory nil)
 (cl:defvar pdumper--pure-pool nil)
 
+;; Variables that upstream ELisp assumes exist very early (often C-defined),
+;; but which may not have been DEFVAR'd yet when we start loading a subset of
+;; `lisp/` under clemacs.  Declaring them here keeps SBCL from emitting
+;; undefined-variable warnings while we bootstrap.
+(cl:defvar inhibit-point-motion-hooks nil)
+(cl:defvar inhibit-file-name-handlers nil)
+(cl:defvar inhibit-file-name-operation nil)
+(cl:defvar buffer-undo-list nil)
+(cl:defvar default-frame-alist nil)
+(cl:defvar shell-file-name nil)
+(cl:defvar command-history nil)
+
+;; Bring-up: these are defined later in upstream ELisp (or in libraries we may
+;; not load yet), but are referenced by early-startup code paths.
+(cl:defvar inhibit-auto-fill nil)
+(cl:defvar comint-file-name-prefix nil)
+(cl:defvar isearch-forward nil)
+(cl:defvar isearch-success nil)
+(cl:defvar isearch-error nil)
+
 (cl:defmacro bound-and-true-p (var)
   "Bring-up subset of ELisp `bound-and-true-p'."
   `(and (cl:boundp ',var) ,var))
