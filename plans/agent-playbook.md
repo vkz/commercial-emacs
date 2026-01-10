@@ -65,6 +65,7 @@ Common patterns:
   - Treat it as "macroexpand-all got replaced by upstream and became non-stack-safe".
   - Fix by restoring clemacs' stack-safe `macroexpand-all` shim after `lisp/emacs-lisp/macroexp.el` loads (see `clemacs/elisp.lisp` `%maybe-install-post-load-shims`).
 
+- If an upstream defun assumes list-keymap internals (e.g. `define-key-after` from `lisp/subr.el`), prefer a post-load shim in `clemacs/elisp.lisp` `%maybe-install-post-load-shims` to replace the definition after that file loads.
 - CL type errors / wrong arity wrapped by `condition-case`
   - Re-run with `CLEMACS_DEBUG_CONDITION_CASE=1` to print the host backtrace at the catch boundary.
 
