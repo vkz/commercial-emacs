@@ -2582,6 +2582,9 @@ Interactive incremental search is not supported yet."
 (cl:defvar *single-window*
   (make-elisp-window :buffer *current-buffer*
                      :start (point-min)))
+(cl:defvar *minibuffer-window*
+  (make-elisp-window :buffer nil
+                     :start 1))
 (cl:defvar *selected-window* *single-window*)
 (cl:defvar *single-frame* (make-elisp-frame :selected-window *single-window*))
 (cl:defvar *selected-frame* *single-frame*)
@@ -2748,7 +2751,9 @@ Interactive incremental search is not supported yet."
 
 (cl:defun window-live-p (window)
   "Bring-up subset of ELisp `window-live-p'."
-  (and (elisp-window-p window) (eq window *single-window*)))
+  (and (elisp-window-p window)
+       (or (eq window *single-window*)
+           (eq window *minibuffer-window*))))
 
 (cl:defun window-buffer (&optional window)
   "Bring-up subset of ELisp `window-buffer'."
@@ -2824,10 +2829,10 @@ Interactive incremental search is not supported yet."
                   (and buffer-or-name (error "ELISP:GET-BUFFER-WINDOW no such buffer: ~S"
                                              buffer-or-name))
                   (current-buffer)))
-         (win *single-window*))
-    (if (and (window-live-p win) (eq (elisp-window-buffer win) buf))
-        win
-        nil)))
+         (wins (list *single-window* *minibuffer-window*)))
+    (dolist (win wins nil)
+      (when (and (window-live-p win) (eq (elisp-window-buffer win) buf))
+        (return-from get-buffer-window win)))))
 
 (cl:defun minibuffer-selected-window ()
   "Bring-up subset of ELisp `minibuffer-selected-window' (TTY)."
@@ -2837,9 +2842,18 @@ Interactive incremental search is not supported yet."
        *clemacs-minibuffer-selected-window*))
 
 (cl:defun minibuffer-window (&optional frame)
-  "Bring-up subset of ELisp `minibuffer-window' (single-window, no minibuffer)."
+  "Bring-up subset of ELisp `minibuffer-window' (single-frame, TTY)."
   (declare (cl:ignore frame))
-  *single-window*)
+  (let ((mbuf (cond
+               ((and (boundp '*clemacs-minibuffer-buffer*)
+                     (bufferp *clemacs-minibuffer-buffer*))
+                *clemacs-minibuffer-buffer*)
+               (t
+                (get-buffer-create +clemacs-minibuffer-buffer-name+)))))
+    (setf (elisp-window-buffer *minibuffer-window*) mbuf)
+    (setf (elisp-window-start *minibuffer-window*)
+          (with-current-buffer mbuf (point-min)))
+    *minibuffer-window*))
 
 (cl:defun active-minibuffer-window ()
   "Bring-up stub for the C primitive `active-minibuffer-window' (TTY)."
@@ -2858,9 +2872,11 @@ Interactive incremental search is not supported yet."
    (t (point-min))))
 
 (cl:defun window-minibuffer-p (&optional _window)
-  "Bring-up subset of ELisp `window-minibuffer-p' (no minibuffer)."
-  (declare (cl:ignore _window))
-  nil)
+  "Bring-up subset of ELisp `window-minibuffer-p' (single-frame, TTY)."
+  (let ((w (or _window (selected-window))))
+    (and (window-live-p w)
+         (eq w (minibuffer-window))
+         t)))
 
 (cl:defun minibufferp (&optional _buffer)
   "Bring-up subset of ELisp `minibufferp' (TTY)."
@@ -2921,6 +2937,7 @@ Interactive incremental search is not supported yet."
   (unless (window-live-p window)
     (error "ELISP:SELECT-WINDOW expected live window, got: ~S" window))
   (setf *selected-window* window)
+  (setf (elisp-frame-selected-window *single-frame*) window)
   (let ((buf (elisp-window-buffer window)))
     (when buf
       (set-buffer buf)))

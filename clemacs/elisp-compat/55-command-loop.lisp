@@ -817,6 +817,7 @@ intentionally small but Emacs-shaped enough for core completion/help paths."
     (error "ELISP:READ-FROM-MINIBUFFER expected string PROMPT, got: %S" prompt))
   (let* ((mbuf (clemacs--ensure-minibuffer-buffer))
          (prompt-end nil)
+         (saved-selected-window (selected-window))
          (saved-mbuf-local-map (with-current-buffer mbuf (current-local-map)))
          (keymap (if (and _keymap (keymapp _keymap))
                      _keymap
@@ -830,7 +831,8 @@ intentionally small but Emacs-shaped enough for core completion/help paths."
     (unwind-protect
         (progn
           (setf *clemacs-minibuffer-active-p* t
-                *clemacs-minibuffer-selected-window* (selected-window))
+                *clemacs-minibuffer-selected-window* saved-selected-window)
+          (ignore-errors (select-window (minibuffer-window) 'norecord))
           (with-current-buffer mbuf
             (erase-buffer)
             (insert prompt)
@@ -879,6 +881,8 @@ intentionally small but Emacs-shaped enough for core completion/help paths."
               (ignore-errors (history-add-new-input histvar result))))
       (setf *clemacs-minibuffer-active-p* nil
             *clemacs-minibuffer-selected-window* nil)
+      (when (and saved-selected-window (window-live-p saved-selected-window))
+        (ignore-errors (select-window saved-selected-window 'norecord)))
       (with-current-buffer mbuf
         (use-local-map saved-mbuf-local-map)))
     result))
