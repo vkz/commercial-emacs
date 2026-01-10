@@ -126,13 +126,28 @@ Runtime
   - Test breadcrumbs: `clemacs/contract/semantics.microtests.sexp` (`completing-read-noninteractive-default`).
 
 - 2026-01-09: Minibuffer contents are tracked as last prompt input (TTY)
-  - Decision: clemacs does not yet implement an editable minibuffer buffer; in
-    TTY bring-up, `read-from-minibuffer` reads a terminal line. We model:
-    - `minibuffer-contents` as “last line read” (or empty string),
-    - `delete-minibuffer-contents` as clearing that state (no error).
-  - Rationale: unblocks early callers that inspect/clear minibuffer text
+  - Superseded (2026-01-10): we now model the minibuffer as an editable buffer
+    (`*Minibuf-0*`) with a prompt boundary.
+  - Original rationale: unblock early callers that inspect/clear minibuffer text
     (e.g. file-name shadowing), without pretending we have full minibuffer UI.
-  - Test breadcrumbs: `clemacs/contract/semantics.microtests.sexp` (`minibuffer-contents-stringp`).
+
+- 2026-01-10: Minibuffer is modeled as an editable `*Minibuf-0*` buffer (TTY)
+  - Decision: in TTY bring-up, `read-from-minibuffer` uses a real buffer
+    (`*Minibuf-0*`) containing PROMPT followed by editable input, with
+    prompt-safe editing primitives and a local minibuffer keymap.
+  - Rationale: enables practical interactive workflows (`M-x`, completion,
+    history navigation) and keeps behavior close to Emacs while we iterate.
+  - Test breadcrumbs: `clemacs/contract/semantics.microtests.sexp` (minibuffer
+    prompt-safety + history microtests).
+
+- 2026-01-10: `key-parse` represents Meta as an ESC-prefix sequence (TTY)
+  - Decision: `key-parse`/`read-kbd-macro` treat `M-` as an ESC-prefix key
+    sequence (e.g. `M-p` → `[27 112]`) rather than Emacs's Meta-bit encoding.
+  - Rationale: clemacs TTY currently models Meta input and shipped prefix maps
+    via `esc-map` / ESC-prefixed event streams, so this aligns `kbd` parsing
+    with actual runtime key dispatch.
+  - Test breadcrumbs:
+    - `clemacs/contract/semantics.microtests.sexp` (`keymaps-key-parse-m-p-esc-prefix`)
 
 ## Compiler/codegen notes (for later)
 

@@ -179,6 +179,12 @@
   :expected "[24 19]"
   :emacs :match)
 
+ (:name "keymaps-key-parse-m-p-esc-prefix"
+  :expr "(key-parse \"M-p\")"
+  :expected "[27 112]"
+  :emacs nil
+  :notes "clemacs TTY currently represents Meta as an ESC prefix (esc-map).")
+
  (:name "keymaps-bindings--define-key-defines-key"
   :expr "(let ((m (make-sparse-keymap))) (bindings--define-key m [load] 'foo) (eq (lookup-key m [load]) 'foo))"
   :expected "t"
