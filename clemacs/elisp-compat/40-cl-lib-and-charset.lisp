@@ -2,7 +2,19 @@
 
 (cl:defmacro cl-progv (symbols values &body body)
   "Bring-up subset of cl-lib's `cl-progv'."
-  `(cl:progv ,symbols ,values ,@body))
+  (labels ((quoted-symbol-list (x)
+             (when (and (consp x) (eq (car x) 'quote)
+                        (consp (cdr x)) (null (cddr x))
+                        (listp (cadr x)))
+               (let* ((raw (cadr x))
+                      (syms (remove-if-not #'symbolp raw)))
+                 (remove-if (lambda (s) (cl:member s '(nil t) :test #'eq)) syms)))))
+    (let ((specials (quoted-symbol-list symbols)))
+      (if specials
+          `(cl:progv ,symbols ,values
+             (locally (declare (special ,@specials))
+               ,@body))
+          `(cl:progv ,symbols ,values ,@body)))))
 
 (cl:defun %cl-destructuring-bind-check-key-list (key-list allowed-keys)
   (let ((xs key-list))
