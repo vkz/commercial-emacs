@@ -1518,6 +1518,21 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
           (return-from run-hook-with-args-until-success v))))
     nil))
 
+(cl:defun run-hook-with-args-until-failure (hook &rest args)
+  "Bring-up subset of ELisp `run-hook-with-args-until-failure'."
+  (unless (symbolp hook)
+    (error "ELISP:RUN-HOOK-WITH-ARGS-UNTIL-FAILURE expected symbol, got: ~S" hook))
+  (let ((cur (if (cl:boundp hook) (symbol-value hook) nil)))
+    (when (null cur)
+      (return-from run-hook-with-args-until-failure t))
+    (unless (listp cur)
+      (setf cur (list cur)))
+    (dolist (fn cur)
+      (let ((v (apply #'funcall fn args)))
+        (when (null v)
+          (return-from run-hook-with-args-until-failure nil))))
+    t))
+
 (cl:defun run-hook-wrapped (hook wrap-function &rest args)
   "Bring-up subset of the C primitive `run-hook-wrapped'."
   (unless (symbolp hook)

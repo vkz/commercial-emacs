@@ -24,10 +24,6 @@ home_dir="${project_root}/${build_dir}/home"
 mkdir -p "${home_dir}"
 export HOME="${home_dir}"
 
-outfile="${project_root}/${build_dir}/tmp/tty-test.txt"
-outfile="$(mktemp "${project_root}/${build_dir}/tmp/tty-test.XXXXXX")"
-trap 'rm -f "${outfile}" 2>/dev/null || true' EXIT
-
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/substrate/build"
 
@@ -36,11 +32,10 @@ qlot_bin="${project_root}/${build_dir}/tools/qlot/bin/qlot"
 substrate_dylib="${project_root}/${build_dir}/substrate/libemxsubstrate.dylib"
 
 export CLEMACS_SUBSTRATE_DYLIB="${substrate_dylib}"
-export CLEMACS_TTY_PATH="${outfile}"
 
-export CLEMACS_TTY_TEST_OUTFILE="${outfile}"
 export CLEMACS_TTY_TEST_QLOT_BIN="${qlot_bin}"
 export CLEMACS_TTY_TEST_PROJECT_ROOT="${project_root}"
+export CLEMACS_TTY_TEST_TMPDIR="${project_root}/${build_dir}/tmp"
 
 cd "${deps_dir}"
 
@@ -49,13 +44,14 @@ import os
 import pty
 import select
 import sys
+import tempfile
 import time
 
 project_root = os.environ.get("CLEMACS_TTY_TEST_PROJECT_ROOT") or os.getcwd()
-outfile = os.environ.get("CLEMACS_TTY_TEST_OUTFILE")
 qlot_bin = os.environ.get("CLEMACS_TTY_TEST_QLOT_BIN")
-if not outfile or not qlot_bin:
-    raise SystemExit("missing CLEMACS_TTY_TEST_OUTFILE/CLEMACS_TTY_TEST_QLOT_BIN")
+tmpdir = os.environ.get("CLEMACS_TTY_TEST_TMPDIR") or os.getcwd()
+if not qlot_bin:
+    raise SystemExit("missing CLEMACS_TTY_TEST_QLOT_BIN")
 
 asd_path = os.path.join(project_root, "clemacs", "clemacs.asd")
 cmd = [
@@ -76,74 +72,128 @@ cmd = [
     '(uiop:quit (clemacs:tty-main :path (or (uiop:getenv "CLEMACS_TTY_PATH") "")))',
 ]
 
-data = bytearray()
-data += b"abc"
-data += bytes([27, 91, 68])  # left arrow
-data += b"X"
-data += b"\nline2"
-data += bytes([24, 19])  # C-x C-s (save)
-data += bytes([24, 3])  # C-x C-c (quit)
+def run_pty(*, level, tty_path, data, expect_file_bytes):
+    env = dict(os.environ)
+    env["CLEMACS_TTY_STARTUP_LEVEL"] = level
+    env["CLEMACS_TTY_PATH"] = tty_path
 
-pid, fd = pty.fork()
-if pid == 0:
-    os.execvp(cmd[0], cmd)
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execvpe(cmd[0], cmd, env)
 
-os.set_blocking(fd, False)
-deadline = time.time() + 20.0
-buf = bytearray()
-exit_code = None
+    os.set_blocking(fd, False)
+    deadline = time.time() + 40.0
+    buf = bytearray()
 
-banner_deadline = time.time() + 3.0
-banner = b"clemacs tty:"
-while time.time() < banner_deadline and banner not in buf:
-    r, _, _ = select.select([fd], [], [], 0.05)
-    if r:
-        try:
-            chunk = os.read(fd, 4096)
-            if chunk:
-                buf += chunk
-        except OSError:
-            pass
+    banner_deadline = time.time() + 3.0
+    while time.time() < banner_deadline:
+        r, _, _ = select.select([fd], [], [], 0.05)
+        if r:
+            try:
+                chunk = os.read(fd, 4096)
+                if chunk:
+                    buf += chunk
+            except OSError:
+                pass
 
+    try:
+        os.write(fd, data)
+    except OSError:
+        pass
+
+    exit_code = None
+    while True:
+        now = time.time()
+        if now > deadline:
+            os.kill(pid, 9)
+            sys.stderr.write(buf.decode("utf-8", "replace"))
+            raise RuntimeError("timeout waiting for clemacs tty")
+
+        r, _, _ = select.select([fd], [], [], 0.05)
+        if r:
+            try:
+                chunk = os.read(fd, 4096)
+                if chunk:
+                    buf += chunk
+            except OSError:
+                pass
+
+        wpid, status = os.waitpid(pid, os.WNOHANG)
+        if wpid == pid:
+            if os.WIFEXITED(status):
+                exit_code = os.WEXITSTATUS(status)
+            elif os.WIFSIGNALED(status):
+                exit_code = 128 + os.WTERMSIG(status)
+            break
+
+    if exit_code != 0:
+        sys.stderr.write(buf.decode("utf-8", "replace"))
+        raise SystemExit(exit_code)
+
+    if expect_file_bytes is not None:
+        if not os.path.exists(tty_path):
+            raise SystemExit("tty test failed: output file not written")
+
+        content = open(tty_path, "rb").read()
+        if content != expect_file_bytes:
+            sys.stderr.write("tty test unexpected file contents: %r\n" % (content,))
+            raise SystemExit(1)
+
+
+# 1) Bring-up gate (`subr`): minimal edit/save/quit with local keymap stubs.
+fd1, outfile1 = tempfile.mkstemp(prefix="tty-test.", dir=tmpdir)
+os.close(fd1)
 try:
-    os.write(fd, data)
-except OSError:
-    pass
+    data1 = bytearray()
+    data1 += b"abc"
+    data1 += bytes([27, 91, 68])  # left arrow
+    data1 += b"X"
+    data1 += b"\nline2"
+    data1 += bytes([24, 19])  # C-x C-s (save)
+    data1 += bytes([24, 3])  # C-x C-c (quit)
 
-while True:
-    now = time.time()
-    if now > deadline:
-        os.kill(pid, 9)
-        raise RuntimeError("timeout waiting for clemacs tty")
+    run_pty(
+        level="subr",
+        tty_path=outfile1,
+        data=bytes(data1),
+        expect_file_bytes=b"abX\nline2c",
+    )
+finally:
+    try:
+        os.unlink(outfile1)
+    except OSError:
+        pass
 
-    r, _, _ = select.select([fd], [], [], 0.05)
-    if r:
-        try:
-            chunk = os.read(fd, 4096)
-            if chunk:
-                buf += chunk
-        except OSError:
-            pass
+# 2) Usable editor slice (`tty-editor`): C-x C-f → edit → C-x C-s → M-x quit.
+fd2, outfile2 = tempfile.mkstemp(prefix="tty-test.", dir=tmpdir)
+os.close(fd2)
+try:
+    # Start in *scratch*; visit OUTFILE via C-x C-f.
+    data2 = bytearray()
+    data2 += bytes([24, 6])  # C-x C-f (find-file)
+    data2 += outfile2.encode("utf-8")
+    data2 += b"\n"
+    data2 += b"abX\nline2c"
+    data2 += bytes([24, 19])  # C-x C-s (save-buffer)
+    data2 += bytes([27, ord("x")])  # M-x (ESC x)
+    data2 += b"save-buffers-kill-terminal\n"
 
-    wpid, status = os.waitpid(pid, os.WNOHANG)
-    if wpid == pid:
-        if os.WIFEXITED(status):
-            exit_code = os.WEXITSTATUS(status)
-        elif os.WIFSIGNALED(status):
-            exit_code = 128 + os.WTERMSIG(status)
-        break
-
-if exit_code != 0:
-    sys.stderr.write(buf.decode("utf-8", "replace"))
-    raise SystemExit(exit_code)
-
-if not os.path.exists(outfile):
-    raise SystemExit("tty test failed: output file not written")
-
-content = open(outfile, "rb").read()
-if content != b"abX\nline2c":
-    sys.stderr.write("tty test unexpected file contents: %r\n" % (content,))
-    raise SystemExit(1)
+    run_pty(
+        level="tty-editor",
+        tty_path="",
+        data=bytes(data2),
+        expect_file_bytes=None,
+    )
+    # `save-buffer` should have written OUTFILE.
+    content = open(outfile2, "rb").read()
+    if content != b"abX\nline2c":
+        sys.stderr.write("tty-editor unexpected file contents: %r\n" % (content,))
+        raise SystemExit(1)
+finally:
+    try:
+        os.unlink(outfile2)
+    except OSError:
+        pass
 
 print("clemacs tty: ok")
 PY

@@ -4,6 +4,8 @@
 (cl:defvar last-command nil)
 (cl:defvar this-command nil)
 (cl:defvar *clemacs-this-command-keys* nil)
+(cl:defvar overriding-local-map nil)
+(cl:defvar overriding-terminal-local-map nil)
 (cl:defvar clemacs-tty-path nil)
 (cl:defvar clemacs-tty-goal-column nil)
 (cl:defvar *clemacs-minibuffer-depth* 0)
@@ -50,6 +52,11 @@ Outside the minibuffer, we return the last captured minibuffer input."
 (cl:defun this-single-command-raw-keys ()
   "Bring-up stub for ELisp `this-single-command-raw-keys'."
   (this-single-command-keys))
+
+(cl:defun set--this-command-keys (&rest args)
+  "Bring-up stub for ELisp internal `set--this-command-keys'."
+  (setf *clemacs-this-command-keys* (and args (first args)))
+  nil)
 
 (cl:defun %clemacs--unread-pop ()
   (when (consp unread-command-events)
@@ -385,14 +392,59 @@ Outside the minibuffer, we return the last captured minibuffer input."
                (function-name-symbol (cdr fn)))
               ((and (consp fn) (eq (car fn) 'autoload))
                nil)
-              (t
+              ((functionp fn)
                (multiple-value-bind (_lambda _closed name)
                    (cl:function-lambda-expression fn)
                  (declare (cl:ignore _lambda _closed))
-                 (and (symbolp name) name))))))
+                 (and (symbolp name) name)))
+              (t nil)))
+
+           (skip-decls-and-doc (body)
+             (let ((b body))
+               (when (and (consp b) (stringp (car b)))
+                 (setf b (cdr b)))
+               (loop while (and (consp b)
+                                (consp (car b))
+                                (eq (caar b) 'declare))
+                     do (setf b (cdr b)))
+               b))
+
+           (scan-interactive (forms)
+             (dolist (f forms nil)
+               (when (and (consp f) (eq (car f) 'interactive))
+                 (return f))))
+
+           (interactive-form-from-lambda (lambda-expr)
+             (when (and (consp lambda-expr) (eq (car lambda-expr) 'lambda))
+               (let ((body (skip-decls-and-doc (cddr lambda-expr))))
+                 (or (scan-interactive body)
+                     ;; Many functions are compiled/normalized into a single
+                     ;; BLOCK; look for an `(interactive ...)' form inside it.
+                     (when (and (consp body)
+                                (consp (car body))
+                                (eq (caar body) 'block))
+                       (let ((block-body (cddr (car body))))
+                         (scan-interactive (skip-decls-and-doc block-body))))))))
+
+           (lambda-expression-for (fn)
+             (cond
+              ((and (consp fn) (eq (car fn) 'lambda)) fn)
+              ((functionp fn)
+               (multiple-value-bind (lambda-expr _closed _name)
+                   (cl:function-lambda-expression fn)
+                 (declare (cl:ignore _closed _name))
+                 lambda-expr))
+              (t nil))))
     (let* ((sym (function-name-symbol function))
            (iform (and sym (function-get sym 'interactive-form))))
-      iform)))
+      (cond
+       (iform iform)
+       (t
+        (let* ((fn (cond
+                    ((and (symbolp sym) (fboundp sym)) (symbol-function sym))
+                    (t function)))
+               (lambda-expr (lambda-expression-for fn)))
+          (and lambda-expr (interactive-form-from-lambda lambda-expr))))))))
 
 (cl:defun commandp (function &optional _for-call-interactively)
   "Bring-up subset of ELisp `commandp'."
@@ -589,27 +641,39 @@ This only extends `minibuffer-setup-hook' around BODY."
   nil)
 
 (cl:defun clemacs--ensure-minibuffer-local-map ()
-  (or (and *clemacs-minibuffer-local-map* (keymapp *clemacs-minibuffer-local-map*)
-           *clemacs-minibuffer-local-map*)
-      (let ((m (make-sparse-keymap)))
-        ;; Exit/abort.
-        (define-key m (vector 13) 'exit-minibuffer)     ; RET
-        (define-key m (vector 7) 'keyboard-quit)        ; C-g
+  (let* ((m
+           (cond
+            ((and *clemacs-minibuffer-local-map*
+                  (keymapp *clemacs-minibuffer-local-map*))
+             *clemacs-minibuffer-local-map*)
+            ((and (boundp 'minibuffer-local-map)
+                  (keymapp (symbol-value 'minibuffer-local-map)))
+             (symbol-value 'minibuffer-local-map))
+            (t (make-sparse-keymap)))))
+    ;; Bring-up invariant: `minibuffer-local-map' must be usable in a TTY-only
+    ;; session even when we are not loading `lisp/minibuffer.el`.
+    (labels ((ensure (key def)
+               (when (null (ignore-errors (lookup-key m key nil)))
+                 (define-key m key def))))
+      ;; Exit/abort.
+      (ensure (vector 13) 'exit-minibuffer)     ; RET
+      (ensure (vector 7) 'keyboard-quit)        ; C-g
 
-        ;; Editing.
-        (define-key m (vector 127) 'clemacs-minibuffer-delete-backward-char) ; DEL
+      ;; Editing.
+      (ensure (vector 127) 'clemacs-minibuffer-delete-backward-char) ; DEL
 
-        ;; Movement (arrows + C-b/C-f).
-        (define-key m 'left 'clemacs-minibuffer-backward-char)
-        (define-key m 'right 'clemacs-minibuffer-forward-char)
-        (define-key m (vector 2) 'clemacs-minibuffer-backward-char) ; C-b
-        (define-key m (vector 6) 'clemacs-minibuffer-forward-char)  ; C-f
+      ;; Movement (arrows + C-b/C-f).
+      (ensure 'left 'clemacs-minibuffer-backward-char)
+      (ensure 'right 'clemacs-minibuffer-forward-char)
+      (ensure (vector 2) 'clemacs-minibuffer-backward-char) ; C-b
+      (ensure (vector 6) 'clemacs-minibuffer-forward-char)  ; C-f
 
-        ;; Default.
-        (define-key m t 'clemacs-minibuffer-self-insert-command)
+      ;; Default.
+      (ensure t 'clemacs-minibuffer-self-insert-command))
 
-        (setf *clemacs-minibuffer-local-map* m)
-        m)))
+    (setf *clemacs-minibuffer-local-map* m)
+    (set 'minibuffer-local-map m)
+    m))
 
 (cl:defun read-from-minibuffer (prompt &optional _initial-contents _keymap _read
                                        _hist _default-value _inherit-input-method)
@@ -623,13 +687,10 @@ intentionally small but Emacs-shaped enough for core completion/help paths."
     (error "ELISP:READ-FROM-MINIBUFFER expected string PROMPT, got: ~S" prompt))
   (let* ((mbuf (clemacs--ensure-minibuffer-buffer))
          (prompt-end nil)
-         (saved-local-map (and (boundp 'local-map) (symbol-value 'local-map)))
-         (keymap (cond
-                  ((and _keymap (keymapp _keymap)) _keymap)
-                  ((and (boundp 'minibuffer-local-map)
-                        (keymapp (symbol-value 'minibuffer-local-map)))
-                   (symbol-value 'minibuffer-local-map))
-                  (t (clemacs--ensure-minibuffer-local-map))))
+         (saved-mbuf-local-map (with-current-buffer mbuf (current-local-map)))
+         (keymap (if (and _keymap (keymapp _keymap))
+                     _keymap
+                     (clemacs--ensure-minibuffer-local-map)))
          (result nil))
     (unwind-protect
         (progn
@@ -663,28 +724,27 @@ intentionally small but Emacs-shaped enough for core completion/help paths."
                 (delete-region (or prompt-end (point-min)) (point-max))
                 (goto-char (point-max))
                 (insert result))
-             (setf *clemacs-last-minibuffer-contents* result))
+              (setf *clemacs-last-minibuffer-contents* result))
              (t
               (setf result
                     (cl:catch +clemacs-minibuffer-exit-tag+
                       (loop
                         (with-current-buffer mbuf
-                          (clemacs--minibuffer--ensure-point-after-prompt))
-                        (let* ((keys (read-key-sequence nil))
-                               (cmd (key-binding keys t)))
-                          (cond
-                           ((and cmd (not (integerp cmd)) (not (keymapp cmd)))
-                            (with-current-buffer mbuf
-                              (command-execute cmd)))
-                           (t (ding)))))))
+                          (clemacs--minibuffer--ensure-point-after-prompt)
+                          (let* ((keys (read-key-sequence nil))
+                                 (cmd (key-binding keys t)))
+                            (cond
+                             ((and cmd (not (integerp cmd)) (not (keymapp cmd)))
+                              (command-execute cmd))
+                             (t (ding))))))))
               (setf *clemacs-last-minibuffer-contents* result)))))
       (setf *clemacs-minibuffer-active-p* nil
             *clemacs-minibuffer-selected-window* nil)
-      (when (boundp 'local-map)
-        (set 'local-map saved-local-map)))
+      (with-current-buffer mbuf
+        (use-local-map saved-mbuf-local-map)))
     result))
 
-(cl:defun completing-read (prompt collection &optional _predicate require-match
+(cl:defun completing-read (prompt collection &optional predicate require-match
                                   _initial-input _hist def _inherit-input-method)
   "Bring-up subset of the C primitive `completing-read'.
 
@@ -695,7 +755,7 @@ Supported COLLECTION forms:
 
 If `noninteractive' is non-nil, prefer DEF (or error if REQUIRE-MATCH is set and
 no default is provided)."
-  (declare (cl:ignore _predicate _initial-input _hist _inherit-input-method))
+  (declare (cl:ignore _initial-input _hist _inherit-input-method))
   (unless (stringp prompt)
     (error "ELISP:COMPLETING-READ expected string PROMPT, got: ~S" prompt))
   (labels ((default-string ()
@@ -706,6 +766,7 @@ no default is provided)."
               (t nil)))
            (collection-strings ()
              (cond
+              ;; Simple list/alist collections.
               ((listp collection)
                (let ((out nil))
                  (dolist (x collection)
@@ -714,8 +775,19 @@ no default is provided)."
                     ((and (consp x) (stringp (car x))) (push (car x) out))
                     (t nil)))
                  (nreverse out)))
+              ;; Obarray-style collections (used by `execute-extended-command`).
               (t
-               (error "ELISP:COMPLETING-READ unsupported COLLECTION: ~S" collection))))
+               (let ((pred (and predicate (functionp predicate)))
+                     (out nil))
+                 (mapatoms
+                  (lambda (sym)
+                    (when (and (symbolp sym)
+                               (or (null pred)
+                                   (ignore-errors (funcall predicate sym))))
+                      (let ((n (ignore-errors (symbol-name sym))))
+                        (when (stringp n)
+                          (push n out))))))
+                 (nreverse out)))))
            (exact-member-p (s cands)
              (and (stringp s)
                   (cl:member (%elisp-string->cl-string s) cands
@@ -936,53 +1008,58 @@ The first non-argument event is pushed back onto `unread-command-events'."
 (cl:defun clemacs-tty-setup (&key path)
   (setf clemacs-tty-path (and path (not (cl:string= path "")) path))
 
-  (let* ((global
-          (let ((g (current-global-map)))
-            (if (and g (keymapp g)) g nil)))
-         (ctl-x
-          (cond
-           ((and (boundp 'ctl-x-map) (keymapp (symbol-value 'ctl-x-map)))
-            (symbol-value 'ctl-x-map))
-           ((and (boundp 'ctl-x-map) (keymapp 'ctl-x-map))
-            'ctl-x-map)
-           (t nil))))
-    ;; If we don't have the shipped keymaps yet (e.g. `startup.editor-core.files`
-    ;; wasn't loaded), fall back to a minimal bring-up global map.
-    (when (null global)
+  (let* ((level (or (ignore-errors (uiop:getenv "CLEMACS_TTY_STARTUP_LEVEL")) "tty-editor"))
+         (force-bringup-p (or (cl:string= level "none")
+                              (cl:string= level "subr")))
+         (shipped-global
+           (let ((g (current-global-map)))
+             (and g (keymapp g) g)))
+         (shipped-ctl-x
+           (cond
+            ((and (boundp 'ctl-x-map) (keymapp (symbol-value 'ctl-x-map)))
+             (symbol-value 'ctl-x-map))
+            ((and (boundp 'ctl-x-map) (keymapp 'ctl-x-map))
+             'ctl-x-map)
+            (t nil)))
+         (bringup-p (or force-bringup-p (null shipped-global) (null shipped-ctl-x)))
+         (global (and (not bringup-p) shipped-global))
+         (ctl-x (and (not bringup-p) shipped-ctl-x)))
+    ;; For bring-up/debugging (`CLEMACS_TTY_STARTUP_LEVEL=subr|none`), prefer a
+    ;; minimal local keymap so we don't override shipped bindings in `global-map`
+    ;; / `ctl-x-map`.
+    (when bringup-p
       (when (or (null *clemacs-tty-global-map*) (not (keymapp *clemacs-tty-global-map*)))
         (setf *clemacs-tty-global-map* (make-sparse-keymap)))
       (setf global *clemacs-tty-global-map*)
-      (use-global-map global))
+      (use-global-map global)
 
-    (when (null ctl-x)
       (when (or (null *clemacs-tty-ctl-x-map*) (not (keymapp *clemacs-tty-ctl-x-map*)))
         (setf *clemacs-tty-ctl-x-map* (make-sparse-keymap)))
       (setf ctl-x *clemacs-tty-ctl-x-map*)
-      (define-key global (vector 24) ctl-x))
+      (define-key global (vector 24) ctl-x)
 
-    ;; C-x ...
-    (define-key ctl-x (vector 19) 'clemacs-tty-save-buffer) ; C-x C-s
-    (define-key ctl-x (vector 3) 'clemacs-tty-quit)          ; C-x C-c
+      ;; C-x ...
+      (define-key ctl-x (vector 19) 'clemacs-tty-save-buffer) ; C-x C-s
+      (define-key ctl-x (vector 3) 'clemacs-tty-quit)          ; C-x C-c
 
-    ;; Movement.
-    (define-key global 'left 'clemacs-tty-backward-char)
-    (define-key global 'right 'clemacs-tty-forward-char)
-    (define-key global 'up 'clemacs-tty-previous-line)
-    (define-key global 'down 'clemacs-tty-next-line)
+      ;; Movement.
+      (define-key global 'left 'clemacs-tty-backward-char)
+      (define-key global 'right 'clemacs-tty-forward-char)
+      (define-key global 'up 'clemacs-tty-previous-line)
+      (define-key global 'down 'clemacs-tty-next-line)
 
-    ;; Traditional TTY keys.
-    (define-key global (vector 2) 'clemacs-tty-backward-char) ; C-b
-    (define-key global (vector 6) 'clemacs-tty-forward-char)  ; C-f
-    (define-key global (vector 16) 'clemacs-tty-previous-line) ; C-p
-    (define-key global (vector 14) 'clemacs-tty-next-line)      ; C-n
-    (define-key global (vector 21) 'universal-argument)         ; C-u
+      ;; Traditional TTY keys.
+      (define-key global (vector 2) 'clemacs-tty-backward-char) ; C-b
+      (define-key global (vector 6) 'clemacs-tty-forward-char)  ; C-f
+      (define-key global (vector 16) 'clemacs-tty-previous-line) ; C-p
+      (define-key global (vector 14) 'clemacs-tty-next-line)      ; C-n
+      (define-key global (vector 21) 'universal-argument)         ; C-u
 
-    ;; Editing (keep these explicit until the shipped bindings are loaded deeper).
-    (define-key global (vector 127) 'clemacs-tty-delete-backward-char) ; DEL
-    (define-key global (vector 13) 'clemacs-tty-newline)               ; RET
+      ;; Editing.
+      (define-key global (vector 127) 'clemacs-tty-delete-backward-char) ; DEL
+      (define-key global (vector 13) 'clemacs-tty-newline)               ; RET
 
-    ;; Default (only for the bring-up map; avoid poisoning the shipped global map).
-    (when (eq global *clemacs-tty-global-map*)
+      ;; Default.
       (define-key global t 'clemacs-tty-self-insert-command))
 
     t))

@@ -5,6 +5,15 @@
 ;; ---------------------------------------------------------------------------
 
 (cl:defvar enable-multibyte-characters t)
+(cl:defvar selective-display nil)
+
+(cl:defun set-buffer-multibyte (flag)
+  "Bring-up subset of the C primitive `set-buffer-multibyte'.
+
+This does not convert buffer contents; it only updates
+`enable-multibyte-characters` for the current buffer."
+  (make-local-variable 'enable-multibyte-characters)
+  (set 'enable-multibyte-characters (and flag t)))
 
 (defstruct elisp-marker-edit
   ;; :insert  a=at  b=len
@@ -403,6 +412,14 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
     (if (and (%buffer-live-p cur) (cl:member cur live :test #'eq))
         (cons cur (remove cur live :test #'eq))
         live)))
+
+(cl:defun find-buffer (variable value)
+  "Bring-up subset of the C primitive `find-buffer'."
+  (unless (symbolp variable)
+    (error "ELISP:FIND-BUFFER expected symbol VARIABLE, got: ~S" variable))
+  (dolist (buf (buffer-list) nil)
+    (when (equal value (buffer-local-value variable buf))
+      (return buf))))
 
 (cl:defun %buffer-bump-to-front (buf)
   (when (and (elisp-buffer-p buf) (%buffer-live-p buf))
@@ -2022,15 +2039,19 @@ This checks overlays first (when OBJECT is a buffer), then falls back to
   "Bring-up subset of ELisp `insert-before-markers-and-inherit'."
   (apply #'insert parts))
 
-(cl:defun insert-file-contents (filename &optional _visit beg end replace)
+(cl:defun insert-file-contents (filename &optional visit beg end replace)
   "Bring-up subset of ELisp `insert-file-contents'."
-  (declare (cl:ignore _visit))
   (unless (stringp filename)
     (error "ELISP:INSERT-FILE-CONTENTS expects a file name string, got: ~S" filename))
   (when (and beg (not (integerp beg)))
     (error "ELISP:INSERT-FILE-CONTENTS bad BEG: ~S" beg))
   (when (and end (not (integerp end)))
     (error "ELISP:INSERT-FILE-CONTENTS bad END: ~S" end))
+  ;; When VISIT is non-nil, Emacs marks the current buffer as visiting FILENAME.
+  ;; `find-file-noselect-1' relies on this to set `buffer-file-truename' and
+  ;; `default-directory' after reading.
+  (when visit
+    (set 'buffer-file-name filename))
   (let* ((path (%file-name->cl-string filename))
          (txt (uiop:read-file-string path :external-format :utf-8))
          (b (or beg 0))
@@ -2052,6 +2073,14 @@ Scope: UTF-8 only (no legacy coding systems)."
   (declare (cl:ignore _visit _lockname _mustbenew))
   (unless (stringp filename)
     (error "ELISP:WRITE-REGION expects a file name string, got: ~S" filename))
+  ;; Emacs calls (write-region nil nil FILE ...) from the save-buffer path to
+  ;; indicate "write the whole buffer" (not a region); we don't implement
+  ;; write-region annotation functions yet, so treat it as point-min..point-max.
+  (when (null start)
+    (when end
+      (error "ELISP:WRITE-REGION nil START requires END=nil, got: ~S" end))
+    (setf start (point-min)
+          end (point-max)))
   (let* ((path (%file-name->cl-string filename))
          (if-exists (if append :append :supersede)))
     (cond
@@ -2932,6 +2961,11 @@ Interactive incremental search is not supported yet."
   (let ((win (display-buffer buffer-or-name)))
     (select-window win)
     (window-buffer win)))
+
+(cl:defun pop-to-buffer-same-window (buffer-or-name &optional _action _norecord)
+  "Bring-up subset of ELisp `pop-to-buffer-same-window' (single-window)."
+  (declare (cl:ignore _action _norecord))
+  (switch-to-buffer buffer-or-name))
 
 (cl:defun switch-to-buffer (buffer-or-name &optional _norecord _force-same-window)
   "Bring-up subset of ELisp `switch-to-buffer' (single-window)."

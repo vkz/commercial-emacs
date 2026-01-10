@@ -8,15 +8,127 @@
 (cl:defvar major-mode-remap-defaults nil)
 (cl:defvar file-name-handler-alist nil)
 
+(cl:defvar uniquify-trailing-separator-p nil)
+(cl:defvar uniquify-buffer-name-style nil)
+(cl:defvar uniquify-separator "\\")
+
+(cl:defvar auto-save-visited-file-name nil)
+(cl:defvar buffer-auto-save-file-name nil)
+(cl:defvar buffer-file-coding-system nil)
+(cl:defvar last-coding-system-used nil)
+(cl:defvar buffer-file-coding-system-explicit nil)
+
+(cl:defun %initial-temporary-file-directory ()
+  (let* ((env (or (uiop:getenv "TMPDIR")
+                  (uiop:getenv "TMP")
+                  (uiop:getenv "TEMP")))
+         (base (cond
+                ((and (cl:stringp env) (cl:> (length env) 0)) env)
+                (t (namestring (uiop:temporary-directory)))))
+         (out (if (and (cl:> (length base) 0)
+                       (cl:char= (cl:aref base (cl:1- (length base))) #\/))
+                  base
+                  (cl:concatenate 'cl:string base "/"))))
+    ;; Return a CL string so this can be used safely during early system load
+    ;; (before the ELisp arithmetic predicates used by `string-to-unibyte` exist).
+    out))
+
+(cl:defvar temporary-file-directory nil)
+
+;; In upstream Emacs, `temporary-file-directory' is initialized very early (C).
+;; In clemacs bring-up, it can be bound to NIL before `lisp/files.el' runs; give
+;; it a stable default so `find-file' and backup logic don't explode.
+(unless (and (stringp temporary-file-directory)
+             (cl:> (length temporary-file-directory) 0))
+  (setf (cl:symbol-value 'temporary-file-directory)
+        (%initial-temporary-file-directory)))
+
+(cl:defun vc-before-save ()
+  "Bring-up stub for `vc-before-save' (avoid VC hooks in the TTY slice)."
+  nil)
+
+(cl:defun vc-after-save ()
+  "Bring-up stub for `vc-after-save' (avoid VC hooks in the TTY slice)."
+  nil)
+
+(cl:defun uniquify--create-file-buffer-advice (&rest _args)
+  "Bring-up stub used by `create-file-buffer' (see `lisp/files.el')."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun next-read-file-uses-dialog-p ()
+  "TTY-only stub for `next-read-file-uses-dialog-p'."
+  nil)
+
+(cl:defun recent-auto-save-p ()
+  "Bring-up stub for the C primitive `recent-auto-save-p'."
+  nil)
+
+(cl:defun find-file-long-lines-p (_filename)
+  "Bring-up stub for the C primitive `find-file-long-lines-p'.
+
+Return nil so `find-file' does not prompt about very long lines yet."
+  (declare (cl:ignore _filename))
+  nil)
+
 (cl:defun find-file-name-handler (_filename _operation)
   "Bring-up stub for the C primitive `find-file-name-handler'."
   (declare (cl:ignore _filename _operation))
   nil)
 
+(cl:defun get-file-buffer (filename)
+  "Bring-up subset of the C primitive `get-file-buffer'.
+
+Return a live buffer visiting FILENAME, or nil."
+  (unless (stringp filename)
+    (error "ELISP:GET-FILE-BUFFER expected string, got: ~S" filename))
+  (let* ((target (expand-file-name filename))
+         (target* (%file-name->cl-string target))
+         (found nil))
+    (dolist (buf (buffer-list))
+      (let ((bf (ignore-errors (buffer-file-name buf))))
+        (when (and (stringp bf)
+                   (cl:string=
+                    (%file-name->cl-string (expand-file-name bf))
+                    target*))
+          (setf found buf)
+          (return))))
+    found))
+
+(cl:defun get-truename-buffer (filename)
+  "Bring-up subset of the C primitive `get-truename-buffer'.
+
+Return a live buffer visiting the true name of FILENAME, or nil."
+  (unless (stringp filename)
+    (error "ELISP:GET-TRUENAME-BUFFER expected string, got: ~S" filename))
+  (let* ((expanded (expand-file-name filename))
+         (expanded* (%file-name->cl-string expanded))
+         (tru*
+           (let* ((p (probe-file expanded*)))
+             (when p
+               (ignore-errors (namestring (truename p)))))))
+    (dolist (buf (buffer-list) nil)
+      (let* ((bf (ignore-errors (buffer-file-name buf)))
+             (bt (ignore-errors (buffer-local-value 'buffer-file-truename buf))))
+        (when (or (and tru* (stringp bt)
+                       (cl:string= (%file-name->cl-string bt) tru*))
+                  (and (stringp bf)
+                       (cl:string=
+                        (%file-name->cl-string (expand-file-name bf))
+                        expanded*)))
+          (return buf))))))
+
 (cl:defun file-name-case-insensitive-p (_filename)
   "Bring-up stub for the C primitive `file-name-case-insensitive-p'."
   (declare (cl:ignore _filename))
   nil)
+
+(cl:defun verify-visited-file-modtime (&optional _buffer)
+  "Bring-up stub for the C primitive `verify-visited-file-modtime'.
+
+Return t so `save-buffer' can proceed without modtime tracking yet."
+  (declare (cl:ignore _buffer))
+  t)
 
 (cl:defun read-file-name (prompt &optional dir default-filename _mustmatch initial _predicate)
   "Bring-up subset of the C primitive `read-file-name' (TTY only).
@@ -34,8 +146,9 @@ expanded file name string."
             (t nil)))
          (initial*
            (cond
+            ;; INITIAL is for pre-populating the minibuffer; DEFAULT-FILENAME is
+            ;; only the fallback value when the user enters an empty string.
             ((and initial (stringp initial)) initial)
-            ((and default-filename (stringp default-filename)) default-filename)
             (t nil)))
          (input (read-from-minibuffer prompt initial*)))
     (when (and (stringp input)
@@ -433,6 +546,19 @@ FEATURE as provided."
   "Bring-up subset of the C primitive `file-readable-p'."
   (let ((s (%file-name->cl-string filename)))
     (and (probe-file s) t)))
+
+(cl:defun file-newer-than-file-p (file1 file2)
+  "Bring-up subset of the C primitive `file-newer-than-file-p'."
+  (unless (and (stringp file1) (stringp file2))
+    (error "ELISP:FILE-NEWER-THAN-FILE-P expects strings, got: %S %S" file1 file2))
+  (let* ((p1 (ignore-errors (probe-file (%file-name->cl-string file1))))
+         (p2 (ignore-errors (probe-file (%file-name->cl-string file2)))))
+    (cond
+     ((or (null p1) (null p2)) nil)
+     (t
+      (let ((t1 (ignore-errors (file-write-date p1)))
+            (t2 (ignore-errors (file-write-date p2))))
+        (and (integerp t1) (integerp t2) (> t1 t2) t))))))
 
 (cl:defun file-directory-p (filename)
   "Bring-up subset of ELisp `file-directory-p'."

@@ -1,0 +1,43 @@
+# clemacs startup manifest (tty-editor)
+#
+# This list is data and should grow monotonically.
+#
+# Purpose: a small, TTY-first editor startup slice used by the clemacs TTY loop
+# (`mise run clemacs:tty:run`).  It aims to be "Emacs-shaped enough" for a
+# usable terminal session: `find-file`, `save-buffer`, and `M-x`.
+
+# pdump: debug-early, byte-run, backquote, subr, keymap, version.
+lisp/emacs-lisp/debug-early.el
+lisp/emacs-lisp/byte-run.el 1
+lisp/emacs-lisp/backquote.el
+lisp/subr.el -
+lisp/keymap.el -
+lisp/version.el -
+
+# pdump: mule + startup basics (needed for file I/O + coding systems).
+lisp/international/mule.el 20
+lisp/international/mule-conf.el 200
+lisp/international/mule-util.el 10
+lisp/case-table.el 10
+
+# core: macros/dispatch helpers that many libraries assume.
+lisp/emacs-lisp/macroexp.el 60
+lisp/emacs-lisp/pcase.el 200
+lisp/emacs-lisp/gv.el -
+lisp/emacs-lisp/cl-lib.el 10
+lisp/emacs-lisp/cl-macs.el 10
+lisp/emacs-lisp/cl-preloaded.el 60
+lisp/emacs-lisp/oclosure.el -
+lisp/emacs-lisp/cl-seq.el 10
+lisp/emacs-lisp/seq.el -
+lisp/obarray.el 10
+
+# key bindings + core commands.
+lisp/env.el 10
+lisp/format.el 10
+lisp/bindings.el 347
+lisp/window.el 10
+lisp/frame.el -
+lisp/files.el -
+lisp/emacs-lisp/cl-generic.el -
+lisp/simple.el -

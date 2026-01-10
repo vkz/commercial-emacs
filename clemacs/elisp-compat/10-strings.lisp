@@ -176,7 +176,17 @@ Unlike CL:STRING-EQUAL, Emacs's `string-equal' is case-sensitive (an alias of
 (cl:defun compare-strings (string1 start1 end1 string2 start2 end2 &optional ignore-case)
   "Bring-up subset of ELisp `compare-strings'."
   (unless (and (stringp string1) (stringp string2))
-    (error "ELISP:COMPARE-STRINGS expects strings, got: ~S ~S" string1 string2))
+    (when (uiop:getenv "CLEMACS_DEBUG_COMPARE_STRINGS_BAD_TYPES")
+      (cl:format *error-output*
+                 "~&[clemacs] compare-strings bad types: a=~S (~S) b=~S (~S) start1=~S end1=~S start2=~S end2=~S ignore=~S~%"
+                 string1 (type-of string1)
+                 string2 (type-of string2)
+                 start1 end1 start2 end2 ignore-case)
+      #+sbcl
+      (ignore-errors
+        (sb-debug:print-backtrace :stream *error-output* :count 40))
+      (finish-output *error-output*))
+    (error "ELISP:COMPARE-STRINGS expects strings, got: %S %S" string1 string2))
   (let* ((s1 (string-to-multibyte string1))
          (s2 (string-to-multibyte string2))
          (len1 (length s1))

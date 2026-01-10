@@ -95,33 +95,26 @@ Status is tracked in `build/clemacs/reports/progress.md`. As of 2026-01-10:
 Goal: `mise run clemacs:tty:run` is a usable terminal editor (open/edit/save/quit, M-x),
 and common workflows don’t crash (errors are surfaced, not fatal).
 
-Top 10 next tasks (ROI ordered; all TODO)
+Top 10 next tasks (ROI ordered; 1–5 DONE)
 
-1) TTY startup manifest (editor slice)
-   - Add a dedicated TTY startup manifest (e.g. `clemacs/contract/startup.tty-editor.files`).
-   - Include only what is needed for interactive editing + M-x (keep it small; grow monotonically).
-   - Gate: `CLEMACS_TTY_STARTUP_LEVEL=tty-editor mise run clemacs:test:tty` stays green.
+1) DONE (2026-01-10): TTY startup manifest (editor slice)
+   - Added `clemacs/contract/startup.tty-editor.files` and set the TTY loop default startup
+     level to `tty-editor`.
+   - Gate: `mise run clemacs:test:tty` is green.
 
-2) Stop poisoning shipped keymaps in the TTY loop
-   - Make `clemacs-tty-setup` avoid overriding bindings in shipped `global-map`/`ctl-x-map`.
-   - Keep bring-up bindings only when using the fallback bring-up maps.
-   - Gate: with `CLEMACS_TTY_STARTUP_LEVEL=subr`, the current PTY test still passes; with
-     `CLEMACS_TTY_STARTUP_LEVEL=tty-editor`, `C-x C-s` runs `save-buffer` (not clemacs-only stubs).
+2) DONE (2026-01-10): Stop poisoning shipped keymaps in the TTY loop
+   - `clemacs-tty-setup` only installs bring-up keymaps for `CLEMACS_TTY_STARTUP_LEVEL=subr|none`;
+     `tty-editor` uses shipped `global-map`/`ctl-x-map` without clobbering.
+   - Gate: `mise run clemacs:test:tty` exercises both `subr` and `tty-editor` scenarios and is green.
 
-3) “Visit file” vertical slice: `find-file` (C-x C-f)
-   - Ensure `find-file` prompts via minibuffer and visits into the current buffer/window.
-   - Implement safe stubs for `normal-mode`/`hack-local-variables` if needed to avoid crashes.
-   - Gate: add/extend a PTY test that types `C-x C-f`, enters a path, edits, saves, quits.
+3) DONE (2026-01-10): “Visit file” vertical slice: `find-file` (C-x C-f)
+   - `C-x C-f` works in the `tty-editor` PTY test (visit → edit → save).
 
-4) “Save file” vertical slice: `save-buffer` (C-x C-s)
-   - Ensure `buffer-file-name`/`default-directory` and write path semantics are Emacs-shaped enough.
-   - Prefer using shipped `save-buffer` path once the startup manifest is in place.
-   - Gate: `C-x C-s` works after visiting a file; buffer modified flag clears.
+4) DONE (2026-01-10): “Save file” vertical slice: `save-buffer` (C-x C-s)
+   - `C-x C-s` works after visiting a file; PTY test asserts written contents.
 
-5) M-x: `execute-extended-command` + completion
-   - Ensure M-x command selection works end-to-end: completing-read → commandp → call-interactively.
-   - Add command history plumbing so repeat M-x is stable (`command-history`, `extended-command-history`).
-   - Gate: PTY test can run `M-x save-buffers-kill-terminal` and exit cleanly.
+5) DONE (2026-01-10): M-x: `execute-extended-command` + completion
+   - `M-x save-buffers-kill-terminal` works end-to-end in the PTY test and exits cleanly.
 
 6) Minibuffer history (core UX)
    - Implement `add-to-history` / `history-add-new-input` (and the minimal history variables) so

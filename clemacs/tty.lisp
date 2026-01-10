@@ -5,21 +5,39 @@
   (top-line 0 :type fixnum)
   (frame nil))
 
+(defvar *tty-unread-bytes* nil)
+
+(defun %tty-read-byte ()
+  (if (consp *tty-unread-bytes*)
+      (let ((b (car *tty-unread-bytes*)))
+        (setf *tty-unread-bytes* (cdr *tty-unread-bytes*))
+        b)
+      (tty-read-byte)))
+
+(defun %tty-unread-byte (b)
+  (setf *tty-unread-bytes* (cons b *tty-unread-bytes*))
+  nil)
+
 (defun %tty-read-key ()
-  (let ((b (tty-read-byte)))
+  (let ((b (%tty-read-byte)))
     (cond
      ((= b 27) ; ESC sequence
-      (let ((b1 (tty-read-byte)))
+      (let ((b1 (%tty-read-byte)))
         (cond
          ((= b1 91) ; [
-          (let ((b2 (tty-read-byte)))
+          (let ((b2 (%tty-read-byte)))
             (case b2
               (65 :up)
               (66 :down)
               (67 :right)
               (68 :left)
               (t :esc))))
-         (t :esc))))
+         (t
+          ;; Treat ESC as a prefix key unless this is a recognized escape
+          ;; sequence; push the following byte back so keymaps can see ESC <key>
+          ;; (e.g. M-x is typically sent as ESC x in terminals).
+          (%tty-unread-byte b1)
+          :esc))))
      ((or (= b 10) (= b 13)) :enter)
      ((or (= b 8) (= b 127)) :backspace)
      ((and (<= 1 b) (<= b 26))
@@ -252,7 +270,7 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
   (when (or (not (elisp::boundp 'elisp::global-map))
             (not (ignore-errors (elisp::keymapp (elisp::symbol-value 'elisp::global-map)))))
     (let ((project-root (%tty-project-root)))
-      (let* ((level (or (uiop:getenv "CLEMACS_TTY_STARTUP_LEVEL") "smoke")))
+      (let* ((level (or (uiop:getenv "CLEMACS_TTY_STARTUP_LEVEL") "tty-editor")))
         (format t "[clemacs] loading startup (~A)~%" level)
         (finish-output)
         (handler-case
@@ -287,27 +305,76 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
         (progn
           (%tty-maybe-load-startup)
           (tty-enter-raw)
-          (let ((buf (elisp::get-buffer-create (or path* "*scratch*"))))
-            (elisp::set-buffer buf)
-            (setf elisp::noninteractive nil)
-            (setf elisp::clemacs-tty-path path*)
-            (when path*
-              (elisp::insert-file-contents path* nil nil nil t))
-            (elisp::goto-char (elisp::point-max))
-            (elisp::clemacs-tty-setup :path path*)
-            (setf (tty-state-buf state) buf)
-            (loop
-              (setf (tty-state-top-line state)
-                    (%tty-draw state))
-              (handler-case
-                  (let* ((keys (elisp::read-key-sequence nil))
-                         (cmd (elisp::key-binding keys t)))
-                    (if (and cmd (not (integerp cmd)) (not (elisp::keymapp cmd)))
-                        (elisp::command-execute cmd)
-                        (tty-write-string "\a")))
-                (clemacs-quit ()
-                  (return 0))
-                (error ()
-                  (tty-write-string "\a"))))))
+          (let* ((level (or (uiop:getenv "CLEMACS_TTY_STARTUP_LEVEL") "tty-editor"))
+                 (bringup-p (or (string= level "none")
+                                (string= level "subr"))))
+            ;; Ensure we start with a real buffer; in `tty-editor` we rely on
+            ;; shipped `find-file` to establish `buffer-file-name` semantics.
+            (let ((buf (elisp::get-buffer-create (if bringup-p
+                                                     (or path* "*scratch*")
+                                                     "*scratch*"))))
+              (elisp::set-buffer buf)
+              (setf elisp::noninteractive nil)
+              (setf elisp::clemacs-tty-path path*)
+              (when (and bringup-p path*)
+                (elisp::insert-file-contents path* nil nil nil t))
+              (when (and (not bringup-p) path*)
+                (ignore-errors (elisp::find-file path*)))
+              (elisp::goto-char (elisp::point-max))
+              (elisp::clemacs-tty-setup :path path*)
+              (setf (tty-state-buf state) (elisp::current-buffer))
+              (loop
+                ;; Track buffer switches (`find-file`, `switch-to-buffer`, etc.).
+                (setf (tty-state-buf state) (elisp::current-buffer))
+                (setf (tty-state-top-line state)
+                      (%tty-draw state))
+                (let ((keys nil)
+                      (cmd nil))
+                  (handler-case
+                      (let* ((dbg (uiop:getenv "CLEMACS_TTY_DEBUG_ERRORS"))
+                             (bt (uiop:getenv "CLEMACS_TTY_DEBUG_BACKTRACE"))
+                             (debugp (and dbg (not (string= dbg ""))))
+                             (backtracep (and bt (not (string= bt "")))))
+                        (labels ((maybe-debug (fmt &rest args)
+                                   (when debugp
+                                     (apply #'format *error-output* fmt args))))
+                          (handler-bind
+                              ((error
+                                 (lambda (e)
+                                   (declare (ignore e))
+                                   (when (and debugp backtracep)
+                                     (maybe-debug "[clemacs] tty debug (signal): keys=~S cmd=~S this-command=~S~%"
+                                                  keys cmd (ignore-errors elisp::this-command))
+                                     (maybe-debug "[clemacs] tty debug (signal): interactive-form=~S~%"
+                                                  (ignore-errors (elisp::interactive-form cmd)))
+                                     #+sbcl
+                                     (ignore-errors
+                                       (sb-debug:print-backtrace :stream *error-output* :count 40)))
+                                   nil)))
+                            (setf keys (elisp::read-key-sequence nil))
+                            (setf cmd (elisp::key-binding keys t))
+                            (if (and cmd (not (integerp cmd)) (not (elisp::keymapp cmd)))
+                                (elisp::command-execute cmd)
+                                (tty-write-string "\a")))))
+                    (clemacs-quit ()
+                      (return 0))
+                    (error (e)
+                      (cond
+                       ((typep e 'elisp::elisp-signal)
+                        (let ((sym (ignore-errors (elisp::elisp-signal-symbol e)))
+                              (data (ignore-errors (elisp::elisp-signal-data e))))
+                          (format *error-output*
+                                  "[clemacs] tty command error: (signal ~S ~S)~%"
+                                  sym data)))
+                       (t
+                        (format *error-output* "[clemacs] tty command error: ~A~%" e)))
+                      (let ((dbg (uiop:getenv "CLEMACS_TTY_DEBUG_ERRORS")))
+                        (when (and dbg (not (string= dbg "")))
+                          (format *error-output* "[clemacs] tty debug: keys=~S cmd=~S this-command=~S~%"
+                                  keys cmd (ignore-errors elisp::this-command))
+                          (format *error-output* "[clemacs] tty debug: interactive-form=~S~%"
+                                  (ignore-errors (elisp::interactive-form cmd)))))
+                      (finish-output *error-output*)
+                      (tty-write-string "\a"))))))))
       (ignore-errors (tty-exit-raw))
       (%tty-clear))))

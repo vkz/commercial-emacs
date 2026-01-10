@@ -437,13 +437,25 @@ Print a host backtrace to `*standard-output*' and return nil."
   (write-string (backtrace-to-string (backtrace-get-frames)) *standard-output*)
   nil)
 
-(cl:defun kill-emacs (&optional arg)
+(cl:defun backtrace-frame--internal (_fn _nframes _base)
+  "Bring-up stub for `backtrace-frame--internal'.
+
+This is used by `backtrace-frame` (in `lisp/subr.el`) and therefore by some
+callers of `called-interactively-p`.  For clemacs bring-up, return nil to
+indicate \"no such frame\"."
+  (declare (cl:ignore _fn _nframes _base))
+  nil)
+
+(cl:defun kill-emacs (&rest args)
   "Bring-up subset of ELisp `kill-emacs'.
 
-Exit the hosting process.  ARG, when an integer, is used as the process exit
-code."
-  (let ((code (if (integerp arg) arg 0)))
-    (uiop:quit code)))
+Exit the hosting process.  When the first arg is an integer, use it as the
+process exit code."
+  (let* ((arg (and args (first args)))
+         (code (if (integerp arg) arg 0)))
+    (if (and (boundp 'noninteractive) (not noninteractive))
+        (cl:error 'clemacs:clemacs-quit)
+        (uiop:quit code))))
 
 (defstruct elisp-timer
   (secs 0)
@@ -1081,8 +1093,11 @@ Evaluate BODY, but if an error is signaled, demote it and return nil."
 (make-variable-buffer-local 'local-map)
 (make-variable-buffer-local 'font-lock-mode)
 (make-variable-buffer-local 'font-lock-function)
+(make-variable-buffer-local 'enable-multibyte-characters)
+(make-variable-buffer-local 'selective-display)
 (make-variable-buffer-local 'default-directory)
 (make-variable-buffer-local 'buffer-file-name)
+(make-variable-buffer-local 'buffer-auto-save-file-name)
 (make-variable-buffer-local 'buffer-read-only)
 (make-variable-buffer-local 'mark-ring)
 (make-variable-buffer-local 'mark-active)
