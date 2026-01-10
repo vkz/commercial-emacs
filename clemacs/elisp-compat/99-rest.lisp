@@ -15,6 +15,46 @@
   (declare (cl:ignore _name))
   (list 'keymap nil (make-elisp-keymap)))
 
+(cl:defmacro defvar-keymap (variable-name &rest defs)
+  "Bring-up subset of ELisp `defvar-keymap'.
+
+Supports only:
+- `:doc' for the variable docstring
+- plain KEY/DEFINITION pairs (no `:menu' support yet)."
+  (let ((doc nil)
+        (opts nil)
+        (pairs defs))
+    (loop while (and pairs (keywordp (car pairs)) (not (eq (car pairs) :menu))) do
+      (let ((k (pop pairs)))
+        (unless pairs
+          (error "ELISP:DEFVAR-KEYMAP missing value for keyword: %S" k))
+        (let ((v (pop pairs)))
+          (cond
+           ((eq k :doc) (setf doc v))
+           ;; Keep these in case we want to thread them through later.
+           ((cl:member k '(:full :keymap :parent :suppress :name :prefix :repeat)
+                       :test #'eq)
+            (push v opts)
+            (push k opts))
+           (t
+            ;; During bring-up, be permissive: ignore unknown keywords rather
+            ;; than hard-failing a checkpointed startup manifest.
+            nil)))))
+    (when (not (zerop (mod (length pairs) 2)))
+      (error "ELISP:DEFVAR-KEYMAP uneven number of key/definition pairs: %S" pairs))
+    ;; For now, ignore OPTS and always create a sparse keymap.  This is enough
+    ;; to checkpoint `lisp/ldefs-boot.el' and early core libraries that define
+    ;; keymaps in their autoloads.
+    (let ((map-sym (cl:gensym "KEYMAP-")))
+	      `(defvar ,variable-name
+	         (let ((,map-sym (make-sparse-keymap)))
+	           ,@(loop for (k v) on pairs by #'cddr
+	                   when (not (eq k :menu))
+	                     collect `(define-key ,map-sym ,k ,v))
+	           ,map-sym)
+	         ,doc)))
+  )
+
 (cl:defvar ctl-x-r-map (make-sparse-keymap))
 
 (cl:defvar abbrev-map (make-sparse-keymap))

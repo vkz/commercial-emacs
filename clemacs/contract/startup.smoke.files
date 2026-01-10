@@ -15,7 +15,7 @@ lisp/emacs-lisp/debug-early.el
 lisp/emacs-lisp/byte-run.el 1
 lisp/emacs-lisp/backquote.el
 lisp/subr.el -
-lisp/keymap.el 1
+lisp/keymap.el 20
 lisp/version.el 2
 
 # pdump: widget, custom, map-ynp, mule, mule-conf, env, format, bindings, window, files.
@@ -39,7 +39,7 @@ lisp/emacs-lisp/regexp-opt.el 1
 lisp/emacs-lisp/rx.el 1
 
 # pdump: autoloads snapshot (checked in; do not require make-generated loaddefs).
-lisp/ldefs-boot.el 198
+lisp/ldefs-boot.el 203
 
 # pdump: button, gv, cl-lib, cl-macs, cl-preloaded, oclosure, cl-seq, seq.
 lisp/button.el 1
@@ -51,9 +51,11 @@ lisp/emacs-lisp/oclosure.el 1
 lisp/emacs-lisp/cl-seq.el 1
 lisp/emacs-lisp/seq.el 1
 
-# pdump: obarray, abbrev, help, mule-util, case-table.
+# pdump: obarray, abbrev, help, jka-cmpr-hook, epa-hook, mule-util, case-table.
 lisp/obarray.el 1
 lisp/abbrev.el 1
 lisp/help.el 1
+lisp/jka-cmpr-hook.el 1
+lisp/epa-hook.el 1
 lisp/international/mule-util.el 1
 lisp/case-table.el 1

@@ -203,6 +203,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "keymaps-defvar-keymap-basic"
+  :expr "(progn (defun clemacs--dvkm-cmd () (interactive) 'ok) (defvar-keymap clemacs--dvkm :doc \"doc\" \"a\" #'clemacs--dvkm-cmd) (eq (lookup-key clemacs--dvkm \"a\") 'clemacs--dvkm-cmd))"
+  :expected "t"
+  :emacs :match)
+
  (:name "read-string-parses-vector"
   :expr "(equal (read \"[1 2]\") [1 2])"
   :expected "t"
