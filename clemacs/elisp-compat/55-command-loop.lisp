@@ -226,8 +226,11 @@ Outside the minibuffer, we return the last captured minibuffer input."
 	                   (:super (incf bits +char-super+))
 	                   (:hyper (incf bits +char-hyper+))
 	                   (:shift (incf bits +char-shift+))
-	                   (:meta (incf bits +char-meta+))
 	                   (:control (setf ctlp t))
+	                   (:meta
+	                    ;; clemacs TTY currently represents Meta as an ESC prefix
+	                    ;; keymap (ESC-prefix / esc-map), not a modifier bit.
+	                    nil)
 	                   (otherwise (error "ELISP:KEY-PARSE unknown modifier keyword: ~S" m))))
 	               (let ((ctl-code (and ctlp controlify-allowed (%controlify-ascii code))))
 	                 (cond
@@ -261,10 +264,10 @@ Outside the minibuffer, we return the last captured minibuffer input."
 	                ((and (not anglep) (null lt))
 	                 (let ((cc (caret-control-code token)))
 	                   (when cc
-	                     (return-from token->event cc)))
+	                     (return-from token->event (list cc))))
 	                 (let ((oc (octal-escape-code token)))
 	                   (when oc
-	                     (return-from token->event oc))))
+	                     (return-from token->event (list oc)))))
 	                (t nil))
 
 	               (if anglep
@@ -305,7 +308,7 @@ Outside the minibuffer, we return the last captured minibuffer input."
 	                           controlify-allowed t))
 	                    (base-from-angle
 	                     ;; In <> syntax, treat multi-char base names as event symbols.
-	                     (return-from token->event (mods->event-symbol mods base-part)))
+	                     (return-from token->event (list (mods->event-symbol mods base-part))))
 	                    ((null mods)
 	                     ;; Bare multi-char tokens are handled elsewhere (or are named tokens above).
 	                     (error "ELISP:KEY-PARSE unsupported token: ~S" token))
@@ -318,50 +321,65 @@ Outside the minibuffer, we return the last captured minibuffer input."
 	                   (when (and base-is-char base-from-angle)
 	                     (setf controlify-allowed nil))
 
-	                   (apply-char-modifiers base-code mods
-	                                         :controlify-allowed (and controlify-allowed (not base-from-named))))))))
+	                   (let* ((meta (cl:member :meta mods))
+	                          (mods* (remove :meta mods))
+	                          (mods**
+	                            (if (and (cl:member :shift mods*)
+	                                     (integerp base-code)
+	                                     (<= (cl:char-code #\a) base-code)
+	                                     (<= base-code (cl:char-code #\z)))
+	                                (progn
+	                                  (setf base-code (- base-code 32))
+	                                  (remove :shift mods*))
+	                                mods*))
+	                          (inner (apply-char-modifiers base-code mods**
+	                                                       :controlify-allowed (and controlify-allowed (not base-from-named)))))
+	                     (if meta
+	                         (list 27 inner)
+	                         (list inner))))))))
 
 	    (cond
 	     ((vectorp keys) keys)
 	     ((null keys) (cl:make-array 0))
 	     ((stringp keys)
-	      (let* ((s (%elisp-string->cl-string keys))
-	             (words (split-words s))
-	             (events nil))
-	        (dolist (w words)
-	          (multiple-value-bind (times body) (maybe-repetition w)
-	            (dotimes (_ times)
-	              (let ((body-lc (cl:string-downcase body)))
-	                ;; For bare key sequences like "foobar" (no spaces), treat the
-	                ;; token as a run of literal characters, unless it is a named
-	                ;; key like "RET" or includes modifiers/<> syntax.
-	                (cond
-	                 ((and (> (cl:length body) 2)
-	                       (cl:char= (cl:aref body 0) #\<)
-	                       (cl:char= (cl:aref body (1- (cl:length body))) #\>)
-	                       (let ((inner (cl:subseq body 1 (1- (cl:length body)))))
-	                         (find-if #'ws-char-p inner)))
-	                  ;; Treat "< right >" as the literal string "<right>".
-	                  ;; We accumulate EVENTS with PUSH (then NREVERSE), so push
-	                  ;; characters in forward order here.
-	                  (push (cl:char-code #\<) events)
-	                  (let ((inner (cl:subseq body 1 (1- (cl:length body)))))
-	                    (loop for ch across inner
-	                          unless (ws-char-p ch) do (push (cl:char-code ch) events)))
-	                  (push (cl:char-code #\>) events))
-	                 ((and (> (cl:length body) 1)
-	                       (null (cl:position #\- body))
-	                       (null (cl:position #\< body))
-	                       (null (named-token-code body-lc))
-	                       (null (caret-control-code body))
-	                       (null (octal-escape-code body)))
-	                  (dotimes (i (cl:length body))
-	                    (push (cl:char-code (cl:aref body i)) events)))
-	                 (t
-	                  (push (token->event body) events)))))))
-	        (coerce (nreverse events) 'vector)))
+		      (let* ((s (%elisp-string->cl-string keys))
+		             (words (split-words s))
+		             (events nil))
+		        (dolist (w words)
+		          (multiple-value-bind (times body) (maybe-repetition w)
+		            (dotimes (_ times)
+		              (let ((body-lc (cl:string-downcase body)))
+		                ;; For bare key sequences like "foobar" (no spaces), treat the
+		                ;; token as a run of literal characters, unless it is a named
+		                ;; key like "RET" or includes modifiers/<> syntax.
+		                (cond
+		                 ((and (> (cl:length body) 2)
+		                       (cl:char= (cl:aref body 0) #\<)
+		                       (cl:char= (cl:aref body (1- (cl:length body))) #\>)
+		                       (let ((inner (cl:subseq body 1 (1- (cl:length body)))))
+		                         (find-if #'ws-char-p inner)))
+		                  ;; Treat "< right >" as the literal string "<right>".
+		                  ;; We accumulate EVENTS with PUSH (then NREVERSE), so push
+		                  ;; characters in forward order here.
+		                  (push (cl:char-code #\<) events)
+		                  (let ((inner (cl:subseq body 1 (1- (cl:length body)))))
+		                    (loop for ch across inner
+		                          unless (ws-char-p ch) do (push (cl:char-code ch) events)))
+		                  (push (cl:char-code #\>) events))
+		                 ((and (> (cl:length body) 1)
+		                       (null (cl:position #\- body))
+		                       (null (cl:position #\< body))
+		                       (null (named-token-code body-lc))
+		                       (null (caret-control-code body))
+		                       (null (octal-escape-code body)))
+		                  (dotimes (i (cl:length body))
+		                    (push (cl:char-code (cl:aref body i)) events)))
+		                 (t
+		                  (dolist (ev (token->event body))
+		                    (push ev events))))))))
+		        (coerce (nreverse events) 'vector)))
 	     (t
-	      (error "ELISP:KEY-PARSE expected string or vector, got: ~S" keys)))))
+	      (error "ELISP:KEY-PARSE expected string or vector, got: %S" keys)))))
 
 (cl:defun key-binding (keys &optional accept-default _no-remap _position)
   "Bring-up subset of ELisp `key-binding'."
@@ -598,6 +616,114 @@ This only extends `minibuffer-setup-hook' around BODY."
   "Bring-up subset of ELisp `keyboard-quit'."
   (signal 'quit nil))
 
+(cl:defvar minibuffer-history nil)
+(cl:defvar minibuffer-history-variable 'minibuffer-history)
+(cl:defvar minibuffer-history-position 0)
+(cl:defvar history-length 30)
+(cl:defvar history-delete-duplicates t)
+
+(cl:defvar *clemacs-minibuffer-history--saved-input* nil)
+
+(cl:defun %clemacs--elisp-string-empty-p (s)
+  (and (stringp s) (cl:<= (length s) 0)))
+
+(cl:defun %clemacs--elisp-string= (a b)
+  (and (stringp a) (stringp b)
+       (cl:string= (%elisp-string->cl-string a) (%elisp-string->cl-string b))))
+
+(cl:defun add-to-history (history-var new-item &optional max keep-all)
+  "Bring-up subset of ELisp `add-to-history'."
+  (unless (symbolp history-var)
+    (error "ELISP:ADD-TO-HISTORY expected symbol HISTORY-VAR, got: ~S" history-var))
+  (when (or (null new-item) (%clemacs--elisp-string-empty-p new-item))
+    (return-from add-to-history
+      (and (boundp history-var) (symbol-value history-var))))
+  (let* ((hist0 (and (boundp history-var) (symbol-value history-var)))
+         (hist (if (listp hist0) hist0 nil))
+         (delete-dups (and (null keep-all)
+                           (boundp 'history-delete-duplicates)
+                           (symbol-value 'history-delete-duplicates))))
+    (when delete-dups
+      (setf hist (remove new-item hist :test #'%clemacs--elisp-string=)))
+    (setf hist (cons new-item hist))
+    (when (and (integerp max) (cl:<= max 0))
+      (setf hist nil))
+    (when (and (integerp max) (cl:> max 0))
+      (let ((cell (nthcdr (1- max) hist)))
+        (when (consp cell)
+          (setf (cdr cell) nil))))
+    (set history-var hist)
+    hist))
+
+(cl:defun history-add-new-input (history-var new-input &optional keep-all)
+  "Bring-up subset of ELisp `history-add-new-input'."
+  (let ((max (and (boundp 'history-length)
+                  (integerp (symbol-value 'history-length))
+                  (symbol-value 'history-length))))
+    (add-to-history history-var new-input max keep-all)))
+
+(cl:defun clemacs--minibuffer--replace-input (string)
+  (when (and (boundp '*clemacs-minibuffer-active-p*) *clemacs-minibuffer-active-p*)
+    (let ((mbuf (clemacs--ensure-minibuffer-buffer)))
+      (when (bufferp mbuf)
+        (with-current-buffer mbuf
+          (let ((pe (clemacs--minibuffer--prompt-end)))
+            (delete-region pe (point-max))
+            (goto-char (point-max))
+            (when (and string (stringp string))
+              (insert string))
+            (goto-char (point-max)))))))
+  nil)
+
+(cl:defun previous-history-element (&optional n)
+  "Bring-up subset of ELisp `previous-history-element' (TTY minibuffer)."
+  (let* ((step (or n 1))
+         (histvar (and (boundp 'minibuffer-history-variable)
+                       (symbolp (symbol-value 'minibuffer-history-variable))
+                       (symbol-value 'minibuffer-history-variable)))
+         (histvar* (or histvar 'minibuffer-history))
+         (hist (and (boundp histvar*) (symbol-value histvar*)))
+         (lst (if (listp hist) hist nil))
+         (len (length lst))
+         (pos (and (boundp 'minibuffer-history-position)
+                   (integerp (symbol-value 'minibuffer-history-position))
+                   (symbol-value 'minibuffer-history-position)))
+         (pos0 (or pos 0)))
+    (when (and (= pos0 0) (null *clemacs-minibuffer-history--saved-input*))
+      (setf *clemacs-minibuffer-history--saved-input* (minibuffer-contents)))
+    (let* ((pos1 (+ pos0 step))
+           (pos2 (min pos1 len)))
+      (when (= pos2 pos0)
+        (return-from previous-history-element (ding)))
+      (set 'minibuffer-history-position pos2)
+      (let ((s (cond
+                ((= pos2 0) *clemacs-minibuffer-history--saved-input*)
+                ((and (<= 1 pos2) (<= pos2 len))
+                 (nth (1- pos2) lst))
+                (t nil))))
+        (clemacs--minibuffer--replace-input (or s (string-to-unibyte ""))))))
+  nil)
+
+(cl:defun next-history-element (&optional n)
+  "Bring-up subset of ELisp `next-history-element' (TTY minibuffer)."
+  (let* ((step (or n 1))
+         (pos (and (boundp 'minibuffer-history-position)
+                   (integerp (symbol-value 'minibuffer-history-position))
+                   (symbol-value 'minibuffer-history-position)))
+         (pos0 (or pos 0))
+         (pos1 (- pos0 step))
+         (pos2 (max 0 pos1)))
+    (when (= pos2 pos0)
+      (return-from next-history-element (ding)))
+    (set 'minibuffer-history-position pos2)
+    (cond
+     ((= pos2 0)
+      (clemacs--minibuffer--replace-input
+       (or *clemacs-minibuffer-history--saved-input* (string-to-unibyte ""))))
+     (t
+      (previous-history-element 0))))
+  nil)
+
 (cl:defun clemacs--minibuffer--prompt-end ()
   (or (and (boundp '*clemacs-minibuffer-prompt-end*)
            (integerp *clemacs-minibuffer-prompt-end*)
@@ -668,6 +794,10 @@ This only extends `minibuffer-setup-hook' around BODY."
       (ensure (vector 2) 'clemacs-minibuffer-backward-char) ; C-b
       (ensure (vector 6) 'clemacs-minibuffer-forward-char)  ; C-f
 
+      ;; History navigation (minimal).
+      (ensure (vector 27 (cl:char-code #\p)) 'previous-history-element) ; M-p
+      (ensure (vector 27 (cl:char-code #\n)) 'next-history-element)     ; M-n
+
       ;; Default.
       (ensure t 'clemacs-minibuffer-self-insert-command))
 
@@ -682,15 +812,20 @@ This only extends `minibuffer-setup-hook' around BODY."
 In clemacs TTY bring-up, the minibuffer is modeled as an ordinary buffer
 (`*Minibuf-0*`) containing PROMPT followed by editable input text. This is
 intentionally small but Emacs-shaped enough for core completion/help paths."
-  (declare (cl:ignore _read _hist _inherit-input-method))
+  (declare (cl:ignore _read _inherit-input-method))
   (unless (stringp prompt)
-    (error "ELISP:READ-FROM-MINIBUFFER expected string PROMPT, got: ~S" prompt))
+    (error "ELISP:READ-FROM-MINIBUFFER expected string PROMPT, got: %S" prompt))
   (let* ((mbuf (clemacs--ensure-minibuffer-buffer))
          (prompt-end nil)
          (saved-mbuf-local-map (with-current-buffer mbuf (current-local-map)))
          (keymap (if (and _keymap (keymapp _keymap))
                      _keymap
                      (clemacs--ensure-minibuffer-local-map)))
+         (histvar (cond
+                   ((null _hist) nil)
+                   ((symbolp _hist) _hist)
+                   ((and (consp _hist) (symbolp (car _hist))) (car _hist))
+                   (t nil)))
          (result nil))
     (unwind-protect
         (progn
@@ -713,31 +848,35 @@ intentionally small but Emacs-shaped enough for core completion/help paths."
                 (dolist (fn (symbol-value 'minibuffer-setup-hook))
                   (when (functionp fn)
                     (ignore-errors (funcall fn))))))
-            (cond
-             (noninteractive
-              (setf result
-                    (cond
-                     ((and _initial-contents (stringp _initial-contents)) _initial-contents)
-                     ((and _default-value (stringp _default-value)) _default-value)
-                     (t (string-to-unibyte ""))))
-              (with-current-buffer mbuf
-                (delete-region (or prompt-end (point-min)) (point-max))
-                (goto-char (point-max))
-                (insert result))
-              (setf *clemacs-last-minibuffer-contents* result))
-             (t
-              (setf result
-                    (cl:catch +clemacs-minibuffer-exit-tag+
-                      (loop
-                        (with-current-buffer mbuf
-                          (clemacs--minibuffer--ensure-point-after-prompt)
-                          (let* ((keys (read-key-sequence nil))
-                                 (cmd (key-binding keys t)))
-                            (cond
-                             ((and cmd (not (integerp cmd)) (not (keymapp cmd)))
-                              (command-execute cmd))
-                             (t (ding))))))))
-              (setf *clemacs-last-minibuffer-contents* result)))))
+            (if noninteractive
+                (progn
+                  (setf result
+                        (cond
+                         ((and _initial-contents (stringp _initial-contents)) _initial-contents)
+                         ((and _default-value (stringp _default-value)) _default-value)
+                         (t (string-to-unibyte ""))))
+                  (with-current-buffer mbuf
+                    (delete-region (or prompt-end (point-min)) (point-max))
+                    (goto-char (point-max))
+                    (insert result)))
+                (let ((*clemacs-minibuffer-history--saved-input* nil))
+                  (when histvar
+                    (set 'minibuffer-history-variable histvar)
+                    (set 'minibuffer-history-position 0))
+                  (setf result
+                        (cl:catch +clemacs-minibuffer-exit-tag+
+                          (loop
+                            (with-current-buffer mbuf
+                              (clemacs--minibuffer--ensure-point-after-prompt)
+                              (let* ((keys (read-key-sequence nil))
+                                     (cmd (key-binding keys t)))
+                                (cond
+                                 ((and cmd (not (integerp cmd)) (not (keymapp cmd)))
+                                  (command-execute cmd))
+                                 (t (ding)))))))))))
+            (setf *clemacs-last-minibuffer-contents* result)
+            (when histvar
+              (ignore-errors (history-add-new-input histvar result))))
       (setf *clemacs-minibuffer-active-p* nil
             *clemacs-minibuffer-selected-window* nil)
       (with-current-buffer mbuf
@@ -755,7 +894,7 @@ Supported COLLECTION forms:
 
 If `noninteractive' is non-nil, prefer DEF (or error if REQUIRE-MATCH is set and
 no default is provided)."
-  (declare (cl:ignore _initial-input _hist _inherit-input-method))
+  (declare (cl:ignore _initial-input _inherit-input-method))
   (unless (stringp prompt)
     (error "ELISP:COMPLETING-READ expected string PROMPT, got: ~S" prompt))
   (labels ((default-string ()
@@ -814,7 +953,7 @@ no default is provided)."
                                       (%elisp-string->cl-string prompt)
                                       (%elisp-string->cl-string d)))
                           prompt))
-             (input (read-from-minibuffer prompt*)))
+             (input (read-from-minibuffer prompt* nil nil nil _hist d nil)))
         (when (and (stringp input)
                    (cl:string= (%elisp-string->cl-string input) "")
                    d)
@@ -841,6 +980,86 @@ Returns a vector of events."
           (when (or (null binding) (not (keymapp binding)))
             (setf *clemacs-this-command-keys* seq)
             (return seq)))))))
+
+(cl:defun read-key-sequence-vector (&optional prompt &rest args)
+  "Bring-up subset of ELisp `read-key-sequence-vector'."
+  (declare (cl:ignore args))
+  (read-key-sequence prompt))
+
+(cl:defun %clemacs--strip-kbd-macro-comments (s)
+  (cl:with-output-to-string (out)
+    (let ((len (cl:length s))
+          (i 0)
+          (in-comment nil)
+          (pending-space nil))
+      (labels ((emit-space ()
+                 (when pending-space
+                   (write-char #\Space out)
+                   (setf pending-space nil))))
+        (loop while (< i len) do
+          (let* ((ch (cl:aref s i))
+                 (c (cl:char-code ch)))
+            (cond
+             (in-comment
+              (incf i)
+              (when (= c 10) ; newline
+                (setf in-comment nil pending-space t)))
+             ((and (= c 59) ; ';'
+                   (< (1+ i) len)
+                   (= (cl:char-code (cl:aref s (1+ i))) 59))
+              (setf in-comment t)
+              (incf i 2))
+             ((or (= c 32) (= c 9) (= c 10) (= c 13) (= c 12)) ; ws
+              (setf pending-space t)
+              (incf i))
+             (t
+              (emit-space)
+              (write-char ch out)
+              (incf i)))))))))
+
+(cl:defun read-kbd-macro (start &optional end)
+  "Bring-up subset of ELisp `read-kbd-macro'.
+
+Only supports START as a string.  Ignores \";;\" comments to end of line."
+  (declare (cl:ignore end))
+  (unless (stringp start)
+    (error "ELISP:READ-KBD-MACRO expected string START, got: ~S" start))
+  (let* ((s (%elisp-string->cl-string start))
+         (clean (%clemacs--strip-kbd-macro-comments s)))
+    (key-parse
+     (string-to-unibyte
+      (cl:string-trim '(#\Space #\Tab #\Newline #\Return #\Page) clean)))))
+
+(cl:defvar last-kbd-macro nil)
+
+(cl:defun execute-kbd-macro (macro &optional count _loopfunc)
+  "Bring-up subset of the C primitive `execute-kbd-macro'."
+  (declare (cl:ignore _loopfunc))
+  (when (null macro)
+    (setf macro (and (boundp 'last-kbd-macro) (symbol-value 'last-kbd-macro))))
+  (when (null macro)
+    (let ((s (read-from-minibuffer (string-to-unibyte "Keyboard macro: ")
+                                   nil nil nil 'minibuffer-history nil nil)))
+      (setf macro (and (stringp s) (read-kbd-macro s)))
+      (set 'last-kbd-macro macro)))
+  (unless (boundp 'unread-command-events)
+    (set 'unread-command-events nil))
+  (let* ((reps (cond
+                ((null count) 1)
+                ((and (integerp count) (cl:> count 0)) count)
+                (t 1)))
+         (events (%keyseq->events macro))
+         (saved (symbol-value 'unread-command-events)))
+    (dotimes (_ reps)
+      (set 'unread-command-events (append events saved))
+      (loop until (eq (symbol-value 'unread-command-events) saved) do
+        (let* ((keys (read-key-sequence nil))
+               (cmd (key-binding keys t)))
+          (cond
+           ((and cmd (not (integerp cmd)) (not (keymapp cmd)))
+            (command-execute cmd))
+           (t (ding)))))))
+    nil)
 
 (cl:defun negative-argument (&optional _arg)
   "Bring-up subset of ELisp `negative-argument'.

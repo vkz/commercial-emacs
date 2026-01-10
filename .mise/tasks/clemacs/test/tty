@@ -175,6 +175,19 @@ try:
     data2 += b"\n"
     data2 += b"abX\nline2c"
     data2 += bytes([24, 19])  # C-x C-s (save-buffer)
+    # Minibuffer history: M-x save-buffer, then M-x M-p RET recalls it.
+    data2 += bytes([27, ord("x")])  # M-x (ESC x)
+    data2 += b"save-buffer\n"
+    data2 += bytes([27, ord("x")])  # M-x (ESC x)
+    data2 += bytes([27, ord("p")])  # M-p (history prev)
+    data2 += b"\n"
+    # Keyboard macro surface: M-x execute-kbd-macro twice (define + replay).
+    data2 += bytes([27, ord("x")])  # M-x (ESC x)
+    data2 += b"execute-kbd-macro\n"
+    data2 += b"C-a C-e\n"
+    data2 += bytes([27, ord("x")])  # M-x (ESC x)
+    data2 += b"execute-kbd-macro\n"
+    data2 += b"C-a C-e\n"
     data2 += bytes([27, ord("x")])  # M-x (ESC x)
     data2 += b"save-buffers-kill-terminal\n"
 

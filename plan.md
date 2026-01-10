@@ -116,15 +116,15 @@ Top 10 next tasks (ROI ordered; 1–5 DONE)
 5) DONE (2026-01-10): M-x: `execute-extended-command` + completion
    - `M-x save-buffers-kill-terminal` works end-to-end in the PTY test and exits cleanly.
 
-6) Minibuffer history (core UX)
-   - Implement `add-to-history` / `history-add-new-input` (and the minimal history variables) so
-     minibuffer prompts don’t regress or lose state.
-   - Bind M-p/M-n in the minibuffer local map for history navigation (minimal subset).
-   - Gate: PTY test demonstrates M-p recalls last minibuffer input.
+6) DONE (2026-01-10): Minibuffer history (core UX)
+   - Implemented `add-to-history` / `history-add-new-input`, plus the minimal minibuffer history
+     variables to preserve interactive state.
+   - Added M-p/M-n history navigation in the minibuffer local map.
+   - Gate: `mise run clemacs:test:tty` demonstrates M-p recalling last minibuffer input.
 
-7) Keyboard macro surface (unblocks upstream key/command tests)
-   - Implement `read-key-sequence-vector`, `read-kbd-macro`, `execute-kbd-macro` (minimal).
-   - Gate: PTY test can define a tiny macro and replay it without crashing.
+7) DONE (2026-01-10): Keyboard macro surface (unblocks upstream key/command tests)
+   - Implemented `read-key-sequence-vector`, `read-kbd-macro`, `execute-kbd-macro` (minimal).
+   - Gate: `mise run clemacs:test:tty` replays a tiny macro without crashing.
 
 8) Timing + yielding
    - Implement `sit-for`/`sleep-for` (and tighten `input-pending-p` behavior) so libraries that

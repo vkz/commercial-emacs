@@ -643,6 +643,21 @@
   :expected "\"D\""
   :emacs nil)
 
+ (:name "add-to-history-prepend-and-dedup"
+  :expr "(progn (setq history-delete-duplicates t) (setq clemacs--hist nil) (add-to-history 'clemacs--hist \"a\") (add-to-history 'clemacs--hist \"b\") (add-to-history 'clemacs--hist \"a\") clemacs--hist)"
+  :expected "(\"a\" \"b\")"
+  :emacs :match)
+
+ (:name "read-from-minibuffer-noninteractive-adds-history"
+  :expr "(progn (setq noninteractive t) (setq clemacs--mh nil) (read-from-minibuffer \"P: \" nil nil nil 'clemacs--mh \"D\" nil) clemacs--mh)"
+  :expected "(\"D\")"
+  :emacs nil)
+
+ (:name "execute-kbd-macro-basic"
+  :expr "(progn (setq noninteractive t) (defun clemacs--kmtest () (interactive) (insert \"Z\")) (use-global-map (make-sparse-keymap)) (define-key (current-global-map) \"a\" 'clemacs--kmtest) (with-temp-buffer (execute-kbd-macro \"a\") (buffer-string)))"
+  :expected "\"Z\""
+  :emacs nil)
+
  (:name "minibuffer-prompt-safe-self-insert"
   :expr "(with-temp-buffer (insert \"P> \") (setq *clemacs-minibuffer-prompt-end* (point)) (goto-char 1) (setq last-command-event 97) (clemacs-minibuffer-self-insert-command 1) (buffer-string))"
   :expected "\"P> a\""
