@@ -41,6 +41,7 @@ These are intentional and should be treated as invariants until the project dire
   - `lisp/x-dnd.el`, `lisp/pgtk-dnd.el`, and `test/lisp/x-dnd-tests.el`
 - Dynamic modules are removed.
 - Native compilation (libgccjit / `.eln`) is removed/disabled.
+- Internationalization beyond UTF-8 is out of scope (no locale/translation work planned for alpha).
 
 Baseline acceptance criteria (C-hosted TTY Emacs)
 
@@ -85,7 +86,7 @@ P0: Put clemacs in users' hands (alpha)
 - TODO: Make `clemacs:emacs:run` default to `--startup-level tty-editor` and update `emacs --help` to list `tty-editor`.
 - TODO: Implement minimal `--batch` behavior (load startup manifest, run `--eval` forms, exit nonzero on error); document unsupported flags.
 - TODO: Implement minimal init loading and opt-outs (`-Q` and `-q` Emacs-shaped behavior, even if partial).
-- TODO: Add a "bugreport bundle" helper task that captures: `progress.md`, `first-failure.*`, `stamps/*`, plus a repro command line.
+- TODO: Add an "issue bundle" helper task (not Emacs' built-in bug reporter) that captures: `progress.md`, `first-failure.*`, `stamps/*`, plus a repro command line.
 
 P1: Usable terminal editor UX (stability + core workflows)
 - TODO: Inventory the top interactive workflows that still crash (use `clemacs:test:tty` as the gate) and implement the missing primitives in clusters.
