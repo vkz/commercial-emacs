@@ -411,6 +411,38 @@ and ignores the FRAME argument."
     (maphash (lambda (id sym) (push (cons id sym) pairs)) *face-symbols-by-id*)
     (mapcar #'cdr (sort pairs #'< :key #'car))))
 
+(cl:defun set-face-documentation (face string)
+  "Bring-up subset of ELisp `set-face-documentation'."
+  (unless (symbolp face)
+    (error "ELISP:SET-FACE-DOCUMENTATION expected symbol face, got: %S" face))
+  (unless (documentation-stringp string)
+    (error "ELISP:SET-FACE-DOCUMENTATION expected docstring object, got: %S" string))
+  (put face 'face-documentation string))
+
+(cl:defun face-spec-set (face spec &optional (spec-type 'face-override-spec))
+  "Bring-up stub for ELisp `face-spec-set'."
+  (unless (symbolp face)
+    (error "ELISP:FACE-SPEC-SET expected symbol face, got: %S" face))
+  ;; Ensure the face exists in our minimal registry.
+  (ignore-errors (face-id face))
+  (put face spec-type spec)
+  spec)
+
+(cl:defun internal-set-font-selection-order (_value)
+  "TTY-only stub for the C primitive `internal-set-font-selection-order'."
+  (declare (cl:ignore _value))
+  nil)
+
+(cl:defun internal-set-alternative-font-family-alist (_value)
+  "TTY-only stub for the C primitive `internal-set-alternative-font-family-alist'."
+  (declare (cl:ignore _value))
+  nil)
+
+(cl:defun internal-set-alternative-font-registry-alist (_value)
+  "TTY-only stub for the C primitive `internal-set-alternative-font-registry-alist'."
+  (declare (cl:ignore _value))
+  nil)
+
 (cl:defun %map--plist-p (xs)
   "Return non-nil when XS looks like an ELisp plist (bring-up heuristic)."
   (and (listp xs)
@@ -1843,6 +1875,24 @@ The \"default\" value is CL's global binding model."
        ((and presentp (eq v +elisp-unbound+))
         (signal 'void-variable (list sym)))
        (t (cl:symbol-value sym))))))
+
+(cl:defun default-toplevel-value (symbol)
+  "Bring-up subset of the C primitive `default-toplevel-value'."
+  (unless (symbolp symbol)
+    (error "ELISP:DEFAULT-TOPLEVEL-VALUE expected symbol, got: %S" symbol))
+  (handler-case
+      #+sbcl (sb-ext:symbol-global-value symbol)
+      #-sbcl (cl:symbol-value symbol)
+    (unbound-variable ()
+      (signal 'void-variable (list symbol)))))
+
+(cl:defun set-default-toplevel-value (symbol value)
+  "Bring-up subset of the C primitive `set-default-toplevel-value'."
+  (unless (symbolp symbol)
+    (error "ELISP:SET-DEFAULT-TOPLEVEL-VALUE expected symbol, got: %S" symbol))
+  #+sbcl (setf (sb-ext:symbol-global-value symbol) value)
+  #-sbcl (setf (cl:symbol-value symbol) value)
+  nil)
 
 (cl:defun set-default (symbol value)
   "Stub for ELisp `set-default'."

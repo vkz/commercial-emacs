@@ -116,6 +116,137 @@ strings are CL strings."
                   (cl:error "ELISP:STRING expects characters, got: ~S" ch)))))
     out))
 
+(cl:defun car (x)
+  "ELisp-ish CAR.
+
+Return the car of X.  Signal `wrong-type-argument' when X is not a list."
+  (cond
+   ((null x) nil)
+   ((consp x) (cl:car x))
+   (t
+    (if (fboundp 'signal)
+        (signal 'wrong-type-argument (list 'listp x))
+        (cl:error "ELISP:CAR expected list, got: ~S" x)))))
+
+(cl:defun cdr (x)
+  "ELisp-ish CDR.
+
+Return the cdr of X.  Signal `wrong-type-argument' when X is not a list."
+  (cond
+   ((null x) nil)
+   ((consp x) (cl:cdr x))
+   (t
+    (if (fboundp 'signal)
+        (signal 'wrong-type-argument (list 'listp x))
+        (cl:error "ELISP:CDR expected list, got: ~S" x)))))
+
+(cl:defun (setf car) (newcar cell)
+  "ELisp-ish (SETF CAR)."
+  (unless (consp cell)
+    (if (fboundp 'signal)
+        (signal 'wrong-type-argument (list 'consp cell))
+        (cl:error "ELISP:(SETF CAR) expected cons, got: ~S" cell)))
+  (setf (cl:car cell) newcar)
+  newcar)
+
+(cl:defun (setf cdr) (newcdr cell)
+  "ELisp-ish (SETF CDR)."
+  (unless (consp cell)
+    (if (fboundp 'signal)
+        (signal 'wrong-type-argument (list 'consp cell))
+        (cl:error "ELISP:(SETF CDR) expected cons, got: ~S" cell)))
+  (setf (cl:cdr cell) newcdr)
+  newcdr)
+
+(cl:defmacro %define-cxxr (name letters)
+  (unless (and (cl:stringp letters)
+               (cl:<= 2 (cl:length letters) 4)
+               (cl:every (lambda (ch) (or (char= ch #\a) (char= ch #\d)))
+                         letters))
+    (cl:error "Bad cXXr spec: ~S ~S" name letters))
+  (let ((form 'x))
+    (loop for ch across (reverse letters) do
+      (setf form (list (if (char= ch #\a) 'car 'cdr) form)))
+    `(cl:defun ,name (x)
+       (declare (compiler-macro internal--compiler-macro-cXXr))
+       ,form)))
+
+(%define-cxxr caar "aa")
+(%define-cxxr cadr "ad")
+(%define-cxxr cdar "da")
+(%define-cxxr cddr "dd")
+(%define-cxxr caaar "aaa")
+(%define-cxxr caadr "aad")
+(%define-cxxr cadar "ada")
+(%define-cxxr caddr "add")
+(%define-cxxr cdaar "daa")
+(%define-cxxr cdadr "dad")
+(%define-cxxr cddar "dda")
+(%define-cxxr cdddr "ddd")
+(%define-cxxr caaaar "aaaa")
+(%define-cxxr caaadr "aaad")
+(%define-cxxr caadar "aada")
+(%define-cxxr caaddr "aadd")
+(%define-cxxr cadaar "adaa")
+(%define-cxxr cadadr "adad")
+(%define-cxxr caddar "adda")
+(%define-cxxr cadddr "addd")
+(%define-cxxr cdaaar "daaa")
+(%define-cxxr cdaadr "daad")
+(%define-cxxr cdadar "dada")
+(%define-cxxr cdaddr "dadd")
+(%define-cxxr cddaar "ddaa")
+(%define-cxxr cddadr "ddad")
+(%define-cxxr cdddar "ddda")
+(%define-cxxr cddddr "dddd")
+
+(cl:defmacro %define-setf-cxxr (name letters)
+  (unless (and (cl:stringp letters)
+               (cl:<= 2 (cl:length letters) 4)
+               (cl:every (lambda (ch) (or (char= ch #\a) (char= ch #\d)))
+                         letters))
+    (cl:error "Bad (setf cXXr) spec: ~S ~S" name letters))
+  (let* ((len (cl:length letters))
+         (ops (reverse letters))
+         (prefix (subseq ops 0 (cl:1- len)))
+         (last (char ops (cl:1- len)))
+         (cell (cl:gensym "CELL")))
+    `(cl:defun (setf ,name) (new x)
+       (let ((,cell x))
+         ,@(loop for ch across prefix collect
+             `(setf ,cell (,(if (char= ch #\a) 'car 'cdr) ,cell)))
+         (setf (,(if (char= last #\a) 'car 'cdr) ,cell) new)
+         new))))
+
+(%define-setf-cxxr caar "aa")
+(%define-setf-cxxr cadr "ad")
+(%define-setf-cxxr cdar "da")
+(%define-setf-cxxr cddr "dd")
+(%define-setf-cxxr caaar "aaa")
+(%define-setf-cxxr caadr "aad")
+(%define-setf-cxxr cadar "ada")
+(%define-setf-cxxr caddr "add")
+(%define-setf-cxxr cdaar "daa")
+(%define-setf-cxxr cdadr "dad")
+(%define-setf-cxxr cddar "dda")
+(%define-setf-cxxr cdddr "ddd")
+(%define-setf-cxxr caaaar "aaaa")
+(%define-setf-cxxr caaadr "aaad")
+(%define-setf-cxxr caadar "aada")
+(%define-setf-cxxr caaddr "aadd")
+(%define-setf-cxxr cadaar "adaa")
+(%define-setf-cxxr cadadr "adad")
+(%define-setf-cxxr caddar "adda")
+(%define-setf-cxxr cadddr "addd")
+(%define-setf-cxxr cdaaar "daaa")
+(%define-setf-cxxr cdaadr "daad")
+(%define-setf-cxxr cdadar "dada")
+(%define-setf-cxxr cdaddr "dadd")
+(%define-setf-cxxr cddaar "ddaa")
+(%define-setf-cxxr cddadr "ddad")
+(%define-setf-cxxr cdddar "ddda")
+(%define-setf-cxxr cddddr "dddd")
+
 (cl:defun vectorp (x)
   "Bring-up subset of ELisp `vectorp'.
 
@@ -641,6 +772,40 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
                          (#\U
                           (ensure-multibyte)
                           (vector-push-extend (read-fixed-hex 8) codes))
+                         (#\N
+                          (let ((open (read-char stream nil nil t)))
+                            (unless (and open (char= open #\{))
+                              (cl:error "Bad \\N escape (expected {)"))
+                            (let ((chars nil))
+                              (loop for c = (read-char stream nil nil t) do
+                                (when (null c)
+                                  (cl:error "EOF in \\N{...} escape"))
+                                (when (char= c #\})
+                                  (return))
+                                (push c chars))
+                              (let* ((raw (coerce (nreverse chars) 'cl:string))
+                                     (uplusp
+                                       (and (>= (length raw) 3)
+                                            (char= (char raw 0) #\U)
+                                            (char= (char raw 1) #\+)))
+                                     (ch
+                                       (cond
+                                        (uplusp
+                                         (let ((cp (parse-integer raw :start 2 :radix 16)))
+                                           (or (code-char cp)
+                                               (cl:error "Bad \\N{U+...} codepoint: ~S" raw))))
+                                        #+sbcl
+                                        (t
+                                         (let* ((norm
+                                                  (string-upcase
+                                                   (substitute #\_ #\Space raw)))
+                                                (c0 (sb-unicode::name-char norm)))
+                                           (or c0
+                                               (cl:error "Unknown \\N name: ~S" raw))))
+                                        #-sbcl
+                                        (t
+                                         (cl:error "\\N{...} escapes require SBCL for now: ~S" raw)))))
+                                (push-char ch)))))
                          (otherwise
                           (cond
                            ((digit-char-p e 8)

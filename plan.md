@@ -91,6 +91,7 @@ P2: Load more shipped `lisp/` under clemacs (monotonic)
 - DONE (2026-01-10): Fix `lisp/ldefs-boot.el` checkpoint past form 199 by raising `lisp/keymap.el` (smoke) and adding a bring-up `defvar-keymap` macro; advance `startup.smoke.files` to include `jka-cmpr-hook` and `epa-hook`.
 - DONE (2026-01-10): Advance `startup.smoke.files` to include `mule-cmds`, `charprop`, and `characters` (pdump order; monotonic growth).
 - DONE (2026-01-11): Raise `startup.smoke.files` and propagate the `macroexp`/`pcase`/`gv`/`cl-preloaded`/`oclosure` prelude needed for stable `cl-generic` bring-up; begin extending `startup.check/editor-core` with `image` and `fontset`, and `startup.tty-editor` with early pdump prereqs (`widget`/`custom`/`map-ynp`/`cus-face`/`faces`/`rx`).
+- DONE (2026-01-11): Unblock `startup.check` bring-up iteration: add loader progress/timing output, stub `clemacs/ported/lisp/loaddefs.el` to avoid huge generated autoloads, raise early `widget`/`custom`/`startup` checkpoints, and implement missing compat primitives discovered by startup-check.
 - TODO: Keep growing `clemacs/contract/startup.{smoke,tty-editor,check,editor-core}.files` following pdump order; bisect early when checkpoints get unstable.
 
 P3: Upstream ERT bring-up (coverage as a guardrail)
@@ -98,6 +99,7 @@ P3: Upstream ERT bring-up (coverage as a guardrail)
 - DONE (2026-01-11): Bring up `cl-generic` upstream tests under clemacs (incl setf-generic names, gv places, defun declaration plumbing); keep the suite green (see `plans/plan-archive-2026-01-11.md`).
 - DONE (2026-01-11): Bring up `nadvice` upstream tests under clemacs (incl old advice interop, advice printing, and lexical interactive specs); keep the suite green (see `plans/plan-archive-2026-01-11.md`).
 - DONE (2026-01-11): Promote `backquote` and a small `rx` cluster to `clemacs/contract/ert-upstream.tests` (startup-adjacent); keep must-pass monotonic and green.
+- DONE (2026-01-11): Expand the upstream ERT must-pass set with a `subr-tests` cluster (cXXr, version parsing, `[:blank:]`, gensym); fix core list accessor semantics (shadow + define cXXr + setf cXXr), implement `\\N{...}` string escapes, and improve `error-message-string` to keep the suite green.
 - TODO: Grow `clemacs/contract/ert-upstream.tests` monotonically, prioritizing suites that overlap P1/P2.
 - TODO: When something must be skipped, record it in `clemacs/contract/ert-upstream.known-fail.tests` with a dated reason (XPASS is a gate failure).
 
@@ -108,7 +110,7 @@ P3: Upstream ERT bring-up (coverage as a guardrail)
 - DONE (2026-01-11): Standardize reference Emacs defaults across clemacs `mise` tasks (micro/smoke/ref eval) and make the chosen binary explicit.
 - DONE (2026-01-11): Implement missing primitives in tight clusters (help/doc + file-name/filesystem helpers), with new microtests for each behavior.
 - DONE (2026-01-11): Promote startup-adjacent upstream ERT tests (backquote + rx), keeping must-pass monotonic and green.
-- TODO: Keep `clemacs/contract/lisp.allowed-skip.files` strictly “out-of-scope only” (no skipping to get green).
+- DONE (2026-01-11): Keep `clemacs/contract/lisp.allowed-skip.files` strictly “out-of-scope only” (no skipping to get green).
 - DONE (2026-01-11): Keep the PTY editor gate (`mise run clemacs:test:tty`) representative of the promised alpha UX (visit/edit/save/quit + search/replace + basic window ops).
 
 ### Milestone B1-8: load the shipped `lisp/` tree under clemacs

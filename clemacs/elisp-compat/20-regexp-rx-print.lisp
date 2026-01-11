@@ -96,7 +96,20 @@ So we:
                     ((string= s "upper") (write-string "A-Z" out))
                     ((string= s "xdigit") (write-string "0-9A-Fa-f" out))
                     ((string= s "space") (write-string "\\s" out))
-	                    ((string= s "blank") (write-string " \\t" out))
+                    ((string= s "blank")
+                     ;; `[:blank:]` is horizontal whitespace.  Approximate with
+                     ;; space, tab, and common Unicode space separators.
+                     (write-string " \\t" out)
+                     (let ((a (code-char #x2000))
+                           (b (code-char #x200A)))
+                       (when (and a b)
+                         (write-char a out)
+                         (write-char #\- out)
+                         (write-char b out)))
+                     (dolist (cp '(#x00A0 #x1680 #x202F #x205F #x3000))
+                       (let ((ch (code-char cp)))
+                         (when ch
+                           (write-char ch out)))))
                     (t
                      ;; Unknown class: fall back to a conservative subset so
                      ;; callers don't explode during bring-up.

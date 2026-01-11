@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Load the clemacs startup manifest (check) with per-file progress output"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--limit <n>" help="Stop after N manifest entries (0 = no limit)" default="0"
+#USAGE flag "--timings" help="Print per-file timing lines" default="false"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+export CLEMACS_LOAD_PROGRESS=1
+if [[ "${usage_timings}" == "true" ]]; then
+  export CLEMACS_LOAD_TIMINGS=1
+fi
+
+usage_build_dir="${usage_build_dir}" \
+usage_limit="${usage_limit}" \
+  bash "${project_root}/.mise/tasks/clemacs/test/startup-check"

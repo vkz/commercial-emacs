@@ -19,6 +19,6 @@ lisp/international/eucjp-ms.el
 # UTF-8 working end-to-end (load/edit/save). Revisit once editor core is solid.
 lisp/leim/leim-list.el
 
-# 2026-01-07: Too compile-time heavy when loaded as source (eval-when-compile),
-# and currently depends on full translation tables + Unicode charprop/translate.
-lisp/international/ucs-normalize.el
+# NOTE: Keep this list strictly "out-of-scope only". If a file is in-scope but
+# currently failing to load, prefer using `startup.*.files` max-forms caps and
+# implement missing primitives instead of skipping.

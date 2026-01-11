@@ -186,9 +186,32 @@ recognizes them as docstrings (keeping subsequent DECLARE forms legal)."
   "Bring-up subset of the C primitive `special-variable-p'."
   (unless (symbolp symbol)
     (error "ELISP:SPECIAL-VARIABLE-P expected symbol, got: %S" symbol))
+  (when (cl:gethash symbol *clemacs-force-non-special-vars*)
+    (return-from special-variable-p nil))
   #+sbcl
   (eq (nth-value 0 (sb-cltl2:variable-information symbol)) :special)
   #-sbcl
+  nil)
+
+(cl:defvar *clemacs-force-non-special-vars* (cl:make-hash-table :test 'cl:eq))
+
+(cl:defun internal--define-uninitialized-variable (symbol &optional doc)
+  "Bring-up subset of the C primitive `internal--define-uninitialized-variable'."
+  (unless (symbolp symbol)
+    (error "ELISP:INTERNAL--DEFINE-UNINITIALIZED-VARIABLE expected symbol, got: %S" symbol))
+  ;; Emacs marks the symbol as declared-special without affecting its current
+  ;; value (which may be void/unbound).  In CL terms, proclaim it SPECIAL.
+  #+sbcl (cl:proclaim (list 'cl:special symbol))
+  (when doc
+    (let ((doc* (if (cl:stringp doc) doc (%elisp-string->cl-string doc))))
+      (put symbol 'variable-documentation doc*)))
+  nil)
+
+(cl:defun internal-make-var-non-special (symbol)
+  "Bring-up stub for the C primitive `internal-make-var-non-special'."
+  (unless (symbolp symbol)
+    (error "ELISP:INTERNAL-MAKE-VAR-NON-SPECIAL expected symbol, got: %S" symbol))
+  (setf (cl:gethash symbol *clemacs-force-non-special-vars*) t)
   nil)
 
 (cl:defun version-list-not-zero (lst)

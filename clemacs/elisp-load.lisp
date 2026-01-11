@@ -1,5 +1,11 @@
 (in-package #:elisp)
 
+(cl:defun %truthy-env-p (name)
+  (let ((v (uiop:getenv name)))
+    (and v
+         (not (cl:member v '("" "0" "false" "FALSE" "no" "NO")
+                         :test #'cl:string=)))))
+
 (define-condition elisp-load-error (cl:error)
   ((path :initarg :path :reader elisp-load-error-path)
    (form-index :initarg :form-index :reader elisp-load-error-form-index)
@@ -100,7 +106,9 @@ ported copy instead of the original source tree path."
          (skip-file (and skip-file (merge-pathnames skip-file project-root)))
          (ported-root (merge-pathnames ported-root project-root))
          (skips (%read-skip-lines skip-file))
-         (loaded 0))
+         (loaded 0)
+         (show-progress (%truthy-env-p "CLEMACS_LOAD_PROGRESS"))
+         (show-timings (%truthy-env-p "CLEMACS_LOAD_TIMINGS")))
     ;; Many upstream libraries rely on `load-path' for `require' and autoloads.
     ;; Populate it with a minimal source-tree + ported-tree search path the
     ;; first time we load a manifest.
@@ -127,7 +135,16 @@ ported copy instead of the original source tree path."
                     ((eq entry-max-forms :no-limit) nil)
                     ((eq entry-max-forms :inherit) max-forms)
                     (t (or entry-max-forms max-forms)))))
+            (when show-progress
+              (cl:format t "[clemacs:load] load ~A~@[ max-forms=~D~]~%"
+                         rel-path eff-max-forms))
+            (let ((t0 (and show-timings (get-internal-real-time))))
             (load-elisp-file path :max-forms eff-max-forms)
+              (when t0
+                (let* ((dt (- (get-internal-real-time) t0))
+                       (secs (/ (float dt) internal-time-units-per-second)))
+                  (cl:format t "[clemacs:load] done ~A seconds=~,3F~%"
+                             rel-path secs))))
             (incf loaded))))))
     0))
 

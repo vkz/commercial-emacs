@@ -149,6 +149,17 @@ subr-test-key-valid-p
 subr-test-define-prefix-command
 subr-test-local-key-binding
 subr-test-global-key-binding
+subr-test-caaar
+subr-test-caadr
+subr-tests--merge-ordered-lists
+subr-test-when
+subr-test-xor
+subr-test-version-parsing
+subr-test-version-list-<
+subr-test-version-list-=
+subr-test-version-list-<=
+subr-tests--string-match-p--blank
+subr-tests--gensym
 
 # pcase bring-up (pcase-tests).
 pcase-tests-base

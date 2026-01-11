@@ -48,7 +48,23 @@
   (signal 'user-error (list (apply #'format format-string args))))
 
 (cl:defun error-message-string (condition)
-  (princ-to-string condition))
+  "Bring-up subset of the C primitive `error-message-string'.
+
+CONDITION is usually an ELisp-style error datum (ERROR-SYMBOL . DATA).  When
+DATA begins with a string message (e.g. `(error \"msg\")`), return that message
+directly."
+  (cond
+   ((typep condition 'elisp-signal)
+    (error-message-string
+     (cons (elisp-signal-symbol condition)
+           (elisp-signal-data condition))))
+   ((and (consp condition) (symbolp (car condition)))
+    (let ((data (cdr condition)))
+      (if (and (consp data) (stringp (car data)))
+          (car data)
+          (princ-to-string condition))))
+   (t
+    (princ-to-string condition))))
 
 (cl:defun backtrace-get-frames (&optional base &rest _keys)
   "Bring-up subset of `backtrace-get-frames'.
@@ -845,12 +861,14 @@ Binds VAR (when non-nil) to an ELisp-style error datum:
                 ((eq types t) t)
                 ((and (symbolp types) (eq types 'error)) t)
                 ((symbolp types)
-                 `(let ((conds (get ,sym 'error-conditions)))
-                    (and (listp conds) (cl:member ',types conds :test #'eq))))
+                 `(or (eq ,sym ',types)
+                      (let ((conds (get ,sym 'error-conditions)))
+                        (and (listp conds) (cl:member ',types conds :test #'eq)))))
                 ((consp types)
-                 `(let ((conds (get ,sym 'error-conditions)))
-                    (and (listp conds)
-                         (some (lambda (t0) (cl:member t0 conds :test #'eq)) ',types))))
+                 `(or (cl:member ,sym ',types :test #'eq)
+                      (let ((conds (get ,sym 'error-conditions)))
+                        (and (listp conds)
+                             (some (lambda (t0) (cl:member t0 conds :test #'eq)) ',types)))))
                 (t nil)))
              (expand-clauses (err-sym)
                (let ((sym `(car ,err-sym)))
@@ -1340,7 +1358,7 @@ Supports the common pattern of a self-referential closure (used by ERT)."
      (elisp-keymap-table km)))
   nil)
 
-(cl:defun define-key (keymap key definition)
+(cl:defun define-key (keymap key definition &optional remove)
   "Minimal stub for ELisp `define-key' on `elisp-keymap' objects."
   (let* ((km (%keymap-resolve keymap))
          (events (%keyseq->events key)))
@@ -1355,12 +1373,20 @@ Supports the common pattern of a self-referential closure (used by ERT)."
                (or (cl:stringp (car next)) (unibyte-string-p (car next)))
                (keymapp (cdr next)))
           (setf km (%keymap-resolve (cdr next))))
+         ((and remove (not presentp))
+          (return-from define-key nil))
          (t
           (let ((child (make-elisp-keymap)))
             (setf (gethash ev (elisp-keymap-table km)) child)
             (setf km child))))))
-    (setf (gethash (car (last events)) (elisp-keymap-table km)) definition)
-    definition))
+    (let ((last (car (last events))))
+      (cond
+       (remove
+        (remhash last (elisp-keymap-table km))
+        nil)
+       (t
+        (setf (gethash last (elisp-keymap-table km)) definition)
+        definition)))))
 
 (cl:defun where-is-internal (command &optional keymap firstonly _noindirect _noany _include-menus)
   "Bring-up subset of ELisp `where-is-internal'.
@@ -1560,6 +1586,19 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
         (when (listp cur)
           (dolist (fn cur)
             (ignore-errors (funcall fn)))))))
+  nil)
+
+(cl:defun run-hook-with-args (hook &rest args)
+  "Bring-up subset of the C primitive `run-hook-with-args'."
+  (unless (symbolp hook)
+    (error "ELISP:RUN-HOOK-WITH-ARGS expected symbol, got: ~S" hook))
+  (let ((cur (if (cl:boundp hook) (symbol-value hook) nil)))
+    (when (null cur)
+      (return-from run-hook-with-args nil))
+    (unless (listp cur)
+      (setf cur (list cur)))
+    (dolist (fn cur)
+      (ignore-errors (apply #'funcall fn args))))
   nil)
 
 (cl:defun run-hook-with-args-until-success (hook &rest args)

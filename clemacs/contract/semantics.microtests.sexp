@@ -152,6 +152,71 @@
   :expected "(t t t t t t t)"
   :emacs :match)
 
+ (:name "core-internal-define-uninitialized-variable-does-not-bind"
+  :expr "(progn (makunbound 'clemacs--tmp-uninit-var) (internal--define-uninitialized-variable 'clemacs--tmp-uninit-var \"doc\") (list (boundp 'clemacs--tmp-uninit-var) (special-variable-p 'clemacs--tmp-uninit-var) (get 'clemacs--tmp-uninit-var 'variable-documentation)))"
+  :expected "(nil t \"doc\")"
+  :emacs :match)
+
+ (:name "core-default-toplevel-value-ignores-dynamic-let"
+  :expr "(progn (internal--define-uninitialized-variable 'clemacs--tmp-dtv nil) (set-default-toplevel-value 'clemacs--tmp-dtv 1) (let ((clemacs--tmp-dtv 2)) (set-default-toplevel-value 'clemacs--tmp-dtv 3) (list clemacs--tmp-dtv (default-toplevel-value 'clemacs--tmp-dtv))))"
+  :expected "(2 3)"
+  :emacs :match)
+
+ (:name "core-run-hook-with-args-calls-list-in-order"
+  :expr "(progn (setq clemacs--tmp-hook nil clemacs--tmp-hook-log nil) (add-hook 'clemacs--tmp-hook (lambda (x) (setq clemacs--tmp-hook-log (cons x clemacs--tmp-hook-log)))) (add-hook 'clemacs--tmp-hook (lambda (x) (setq clemacs--tmp-hook-log (cons (1+ x) clemacs--tmp-hook-log))) t) (run-hook-with-args 'clemacs--tmp-hook 5) clemacs--tmp-hook-log)"
+  :expected "(6 5)"
+  :emacs :match)
+
+ (:name "files-secure-hash-algorithms-basics"
+  :expr "(secure-hash-algorithms)"
+  :expected "(md5 sha1 sha224 sha256 sha384 sha512)"
+  :emacs :match)
+
+ (:name "faces-internal-set-font-selection-order-accepts-default"
+  :expr "(internal-set-font-selection-order '(:width :height :weight :slant))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "faces-internal-set-alternative-font-family-alist-basic"
+  :expr "(internal-set-alternative-font-family-alist '((\"Monospace\" \"courier\")))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "faces-internal-set-alternative-font-registry-alist-basic"
+  :expr "(internal-set-alternative-font-registry-alist '((\"iso8859-1\" \"ms-oemlatin\")))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "help-documentation-stringp-basic"
+  :expr "(mapcar #'documentation-stringp (list \"x\" 7 (cons \"x\" 7) nil))"
+  :expected "(t t t nil)"
+  :emacs :match)
+
+ (:name "faces-set-face-documentation-stores-prop"
+  :expr "(progn (set-face-documentation 'clemacs--tmp-face \"doc\") (get 'clemacs--tmp-face 'face-documentation))"
+  :expected "\"doc\""
+  :emacs :match)
+
+ (:name "faces-face-spec-set-stores-prop"
+  :expr "(progn (face-spec-set 'clemacs--tmp-face2 '((t :inherit default)) 'face-defface-spec) (get 'clemacs--tmp-face2 'face-defface-spec))"
+  :expected "((t :inherit default))"
+  :emacs :match)
+
+ (:name "errors-condition-case-catches-void-variable"
+  :expr "(condition-case nil (symbol-value 'clemacs--tmp-unbound-cc) (void-variable 'caught))"
+  :expected "caught"
+  :emacs :match)
+
+ (:name "core-internal-make-var-non-special-clears-special-variable-p"
+  :expr "(progn (defvar clemacs--tmp-nonspec 1) (internal-make-var-non-special 'clemacs--tmp-nonspec) (special-variable-p 'clemacs--tmp-nonspec))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "keymaps-define-key-remove-arg"
+  :expr "(let ((m (make-sparse-keymap))) (define-key m (vector 1) 'foo) (define-key m (vector 1) nil t) (lookup-key m (vector 1)))"
+  :expected "nil"
+  :emacs :match)
+
  (:name "rx-bos-any-unibyte"
   :expr "(rx bos (any \"/:\"))"
   :expected "\"\\\\`[/:]\""
@@ -1397,5 +1462,25 @@
  (:name "vars-variable-watchers-roundtrip"
   :expr "(progn (setq clemacs--tmp-vw nil) (add-variable-watcher 'clemacs--tmp-vw #'ignore) (add-variable-watcher 'clemacs--tmp-vw #'ignore) (let ((ws (get-variable-watchers 'clemacs--tmp-vw))) (remove-variable-watcher 'clemacs--tmp-vw #'ignore) (list ws (get-variable-watchers 'clemacs--tmp-vw))))"
   :expected "((ignore) nil)"
+  :emacs :match)
+
+ (:name "car-non-list-signals-wrong-type-argument"
+  :expr "(condition-case _e (progn (car 1) :ok) (wrong-type-argument :wrong-type-argument) (error :other))"
+  :expected ":wrong-type-argument"
+  :emacs :match)
+
+ (:name "cdr-non-list-signals-wrong-type-argument"
+  :expr "(condition-case _e (progn (cdr 1) :ok) (wrong-type-argument :wrong-type-argument) (error :other))"
+  :expected ":wrong-type-argument"
+  :emacs :match)
+
+ (:name "error-message-string-prefers-message"
+  :expr "(error-message-string (condition-case e (progn (error \"Invalid\") :ok) (error e)))"
+  :expected "\"Invalid\""
+  :emacs :match)
+
+ (:name "string-match-p-blank-unicode"
+  :expr "(list (string-match-p \"\\\\`[[:blank:]]\\\\'\" \"\\N{HAIR SPACE}\") (string-match-p \"\\\\`[[:blank:]]\\\\'\" \"\\u3000\") (string-match-p \"\\\\`[[:blank:]]\\\\'\" \"\\n\"))"
+  :expected "(0 0 nil)"
   :emacs :match)
 )

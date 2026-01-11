@@ -48,6 +48,14 @@
 		           #:make-symbol
 		           #:gensym
 		           #:functionp
+               #:car #:cdr
+               ;; Many `c[ad]+r` accessors are defined in `lisp/subr.el`.  Shadow
+               ;; the CL versions so our ELisp `defun` doesn't silently ignore
+               ;; them as CL package symbols.
+               #:caar #:cadr #:cdar #:cddr
+               #:caaar #:caadr #:cadar #:caddr #:cdaar #:cdadr #:cddar #:cdddr
+               #:caaaar #:caaadr #:caadar #:caaddr #:cadaar #:cadadr #:caddar #:cadddr
+               #:cdaaar #:cdaadr #:cdadar #:cdaddr #:cddaar #:cddadr #:cdddar #:cddddr
 		           #:make-list #:format
 		           #:make-string
 		           #:string

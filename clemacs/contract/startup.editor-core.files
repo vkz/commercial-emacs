@@ -18,8 +18,8 @@ lisp/keymap.el -
 lisp/version.el -
 
 # pdump: widget, custom, map-ynp, mule, mule-conf, env, format, bindings, window, files.
-lisp/widget.el 10
-lisp/custom.el 10
+lisp/widget.el 80
+lisp/custom.el 120
 lisp/emacs-lisp/map-ynp.el 10
 lisp/international/mule.el 20
 lisp/international/mule-conf.el 200
@@ -101,7 +101,7 @@ lisp/minibuffer.el -
 lisp/frame.el -
 
 # pdump: startup.
-lisp/startup.el 1
+lisp/startup.el 80
 
 # pdump: tty-colors.
 lisp/term/tty-colors.el 50

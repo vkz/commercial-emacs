@@ -465,6 +465,14 @@ that accepts no arguments."
   ;; Use CL's doc-type symbol, not ELISP::FUNCTION.
   (ignore-errors (cl:documentation object 'cl:function)))
 
+(cl:defun documentation-stringp (object)
+  "Bring-up subset of the C primitive `documentation-stringp'."
+  (cond
+   ((stringp object) t)
+   ((integerp object) t)
+   ((and (consp object) (stringp (car object)) (integerp (cdr object))) t)
+   (t nil)))
+
 (cl:defun find-lisp-object-file-name (&rest _args)
   "Bring-up stub for ELisp `find-lisp-object-file-name'."
   (declare (cl:ignore _args))

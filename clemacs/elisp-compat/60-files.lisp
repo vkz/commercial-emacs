@@ -18,6 +18,10 @@
 (cl:defvar last-coding-system-used nil)
 (cl:defvar buffer-file-coding-system-explicit nil)
 
+(cl:defun secure-hash-algorithms ()
+  "Bring-up subset of the C primitive `secure-hash-algorithms'."
+  (cl:list 'md5 'sha1 'sha224 'sha256 'sha384 'sha512))
+
 (cl:defun %initial-temporary-file-directory ()
   (let* ((env (or (uiop:getenv "TMPDIR")
                   (uiop:getenv "TMP")
