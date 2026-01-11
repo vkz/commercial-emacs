@@ -218,6 +218,24 @@ cl-generic-tests--method-files--finds-methods
 cl-generic-tests--method-files--nonexistent-methods
 cl-generic-tests--advertised-calling-convention-bug58563
 cl-generic-tests--print-quoted
+
+# nadvice bring-up (advice system).
+advice-tests-nadvice
+advice-tests-macroaliases
+advice-tests-advice
+advice-tests-combination
+advice-test-called-interactively-p
+# NOTE(2026-01-11): upstream marks this as `:expected-result :failed`, so it is
+# not a good fit for the "must-pass" contract list.
+# advice-test-called-interactively-p-around
+advice-test-called-interactively-p-filter-args
+advice-test-call-interactively
+advice-test-called-interactively-p-around-careful
+advice-test-interactive
+advice-test-preactivate
+advice-test-multiples
+advice-test-print
+advice-test-bug61179
 test-map-contains-key
 test-map-contains-key-testfn
 test-map-contains-key-signature

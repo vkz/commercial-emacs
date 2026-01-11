@@ -40,6 +40,9 @@ lisp/window.el 10
 lisp/frame.el -
 lisp/files.el -
 lisp/emacs-lisp/cl-generic.el -
+
+# pdump: nadvice.
+lisp/emacs-lisp/nadvice.el -
 lisp/simple.el -
 
 # bring-up: comint/shell (first slice; caps will rise over time).

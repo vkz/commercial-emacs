@@ -56,5 +56,7 @@ lisp/emacs-lisp/cl-generic.el -
 test/lisp/emacs-lisp/cl-generic-tests.el -
 
 # 2026-01-10: Bring up `nadvice` upstream tests (advice system).
+lisp/emacs-lisp/cl-print.el -
 lisp/emacs-lisp/nadvice.el -
+lisp/emacs-lisp/advice.el -
 test/lisp/emacs-lisp/nadvice-tests.el -
