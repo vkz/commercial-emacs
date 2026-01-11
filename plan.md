@@ -58,7 +58,8 @@ Baseline acceptance criteria (C-hosted TTY Emacs)
   - `plans/plan-archive-2026-01-06.md`
   - `plans/plan-archive-2026-01-07.md`
   - `plans/plan-archive-2026-01-10.md`
-- Latest milestone: DONE (2026-01-10): clemacs TTY "alpha" (open/edit/save/quit + M-x) and a runnable clemacs `emacs` executable (details in `plans/plan-archive-2026-01-10.md`).
+  - `plans/plan-archive-2026-01-11.md`
+- Latest milestone: DONE (2026-01-11): cl-generic upstream ERT cluster promoted (must-pass), ERT harness uses a load manifest (ported overrides work), and the clemacs smoke gate is fast again (details in `plans/plan-archive-2026-01-11.md`).
 
 ## Current work (end goal: shipped ELisp runs under clemacs)
 
@@ -93,6 +94,7 @@ P2: Load more shipped `lisp/` under clemacs (monotonic)
 
 P3: Upstream ERT bring-up (coverage as a guardrail)
 - DONE (2026-01-10): Expand `clemacs/contract/ert-upstream.tests` with a cl-lib cluster (gensym + numeric predicates + helpers), backed by compat fixes and microtests; keep the suite green.
+- DONE (2026-01-11): Bring up `cl-generic` upstream tests under clemacs (incl setf-generic names, gv places, defun declaration plumbing); keep the suite green (see `plans/plan-archive-2026-01-11.md`).
 - TODO: Grow `clemacs/contract/ert-upstream.tests` monotonically, prioritizing suites that overlap P1/P2.
 - TODO: When something must be skipped, record it in `clemacs/contract/ert-upstream.known-fail.tests` with a dated reason (XPASS is a gate failure).
 
@@ -172,3 +174,4 @@ Acceptance criteria (promotion gate)
 - `plans/plan-archive-2026-01-06.md` (archived DONE items through 2026-01-06)
 - `plans/plan-archive-2026-01-07.md` (archived DONE items through 2026-01-07)
 - `plans/plan-archive-2026-01-10.md` (archived DONE items through 2026-01-10)
+- `plans/plan-archive-2026-01-11.md` (archived DONE items through 2026-01-11)

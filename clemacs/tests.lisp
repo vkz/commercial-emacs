@@ -2,7 +2,7 @@
 
 (fiveam:def-suite clemacs-smoke)
 (fiveam:in-suite clemacs-smoke)
-(fiveam:def-suite clemacs-micro :in clemacs-smoke)
+(fiveam:def-suite clemacs-micro)
 
 (defun %project-root ()
   (uiop:ensure-directory-pathname
