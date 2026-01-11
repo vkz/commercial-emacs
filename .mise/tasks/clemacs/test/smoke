@@ -18,20 +18,15 @@ build_dir="${usage_build_dir}"
 mkdir -p "${build_dir}"
 
 source "${project_root}/.mise/tasks/clemacs/lib/sbcl.sh"
+source "${project_root}/.mise/tasks/clemacs/lib/reference-emacs.sh"
 clemacs_setup_xdg_and_home "${project_root}" "${build_dir}"
 
 if [[ "${usage_no_emacs:-false}" == "true" ]]; then
   export CLEMACS_SKIP_REFERENCE_EMACS=1
 fi
 
-if [[ -z "${CLEMACS_REFERENCE_EMACS:-}" ]]; then
-  if [[ -x "/opt/homebrew/bin/emacs" ]]; then
-    export CLEMACS_REFERENCE_EMACS="/opt/homebrew/bin/emacs"
-  elif [[ -x "/usr/local/bin/emacs" ]]; then
-    export CLEMACS_REFERENCE_EMACS="/usr/local/bin/emacs"
-  elif command -v emacs >/dev/null 2>&1; then
-    export CLEMACS_REFERENCE_EMACS="$(command -v emacs)"
-  fi
+if [[ "${usage_no_emacs:-false}" != "true" ]]; then
+  clemacs_export_reference_emacs_if_unset
 fi
 
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"

@@ -135,6 +135,7 @@ Then choose one:
     The binary is taken from `CLEMACS_REFERENCE_EMACS` or falls back to `emacs`
     on `PATH`. For ad-hoc probing without shell-escaping, use:
     `mise run clemacs:ref-emacs:eval <<'EL' ... EL`.
+  - Quick sanity check for the reference binary: `mise run clemacs:reference-emacs --check`.
   - For interactive probing, use the `emacs` skill via `gxeval -s wip ...`.
   - If a `:emacs :match` microtest errors with `reference Emacs failed`, use the reported `expr:` string to locate the entry in `clemacs/contract/semantics.microtests.sexp` and decide whether to update clemacs semantics or mark the test `:emacs nil` with a dated compat note.
   - If `ELISP-SEMANTICS-MICROTESTS` fails with an unexpected error, use the reported microtest name + `expr:` to iterate via `mise run clemacs:test:micro -- --name <substr>`.

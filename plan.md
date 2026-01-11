@@ -105,6 +105,7 @@ P3: Upstream ERT bring-up (coverage as a guardrail)
 
 - DONE (2026-01-11): Raise startup manifests in pdump order, skipping legacy encodings/LEIM (UTF-8 only); keep iterating with `--limit` bisection and `clemacs:report:first-failure`.
 - DONE (2026-01-11): Improve agent bring-up ergonomics: document `startup-check --limit` bisection clearly and make `clemacs:report:first-failure`/SBCL log paths discoverable.
+- DONE (2026-01-11): Standardize reference Emacs defaults across clemacs `mise` tasks (micro/smoke/ref eval) and make the chosen binary explicit.
 - DONE (2026-01-11): Implement missing primitives in tight clusters (help/doc + file-name/filesystem helpers), with new microtests for each behavior.
 - DONE (2026-01-11): Promote startup-adjacent upstream ERT tests (backquote + rx), keeping must-pass monotonic and green.
 - TODO: Keep `clemacs/contract/lisp.allowed-skip.files` strictly “out-of-scope only” (no skipping to get green).

@@ -15,31 +15,15 @@ fi
 project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
 cd "${project_root}"
 
-raw="${CLEMACS_REFERENCE_EMACS:-}"
-resolved=""
-
-if [[ -n "${raw}" ]]; then
-  resolved="${raw}"
-elif [[ -x "/opt/homebrew/bin/emacs" ]]; then
-  resolved="/opt/homebrew/bin/emacs"
-elif [[ -x "/usr/local/bin/emacs" ]]; then
-  resolved="/usr/local/bin/emacs"
-elif command -v emacs >/dev/null 2>&1; then
-  resolved="$(command -v emacs)"
-else
-  resolved="emacs"
+source "${project_root}/.mise/tasks/clemacs/lib/reference-emacs.sh"
+resolved="$(clemacs_resolve_reference_emacs 2>/dev/null || true)"
+if [[ -z "${resolved}" ]]; then
+  echo "[clemacs:ref-emacs:eval] FAIL: emacs not found (set CLEMACS_REFERENCE_EMACS or put emacs on PATH)" >&2
+  exit 2
 fi
-
-if [[ "${resolved}" == "emacs" ]]; then
-  if ! command -v emacs >/dev/null 2>&1; then
-    echo "[clemacs:ref-emacs:eval] FAIL: emacs not found on PATH (set CLEMACS_REFERENCE_EMACS)" >&2
-    exit 2
-  fi
-else
-  if [[ ! -x "${resolved}" ]]; then
-    echo "[clemacs:ref-emacs:eval] FAIL: not executable: ${resolved}" >&2
-    exit 2
-  fi
+if [[ ! -x "${resolved}" ]]; then
+  echo "[clemacs:ref-emacs:eval] FAIL: not executable: ${resolved}" >&2
+  exit 2
 fi
 
 file="${usage_file:-}"

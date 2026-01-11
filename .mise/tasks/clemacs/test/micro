@@ -19,10 +19,18 @@ build_dir="${usage_build_dir}"
 mkdir -p "${build_dir}"
 
 source "${project_root}/.mise/tasks/clemacs/lib/sbcl.sh"
+source "${project_root}/.mise/tasks/clemacs/lib/reference-emacs.sh"
 clemacs_setup_xdg_and_home "${project_root}" "${build_dir}"
 
 if [[ "${usage_no_emacs:-false}" == "true" ]]; then
   export CLEMACS_SKIP_REFERENCE_EMACS=1
+else
+  clemacs_export_reference_emacs_if_unset
+  if [[ -n "${CLEMACS_REFERENCE_EMACS:-}" ]]; then
+    echo "[clemacs] reference emacs: ${CLEMACS_REFERENCE_EMACS}" >&2
+  else
+    echo "[clemacs] reference emacs: <none> (set CLEMACS_REFERENCE_EMACS or pass --no-emacs)" >&2
+  fi
 fi
 
 if [[ -n "${usage_name:-}" ]]; then

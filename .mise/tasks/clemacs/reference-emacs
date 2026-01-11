@@ -13,29 +13,23 @@ fi
 project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
 cd "${project_root}"
 
+source "${project_root}/.mise/tasks/clemacs/lib/reference-emacs.sh"
 raw="${CLEMACS_REFERENCE_EMACS:-}"
-resolved=""
-source=""
-
+resolved="$(clemacs_resolve_reference_emacs 2>/dev/null || true)"
 if [[ -n "${raw}" ]]; then
-  resolved="${raw}"
   source="CLEMACS_REFERENCE_EMACS"
-elif [[ -x "/opt/homebrew/bin/emacs" ]]; then
-  resolved="/opt/homebrew/bin/emacs"
+elif [[ -n "${resolved}" && "${resolved}" == "/opt/homebrew/bin/emacs" ]]; then
   source="/opt/homebrew/bin/emacs"
-elif [[ -x "/usr/local/bin/emacs" ]]; then
-  resolved="/usr/local/bin/emacs"
+elif [[ -n "${resolved}" && "${resolved}" == "/usr/local/bin/emacs" ]]; then
   source="/usr/local/bin/emacs"
-elif command -v emacs >/dev/null 2>&1; then
-  resolved="$(command -v emacs)"
+elif [[ -n "${resolved}" ]]; then
   source="PATH"
 else
-  resolved="emacs"
-  source="fallback"
+  source="unavailable"
 fi
 
 echo "CLEMACS_REFERENCE_EMACS=${raw:-<unset>}"
-echo "Resolved reference Emacs (${source}): ${resolved}"
+echo "Resolved reference Emacs (${source}): ${resolved:-<none>}"
 echo "Note: :emacs :match microtests run '${resolved} -Q --batch -l <tmp>.el' (not gxeval); microtests batch all :match exprs per run (set CLEMACS_REFERENCE_EMACS_BATCH=0 to disable)."
 echo "Note: ad-hoc eval without shell escaping: mise run clemacs:ref-emacs:eval <<'EL' ... EL"
 echo "Note: interactive probing uses: gxeval -s wip -e '(...)'"
@@ -44,16 +38,13 @@ if [[ "${usage_check:-false}" != "true" ]]; then
   exit 0
 fi
 
-if [[ "${resolved}" == "emacs" ]]; then
-  if ! command -v emacs >/dev/null 2>&1; then
-    echo "[clemacs:reference-emacs] FAIL: emacs not found on PATH (set CLEMACS_REFERENCE_EMACS)" >&2
-    exit 2
-  fi
-else
-  if [[ ! -x "${resolved}" ]]; then
-    echo "[clemacs:reference-emacs] FAIL: not executable: ${resolved}" >&2
-    exit 2
-  fi
+if [[ -z "${resolved}" ]]; then
+  echo "[clemacs:reference-emacs] FAIL: emacs not found (set CLEMACS_REFERENCE_EMACS or put emacs on PATH)" >&2
+  exit 2
+fi
+if [[ ! -x "${resolved}" ]]; then
+  echo "[clemacs:reference-emacs] FAIL: not executable: ${resolved}" >&2
+  exit 2
 fi
 
 "${resolved}" -Q --batch --eval '(princ (format "ok emacs=%s" emacs-version))' >/dev/null
