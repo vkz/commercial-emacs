@@ -251,6 +251,75 @@ Unlike CL:ELT, indexing a string returns an integer character code."
    ((cl:stringp sequence) (%elisp-char-code (char sequence n)))
    (t (cl:elt sequence n))))
 
+(cl:defun length> (sequence n)
+  "Return non-nil if SEQUENCE has length greater than N."
+  (unless (integerp n)
+    (signal 'wrong-type-argument (list 'integerp n)))
+  (when (minusp n)
+    (cl:return-from length> t))
+  (cond
+   ((listp sequence)
+    (let ((remaining n)
+          (tail sequence))
+      (cl:loop
+        (cond
+         ((null tail) (cl:return nil))
+         ((consp tail)
+          (decf remaining)
+          (when (minusp remaining)
+            (cl:return t))
+          (setf tail (cdr tail)))
+         (t
+          (signal 'wrong-type-argument (list 'listp sequence)))))))
+   (t
+    (> (cl:length sequence) n))))
+
+(cl:defun length< (sequence n)
+  "Return non-nil if SEQUENCE has length less than N."
+  (unless (integerp n)
+    (signal 'wrong-type-argument (list 'integerp n)))
+  (when (<= n 0)
+    (cl:return-from length< nil))
+  (cond
+   ((listp sequence)
+    (let ((remaining n)
+          (tail sequence))
+      (cl:loop
+        (cond
+         ((null tail) (cl:return t))
+         ((consp tail)
+          (decf remaining)
+          (when (zerop remaining)
+            (cl:return nil))
+          (setf tail (cdr tail)))
+         (t
+          (signal 'wrong-type-argument (list 'listp sequence)))))))
+   (t
+    (< (cl:length sequence) n))))
+
+(cl:defun length= (sequence n)
+  "Return non-nil if SEQUENCE has length equal to N."
+  (unless (integerp n)
+    (signal 'wrong-type-argument (list 'integerp n)))
+  (when (minusp n)
+    (cl:return-from length= nil))
+  (cond
+   ((listp sequence)
+    (let ((remaining n)
+          (tail sequence))
+      (cl:loop
+        (cond
+         ((null tail) (cl:return (zerop remaining)))
+         ((consp tail)
+          (when (zerop remaining)
+            (cl:return nil))
+          (decf remaining)
+          (setf tail (cdr tail)))
+         (t
+          (signal 'wrong-type-argument (list 'listp sequence)))))))
+   (t
+    (= (cl:length sequence) n))))
+
 (cl:defun take (n list)
   "Return a list of the first N elements of LIST.
 
@@ -533,6 +602,25 @@ like: (defalias 'string= 'string-equal)."
 (cl:defun funcall (fn &rest args)
   "ELisp-ish FUNCALL that accepts symbols and lambda forms."
   (cl:apply (%resolve-function fn) args))
+
+(cl:defun apply (fn &rest args)
+  "ELisp-ish APPLY.
+
+Supports the Emacs extension where `(apply (list FN ARG...))` is equivalent to
+`(funcall FN ARG...)`."
+  (cond
+   ;; Emacs extension: single list arg interpreted as (FN . ARGS).
+   ((and (null args) (consp fn))
+    (cl:apply (%resolve-function (car fn)) (cdr fn)))
+   ;; Standard shape: (apply FN ARG... LIST)
+   (t
+    (when (null args)
+      (error "ELISP:APPLY expects at least 2 arguments"))
+    (let* ((tail (car (cl:last args)))
+           (prefix (cl:butlast args)))
+      (unless (listp tail)
+        (signal 'wrong-type-argument (list 'listp tail)))
+      (cl:apply (%resolve-function fn) (cl:append prefix tail))))))
 
 (cl:defun eval (form &optional lexical)
   "ELisp-ish EVAL.

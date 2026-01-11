@@ -198,6 +198,26 @@ test-map-values-apply
 test-map-filter
 test-map-remove
 test-map-empty-p
+
+# cl-generic bring-up (generic functions, defmethod, advice interop).
+cl-generic-test-00
+cl-generic-test-01-eql
+cl-generic-test-02-struct
+cl-generic-test-03-setf
+cl-generic-test-04-overlapping-tagcodes
+cl-generic-test-05-alias
+cl-generic-test-06-multiple-dispatch
+cl-generic-test-07-apo
+cl-generic-test-08-after/before
+cl-generic-test-09-advice
+cl-generic-test-10-weird
+cl-generic-test-11-next-method-p
+cl-generic-test-12-context
+cl-generic-test-13-head
+cl-generic-tests--method-files--finds-methods
+cl-generic-tests--method-files--nonexistent-methods
+cl-generic-tests--advertised-calling-convention-bug58563
+cl-generic-tests--print-quoted
 test-map-contains-key
 test-map-contains-key-testfn
 test-map-contains-key-signature

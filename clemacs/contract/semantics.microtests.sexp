@@ -687,6 +687,39 @@
   :emacs nil
   :notes "clemacs extension: some upstream callers scan bindings via `indirect-function` and pass concrete keymaps; treat keymaps as already-indirect during bring-up.")
 
+ (:name "cl-defgeneric-setf-basic"
+  :expr "(progn (setq clemacs--sfg-store 0)\n  (cl-defgeneric clemacs--sfg (x))\n  (cl-defgeneric (setf clemacs--sfg) (v x))\n  (cl-defmethod (setf clemacs--sfg) (v (_x t)) (setq clemacs--sfg-store v))\n  (setf (clemacs--sfg 1) 9)\n  clemacs--sfg-store)"
+  :expected "9"
+  :emacs :match
+  :notes "Support setf generic function names (needed by cl-generic).")
+
+ (:name "gv-deref-setf-basic"
+  :expr "(progn (require 'gv)\n  (let* ((cell (cons 1 nil))\n         (ref (cons (lambda () (car cell))\n                   (lambda (v) (setcar cell v)))))\n    (setf (gv-deref ref) 42)\n    (car cell)))"
+  :expected "42"
+  :emacs :match
+  :notes "Host CL `setf` must support `(gv-deref REF)` places (used by cl-generic/nadvice).")
+
+ (:name "apply-single-list-arg"
+  :expr "(apply (list '+ 1 2))"
+  :expected "3"
+  :emacs :match
+  :notes "Emacs supports `(apply (list FN ARG...))`; cl-generic advice tests rely on it.")
+
+ (:name "sequences-length>-list"
+  :expr "(length> '(a b c) 2)"
+  :expected "t"
+  :emacs :match)
+
+ (:name "sequences-length<-string"
+  :expr "(length< \"abc\" 4)"
+  :expected "t"
+  :emacs :match)
+
+ (:name "sequences-length=-vector"
+  :expr "(length= [1 2 3] 3)"
+  :expected "t"
+  :emacs :match)
+
  (:name "interactive-form-commandp-defun"
   :expr "(progn (defun clemacs--it0 () (interactive) 1) (list (interactive-form 'clemacs--it0) (commandp 'clemacs--it0)))"
   :expected "((interactive nil) t)"

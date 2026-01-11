@@ -7,12 +7,19 @@
    (cause :initarg :cause :reader elisp-load-error-cause)
    (inventory-entry :initarg :inventory-entry :reader elisp-load-error-inventory-entry))
   (:report (lambda (c s)
-             (cl:format s "ELisp load error in ~A (form ~D):~%  ~S~%~A~@[~%Inventory: ~A~]"
+             (let* ((cause (elisp-load-error-cause c))
+                    (cause-msg
+                      (if (typep cause 'elisp-signal)
+                          (cl:format nil "signal: (~S . ~S)"
+                                     (elisp-signal-symbol cause)
+                                     (elisp-signal-data cause))
+                          (cl:princ-to-string cause))))
+               (cl:format s "ELisp load error in ~A (form ~D):~%  ~S~%~A~@[~%Inventory: ~A~]"
                         (elisp-load-error-path c)
                         (elisp-load-error-form-index c)
                         (elisp-load-error-form c)
-                        (elisp-load-error-cause c)
-                        (elisp-load-error-inventory-entry c)))))
+                        cause-msg
+                        (elisp-load-error-inventory-entry c))))))
 
 (cl:defun %read-noncomment-lines (path)
   (let ((out nil))

@@ -538,6 +538,8 @@ If NAME lives in the CL package, ignore the definition."
   (declare (cl:ignore _spec))
   `(progn ,@body))
 
+(cl:defvar *advertised-calling-conventions* (cl:make-hash-table :test 'eq))
+
 (cl:defun set-advertised-calling-convention (&rest _args)
   "Bring-up subset of ELisp `set-advertised-calling-convention'.
 
@@ -563,9 +565,19 @@ Supports the usage exercised by `map-tests.el' via `cl-defgeneric' declares."
                      (cl:function-lambda-expression fn)
                    (declare (cl:ignore _lambda _closed))
                    (and (symbolp name) name))))))
-      (let ((sym (function-name-symbol function)))
+      (let* ((sym (function-name-symbol function))
+             (fnobj
+               (cond
+                ((and (symbolp function) (fboundp function))
+                 (ignore-errors (%resolve-function function)))
+                ((cl:functionp function) function)
+                #+sbcl
+                ((typep function 'sb-mop:funcallable-standard-object) function)
+                (t nil))))
         (when sym
           (function-put sym 'advertised-calling-convention arglist))
+        (when fnobj
+          (setf (gethash fnobj *advertised-calling-conventions*) arglist))
         arglist))))
 
 (cl:defun get-advertised-calling-convention (&rest _args)
@@ -589,13 +601,23 @@ Supports the usage exercised by `map-tests.el' via `cl-defgeneric' declares."
                  (let ((nm (sb-mop:generic-function-name fn)))
                    (and (symbolp nm) nm)))
                 (t
-                 (multiple-value-bind (_lambda _closed name)
-                     (cl:function-lambda-expression fn)
-                   (declare (cl:ignore _lambda _closed))
-                   (and (symbolp name) name))))))
+                (multiple-value-bind (_lambda _closed name)
+                    (cl:function-lambda-expression fn)
+                  (declare (cl:ignore _lambda _closed))
+                  (and (symbolp name) name))))))
       (let* ((sym (function-name-symbol function))
-             (stored (and sym (function-get sym 'advertised-calling-convention))))
+             (stored (and sym (function-get sym 'advertised-calling-convention)))
+             (fnobj
+               (cond
+                ((and (symbolp function) (fboundp function))
+                 (ignore-errors (%resolve-function function)))
+                ((cl:functionp function) function)
+                #+sbcl
+                ((typep function 'sb-mop:funcallable-standard-object) function)
+                (t nil)))
+             (direct (and fnobj (gethash fnobj *advertised-calling-conventions*))))
         (or stored
+            direct
             ;; Heuristic fallback: for the core `map.el` generics the only
             ;; advertised signature differences are deprecated trailing
             ;; `testfn` args.  When we don't have the stored advertised
@@ -711,6 +733,10 @@ implementation-specific ones."
    ((null object) 'symbol)
    ((symbolp object) 'symbol)
    ((typep object 'clemacs--builtin-class) 'built-in-class)
+   #+sbcl
+   ((typep object 'sb-pcl::built-in-class) 'built-in-class)
+   #+sbcl
+   ((typep object 'sb-pcl::structure-class) 'cl-structure-class)
    ((consp object) 'cons)
    ((integerp object) 'integer)
    ((stringp object) 'string)
@@ -1801,7 +1827,10 @@ This only defines the mode variable and a basic toggling function."
                       ((null arg) (not ,name))
                       ((integerp arg) (> arg 0))
                       (t arg)))
-         ,name))))
+	         ,name))))
+
+;; Core editor mode variable referenced by upstream `cl-generic` context tests.
+(defvar overwrite-mode nil)
 
 (cl:defun fset (symbol definition)
   "Set SYMBOL's function cell to DEFINITION.
@@ -1827,8 +1856,23 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
       (setf (cl:fdefinition symbol) definition))
      (t
       (setf (cl:fdefinition symbol)
-            (lambda (&rest args)
-              (cl:apply (%resolve-function symbol) args))))))
+	            (lambda (&rest args)
+	              (cl:apply (%resolve-function symbol) args))))))
+	  (let ((acc (ignore-errors (function-get symbol 'advertised-calling-convention))))
+	    (when acc
+	      (let ((fnobj (ignore-errors (%resolve-function symbol))))
+	        (when fnobj
+	          (setf (gethash fnobj *advertised-calling-conventions*) acc)))))
+	  symbol)
+
+(cl:defun fmakunbound (symbol)
+  "Unset SYMBOL's function cell value.
+
+In clemacs, this also clears the internal function-cell map so `fboundp'
+reflects the unbound state (required by cl-generic tests)."
+  (unless (symbolp symbol)
+    (signal 'wrong-type-argument (list 'symbolp symbol)))
+  (fset symbol nil)
   symbol)
 
 (cl:defun defalias (symbol definition &optional _docstring)
@@ -1837,7 +1881,28 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
   (when (and (symbolp symbol)
              (eq (symbol-package symbol) (find-package "CL")))
     (return-from defalias symbol))
-  (fset symbol definition))
+  (let* ((hook (and (symbolp symbol) (get symbol 'defalias-fset-function)))
+         (out (if hook
+                  (funcall hook symbol definition)
+                  (fset symbol definition))))
+    ;; Bridge Emacs's "gv setter symbol" convention into CL's `(setf F)` naming,
+    ;; so host CL `setf` can call setters defined via gv/cl-generic.
+    ;;
+    ;; `gv-setter` returns an interned symbol named like "(setf foo)" (a symbol,
+    ;; not a list).  Many upstream files (including cl-generic-tests) use `setf`
+    ;; on function call places, which in CL calls the function named `(setf foo)`.
+    (when (and (symbolp symbol) (cl:fboundp symbol))
+      (let* ((nm (%elisp-string->cl-string (symbol-name symbol)))
+             (n (cl:length nm)))
+        (when (and (>= n 7)
+                   (cl:string= (cl:subseq nm 0 6) "(setf ")
+                   (cl:char= (cl:aref nm (1- n)) #\)))
+          (let* ((inner (cl:subseq nm 6 (1- n)))
+                 (base (ignore-errors (intern inner (symbol-package symbol)))))
+            (when (symbolp base)
+              (ignore-errors
+               (setf (cl:fdefinition (list 'setf base)) (cl:fdefinition symbol))))))))
+    out))
 
 (cl:defmacro while (test &body body)
   "ELisp-ish WHILE."
@@ -2039,7 +2104,24 @@ setf expander so it works even when ELisp `setf` isn't available."
                       ,map-store-form)
                     ,new)
                   (cl:error e)))))
-       `(map-elt ,map-access ,k ,d ,tf)))))
+	       `(map-elt ,map-access ,k ,d ,tf)))))
+
+(cl:define-setf-expander gv-deref (ref &environment env)
+  "CL:SETF expansion for ELisp `gv-deref'.
+
+Upstream defines a gv-setter for `gv-deref' (so `(setf (gv-deref ref) v)` calls
+the setter stored in REF).  We mirror that behavior for host CL `setf`."
+  (declare (cl:ignore env))
+  (let ((r (gensym "REF"))
+        (new (gensym "NEW")))
+    (cl:values
+     (list r)
+     (list ref)
+     (list new)
+     `(progn
+        (funcall (cdr ,r) ,new)
+        ,new)
+     `(gv-deref ,r))))
 
 (cl:defun memq (elt list)
   "ELisp-ish MEMQ."

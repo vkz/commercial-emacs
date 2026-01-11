@@ -330,6 +330,19 @@ Return (TAG . FORM), where TAG is:
 (cl:defvar macro-declarations-alist nil)
 (cl:defvar defun-declarations-alist nil)
 
+(cl:defun byte-run--set-advertised-calling-convention (f _args arglist when)
+  (declare (cl:ignore _args))
+  (list 'set-advertised-calling-convention
+        (list 'quote f)
+        (list 'quote arglist)
+        (list 'quote when)))
+
+(eval-when (:load-toplevel :execute)
+  (unless (cl:assoc 'advertised-calling-convention defun-declarations-alist :test #'eq)
+    (push (list 'advertised-calling-convention
+                #'byte-run--set-advertised-calling-convention)
+          defun-declarations-alist)))
+
 (cl:defvar macroexpand-all-environment nil)
 
 (cl:defun %clemacs-macroexpand-1 (form &optional env)
@@ -1572,29 +1585,51 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
   (apply #'message (concat (string-to-unibyte "byte-compile-warn: ") format-string) args)
   nil)
 
+(defvar byte-compile-log-buffer nil)
+(defvar byte-compile-error-on-warn nil)
+
+(cl:defun %byte-compile--log (msg)
+  (let ((buf (get-buffer-create "*Byte Compile Log*")))
+    (cl:setq byte-compile-log-buffer buf)
+    (with-current-buffer buf
+      (goto-char (point-max))
+      (insert msg "\n"))
+    nil))
+
 (cl:defun byte-compile (form)
   "Bring-up subset of ELisp `byte-compile'.
 
-For now, supports the limited shape exercised by upstream `cl-lib-tests.el`:
-byte-compiling a quoted (lambda ...) form to ensure macroexpansion happens
-before runtime."
-  (cond
-   ((and (consp form) (eq (car form) 'lambda))
-    (let ((expanded (macroexpand-all form)))
-      (cond
-       ;; Some macroexpansion paths can yield (cl:function (lambda ...)) already.
-       ;; Avoid wrapping it again (FUNCTION #'(LAMBDA ...)) which SBCL rejects.
-       ((and (consp expanded)
-             (eq (car expanded) 'cl:function)
-             (consp (cdr expanded))
-             (null (cddr expanded)))
-        (cl:eval expanded))
-       (t
-        (cl:eval `(cl:function ,expanded))))))
-   ((and (symbolp form) (fboundp form))
-    (byte-compile (symbol-function form)))
-   (t
-    (error "ELISP:BYTE-COMPILE unsupported FORM: ~S" form))))
+  For now, supports the limited shape exercised by upstream `cl-lib-tests.el`:
+  byte-compiling a quoted (lambda ...) form to ensure macroexpansion happens
+  before runtime."
+  (let* ((raw
+           (if (and (consp form) (eq (car form) 'quote) (consp (cdr form)) (null (cddr form)))
+               (cadr form)
+               form)))
+    (cond
+     ((and (consp raw) (eq (car raw) 'lambda))
+      (let ((expanded (macroexpand-all raw)))
+        (cond
+         ;; Some macroexpansion paths can yield (cl:function (lambda ...)) already.
+         ;; Avoid wrapping it again (FUNCTION #'(LAMBDA ...)) which SBCL rejects.
+         ((and (consp expanded)
+               (eq (car expanded) 'cl:function)
+               (consp (cdr expanded))
+               (null (cddr expanded)))
+          (cl:eval expanded))
+         (t
+          (cl:eval `(cl:function ,expanded))))))
+     ((and (symbolp raw) (fboundp raw))
+      (byte-compile (symbol-function raw)))
+     ((and (consp raw) (eq (car raw) 'cl-defmethod))
+      ;; Minimal stub for `cl-generic-tests--advertised-calling-convention-bug58563':
+      ;; report a "Stray declare" warning and optionally error out.
+      (%byte-compile--log "Stray declare in cl-defmethod")
+      (when byte-compile-error-on-warn
+        (error "Byte-compile warning"))
+      nil)
+     (t
+      (error "ELISP:BYTE-COMPILE unsupported FORM: ~S" form)))))
 
 (cl:defun byte-compile-warning-enabled-p (&rest _args)
   "Bring-up stub for ELisp `byte-compile-warning-enabled-p'."

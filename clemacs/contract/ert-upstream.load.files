@@ -43,3 +43,18 @@ test/lisp/emacs-lisp/map-tests.el -
 # 2026-01-08: Bring up `cl-lib` upstream tests.
 lisp/emacs-lisp/cl-seq.el -
 test/lisp/emacs-lisp/cl-lib-tests.el -
+
+# 2026-01-10: Prereqs for `cl-generic`/`nadvice` bring-up (startup-adjacent).
+# NOTE: `cl-macs.el` is compile-time heavy; cap it to avoid deep `define-inline`
+# fallout during upstream ERT bring-up.
+lisp/emacs-lisp/cl-macs.el 10
+lisp/emacs-lisp/cl-preloaded.el -
+lisp/emacs-lisp/oclosure.el -
+
+# 2026-01-10: Bring up `cl-generic` upstream tests.
+lisp/emacs-lisp/cl-generic.el -
+test/lisp/emacs-lisp/cl-generic-tests.el -
+
+# 2026-01-10: Bring up `nadvice` upstream tests (advice system).
+lisp/emacs-lisp/nadvice.el -
+test/lisp/emacs-lisp/nadvice-tests.el -

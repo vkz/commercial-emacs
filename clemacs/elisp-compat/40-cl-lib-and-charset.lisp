@@ -643,6 +643,10 @@ Returns a list of argument variable symbols from LAMBDA-LIST."
   (unless (symbolp name)
     (return-from cl--find-class nil))
   (or (get name 'cl--class)
+      ;; Prefer the host class when available.  This allows cl-generic's
+      ;; "typeof" generalizer to work for CL built-in types (e.g. FLOAT) and
+      ;; CL structs defined via our `cl-defstruct' wrapper.
+      (ignore-errors (cl:find-class name nil))
       (and (%clemacs--builtin-type-name-p name)
            (%clemacs--builtin-class name))))
 
@@ -650,6 +654,33 @@ Returns a list of argument variable symbols from LAMBDA-LIST."
   `(progn
      (put ,name 'cl--class ,value)
      ,value))
+
+(cl:defun cl--class-allparents (class)
+  "Bring-up subset of cl-lib's internal `cl--class-allparents'."
+  (cond
+   ((typep class 'clemacs--builtin-class)
+    (list (clemacs--builtin-class-name class) t))
+   #+sbcl
+   ((typep class 'cl:class)
+    (remove nil (mapcar #'cl:class-name (sb-mop:class-precedence-list class))))
+   (t
+    (list (type-of class) t))))
+
+(cl:defun cl-type-of (object)
+  "Bring-up subset of cl-lib's `cl-type-of'.
+
+This returns an Emacs-ish type symbol suitable for cl-generic dispatch tags."
+  (cond
+   ((typep object 'elisp-char-table) 'char-table)
+   ((typep object 'elisp-marker) 'marker)
+   ((typep object 'elisp-window-configuration) 'window-configuration)
+   (t
+    #+sbcl
+    (let ((c (cl:class-of object)))
+      (or (and (typep c 'cl:class) (cl:class-name c))
+          (cl:type-of object)))
+    #-sbcl
+    (cl:type-of object))))
 
 (cl:defun cl--make-slot-descriptor (name &optional initform type props)
   "Bring-up subset of cl-lib's internal `cl--make-slot-descriptor'.
@@ -759,8 +790,15 @@ named constructors."
   "Bring-up subset of cl-generic's `cl-defgeneric'.
 
 Defines a CLOS generic function, and (when BODY is provided) a default method."
-  (unless (and (symbolp name) (listp args))
-    (cl:error "ELISP:CL-DEFGENERIC expects (NAME ARGS ...), got: ~S ~S" name args))
+  (labels ((setf-name-p (x)
+             (and (consp x)
+                  (eq (car x) 'setf)
+                  (consp (cdr x))
+                  (symbolp (cadr x))
+                  (null (cddr x)))))
+    (unless (and (or (symbolp name) (setf-name-p name)) (listp args))
+      (cl:error "ELISP:CL-DEFGENERIC expects NAME (or (setf NAME)) and ARGS, got: ~S ~S"
+                name args)))
   (let* ((doc (and rest (stringp (car rest)) (pop rest)))
          (decl-forms nil))
     (labels ((declare-form-p (x)

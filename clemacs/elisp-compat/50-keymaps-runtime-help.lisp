@@ -309,6 +309,22 @@ arguments are not evaluated."
   (declare (cl:ignore _args))
   doc)
 
+(cl:defun help-function-arglist (&rest _args)
+  "Bring-up stub for ELisp `help-function-arglist'."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun documentation (object &optional _raw)
+  "Bring-up subset of ELisp `documentation'."
+  (declare (cl:ignore _raw))
+  ;; Use CL's doc-type symbol, not ELISP::FUNCTION.
+  (ignore-errors (cl:documentation object 'cl:function)))
+
+(cl:defun find-lisp-object-file-name (&rest _args)
+  "Bring-up stub for ELisp `find-lisp-object-file-name'."
+  (declare (cl:ignore _args))
+  nil)
+
 (cl:defun help-fns--signature (&rest _args)
   "Bring-up stub for ELisp `help-fns--signature'."
   (declare (cl:ignore _args))

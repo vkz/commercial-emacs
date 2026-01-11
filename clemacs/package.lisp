@@ -42,18 +42,20 @@
    #:run-smoke))
 
 (defpackage #:elisp
-	  (:use #:cl)
-	  (:shadow #:defmacro #:defun #:equal #:eval #:funcall #:function #:intern #:make-hash-table #:provide #:require #:setq
-	           #:defvar #:defconst
-	           #:make-symbol
-	           #:gensym
-	           #:functionp
-	           #:make-list #:format
-	           #:make-string
-	           #:string
-	           #:string-trim
-	   #:load
-	   #:+ #:-
+		  (:use #:cl)
+		  (:shadow #:defmacro #:defun #:equal #:eval #:funcall #:apply #:function #:intern #:make-hash-table #:provide #:require #:setq
+		           #:defvar #:defconst
+		           #:make-symbol
+		           #:gensym
+		           #:functionp
+		           #:make-list #:format
+		           #:make-string
+		           #:string
+		           #:documentation
+		           #:fmakunbound
+		           #:string-trim
+		   #:load
+		   #:+ #:-
 	   #:logand
 	   #:ignore
 	   #:1+ #:1-
