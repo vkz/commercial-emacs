@@ -654,9 +654,22 @@ loading upstream ELisp)."
       (let* ((doc (and body (stringp (car body)) (car body)))
              (doc* (and doc (if (cl:stringp doc) doc (%elisp-string->cl-string doc))))
              (rest (if doc (cdr body) body)))
-        `(cl:defmacro ,name ,lambda-list
-           ,@(when doc* (list doc*))
-           ,@rest))))
+        `(progn
+           ;; Populate `current-load-list' so `load-history' + `symbol-file'
+           ;; can report the defining file.
+           (when (and (boundp 'current-load-list) (listp current-load-list))
+             (push (cons 'defun ',name) current-load-list))
+           (cl:defmacro ,name ,lambda-list
+             ,@(when doc* (list doc*))
+             ,@rest)
+           ;; Mirror upstream: run the definition through `defalias` so advice
+           ;; and other `defalias-fset-function` users can observe redefs.
+           (let ((mf (cl:macro-function ',name)))
+             (defalias ',name
+               (cons 'macro
+                     (lambda (&rest args)
+                       (funcall mf (cons ',name args) nil)))))
+           ',name))))
 
 (cl:defmacro defun (name lambda-list &body body)
   "Define a function without mutating CL package symbols.
@@ -684,6 +697,14 @@ trying to redefine locked symbols while loading upstream ELisp)."
            (cl:defun ,name ,lambda-list
              ,@(when doc* (list doc*))
              ,@rest)
+           ;; Mirror upstream: run the definition through `defalias` so advice
+           ;; and other `defalias-fset-function` users can observe redefs.
+           (defalias ',name (cl:function ,name))
+           ;; Provide a stable, structured arglist for callers like `advice.el`.
+           ;; Emacs generally prefers an advertised calling convention when
+           ;; present (and falls back to less reliable introspection).
+           (ignore-errors
+             (set-advertised-calling-convention ',name ',lambda-list))
            ,@(when interactive-form
                `((function-put ',name 'interactive-form ',interactive-form)))
            ',name))))
@@ -696,6 +717,24 @@ trying to redefine locked symbols while loading upstream ELisp)."
   (cond
    ((and (stringp a) (stringp b))
     (cl:string= (string-to-multibyte a) (string-to-multibyte b)))
+   ;; In Emacs, anonymous lambdas can be compared structurally (not just by EQ),
+   ;; which is relied upon by `nadvice` (e.g. `advice-remove` with a fresh
+   ;; `(lambda ...)` form).
+   ((and (cl:functionp a) (cl:functionp b))
+    (or (eq a b)
+        (multiple-value-bind (la _closed-a name-a) (cl:function-lambda-expression a)
+          (declare (cl:ignore _closed-a))
+          (multiple-value-bind (lb _closed-b name-b) (cl:function-lambda-expression b)
+            (declare (cl:ignore _closed-b))
+            (cond
+             ((and la lb) (equal la lb))
+             ;; SBCL may drop lambda expressions for compiled functions.  As a
+             ;; fallback, compare anonymous lambda "names" (which include the
+             ;; lambda list + source file) structurally.
+             ((and (consp name-a) (eq (car name-a) 'lambda)
+                   (consp name-b) (eq (car name-b) 'lambda))
+              (equal name-a name-b))
+             (t nil))))))
    ((and (consp a) (consp b))
     (and (equal (car a) (car b))
          (equal (cdr a) (cdr b))))
@@ -1851,7 +1890,17 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
   (when (symbolp symbol)
     (cond
      ((and (consp definition) (eq (car definition) 'macro) (cl:functionp (cdr definition)))
-      (setf (cl:macro-function symbol) (cdr definition)))
+      ;; Our ELisp macro objects store an "args expander" (called with the macro
+      ;; argument list).  Bridge that to CL's macro-function calling convention
+      ;; (WHOLE-FORM ENV) so CL evaluation of loaded ELisp can expand macros too.
+      ;;
+      ;; Capture the cons cell so later `nadvice` mutations of the cdr (wrapping
+      ;; the expander) are observed by CL macroexpansion.
+      (let ((cell definition))
+        (setf (cl:macro-function symbol)
+              (lambda (whole-form _env)
+                (declare (cl:ignore _env))
+                (cl:apply (cdr cell) (cdr whole-form))))))
      ((cl:functionp definition)
       (setf (cl:fdefinition symbol) definition))
      (t

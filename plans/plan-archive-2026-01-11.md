@@ -26,6 +26,29 @@ don’t keep rediscovering the same fixes during clemacs bring-up.
     reflects the unbound state and `cl-generic-define` correctly throws away
     previous methods/dispatches.
 
+### Upstream ERT bring-up: `nadvice` cluster
+
+- Promoted the upstream `test/lisp/emacs-lisp/nadvice-tests.el` suite into the
+  clemacs must-pass list: `clemacs/contract/ert-upstream.tests`.
+  - NOTE: `advice-test-called-interactively-p-around` is marked upstream as
+    `:expected-result :failed`, so it is intentionally not included in the
+    must-pass contract list.
+- Extended the upstream ERT harness manifest to load the nadvice prereqs:
+  - `lisp/emacs-lisp/cl-print.el`, `lisp/emacs-lisp/nadvice.el`,
+    `lisp/emacs-lisp/advice.el`.
+- Implemented a minimal `cl-print` subset in `clemacs/ported/`:
+  - `cl-prin1-to-string` prints advice wrappers as `#f(advice ...)` (needed by
+    `advice-test-print`).
+- Restored correct interactive behavior through advice wrappers:
+  - `interactive-form` computes the combined interactive spec for advice wrapper
+    objects (rather than falling back to the stale symbol property or the
+    advice “car” alone).
+  - Added a tiny “capture mode” for `%interactive` so interactive specs that
+    are lambdas can be reified as closures (lexical `interactive` spec in
+    `advice-test-bug61179`).
+  - Avoided an infinite-recursion trap: do not treat CL function objects’ debug
+    names as ELisp symbols for purposes of `interactive-form`.
+
 ### Smoke gate made fast again
 
 - Decoupled the full ELisp semantics microtest corpus from `clemacs:test:smoke`
@@ -39,11 +62,13 @@ don’t keep rediscovering the same fixes during clemacs bring-up.
 
 - `clemacs/contract/semantics.microtests.sexp`:
   - Added microtests covering `(apply (list ...))` and `length>`/`length<`/`length=`.
+  - Added microtests for `equal` on function objects (structural equality).
 
 ## Verification
 
 - `mise run clemacs:test:contract -- --level check`
 - `mise run clemacs:test:micro -- --name sequences-length`
+- `mise run clemacs:verify`
 
 ## Notes / stance reminders
 

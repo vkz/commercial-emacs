@@ -33,6 +33,20 @@
     (or (try 'elisp::ert-test-result-with-condition-backtrace result)
         nil)))
 
+(defun %debug-print-upstream-ert-condition (result &key (stream *standard-output*))
+  (let ((c (%maybe-upstream-ert-condition result)))
+    (format stream "      ~S~%" c)
+    ;; Sometimes we stash raw CL SIMPLE-CONDITION objects inside ELisp
+    ;; `(error . DATA)` signals.  When present, printing the format args makes
+    ;; the underlying cause (e.g. wrong argcount) actionable.
+    (when (and (consp c) (consp (cdr c)) (typep (cadr c) 'simple-condition))
+      (let ((sc (cadr c)))
+        (format stream "      cl:simple-condition control: ~S~%"
+                (ignore-errors (simple-condition-format-control sc)))
+        (format stream "      cl:simple-condition args: ~S~%"
+                (ignore-errors (simple-condition-format-arguments sc))))))
+  (finish-output stream))
+
 (defun list-upstream-ert-test-names (&key (stream *standard-output*))
   "Return the list of upstream ERT tests currently registered under clemacs.
 
@@ -59,6 +73,8 @@ This is an incremental bring-up gate: we run named tests via upstream
     (error "Upstream ERT is not loaded (missing ELISP::ERT-RUN-TEST)"))
   (unless (fboundp 'elisp::ert-test-passed-p)
     (error "Upstream ERT is not loaded (missing ELISP::ERT-TEST-PASSED-P)"))
+  (unless (fboundp 'elisp::ert-test-result-expected-p)
+    (error "Upstream ERT is not loaded (missing ELISP::ERT-TEST-RESULT-EXPECTED-P)"))
 
   (let ((debugp (and (uiop:getenv "CLEMACS_ERT_DEBUG") t))
         (timeout-secs
@@ -81,6 +97,15 @@ This is an incremental bring-up gate: we run named tests via upstream
                  (lambda (e)
                    (when debugp
                      (format stream "      signalled: ~A~%" e)
+                     #+sbcl
+                     (sb-debug:print-backtrace :stream stream :count 50))
+                   nil))
+               (elisp::elisp-signal
+                 (lambda (c)
+                   (when debugp
+                     (format stream "      elisp-signal: ~S ~S~%"
+                             (ignore-errors (elisp::elisp-signal-symbol c))
+                             (ignore-errors (elisp::elisp-signal-data c)))
                      #+sbcl
                      (sb-debug:print-backtrace :stream stream :count 50))
                    nil)))
@@ -142,27 +167,57 @@ This is an incremental bring-up gate: we run named tests via upstream
                          (funcall 'elisp::ert-run-test test))
                      #-sbcl
                      (funcall 'elisp::ert-run-test test))
-                   (ok (funcall 'elisp::ert-test-passed-p result))
+                   (passedp (funcall 'elisp::ert-test-passed-p result))
+                   (expectedp (funcall 'elisp::ert-test-result-expected-p test result))
+                   (skippedp (and (fboundp 'elisp::ert-test-skipped-p)
+                                  (funcall 'elisp::ert-test-skipped-p result)))
                    (expected-fail (member name known-fail :test #'string=)))
               (cond
-               ((and expected-fail ok)
-               (incf xpass)
-                (format stream "XPASS ~A~%" name)
-                (when debugp
-                  (let ((bt (%maybe-upstream-ert-backtrace result)))
-                    (when bt
-                      (format stream "      backtrace:~%      ~S~%" bt)))
-                  (format stream "      ~S~%" (%maybe-upstream-ert-condition result))))
-               ((and expected-fail (not ok))
+               ;; Manual known-fail list always wins (treat XPASS as a failure).
+               (expected-fail
+                (cond
+                 ((and passedp (not skippedp))
+                  (incf xpass)
+                  (format stream "XPASS ~A~%" name)
+                  (when debugp
+                    (let ((bt (%maybe-upstream-ert-backtrace result)))
+                      (when bt
+                        (format stream "      backtrace:~%      ~S~%" bt)))
+                    (%debug-print-upstream-ert-condition result :stream stream)))
+                 (t
+                  (incf xfail)
+                  (format stream "XFAIL ~A~%" name)
+                  (when debugp
+                    (let ((bt (%maybe-upstream-ert-backtrace result)))
+                      (when bt
+                        (format stream "      backtrace:~%      ~S~%" bt)))
+                    (%debug-print-upstream-ert-condition result :stream stream)))))
+
+               ;; Skips are "expected" in upstream ERT.
+               (skippedp
                 (incf xfail)
-                (format stream "XFAIL ~A~%" name)
+                (format stream "SKIP ~A~%" name)
                 (when debugp
-                  (let ((bt (%maybe-upstream-ert-backtrace result)))
-                    (when bt
-                      (format stream "      backtrace:~%      ~S~%" bt)))
-                  (format stream "      ~S~%" (%maybe-upstream-ert-condition result))))
-               (ok
-                (format stream "ok   ~A~%" name))
+                  (%debug-print-upstream-ert-condition result :stream stream)))
+
+               ;; ERT-level expected results (e.g. :expected-result :failed).
+               (expectedp
+                (cond
+                 (passedp
+                  (format stream "ok   ~A~%" name))
+                 (t
+                  (incf xfail)
+                  (format stream "XFAIL ~A~%" name)
+                  (when debugp
+                    (let ((bt (%maybe-upstream-ert-backtrace result)))
+                      (when bt
+                        (format stream "      backtrace:~%      ~S~%" bt)))
+                    (%debug-print-upstream-ert-condition result :stream stream)))))
+
+               ;; Unexpected results.
+               (passedp
+                (incf xpass)
+                (format stream "XPASS ~A~%" name))
                (t
                 (incf failed)
                 (format stream "FAIL ~A~%" name)
@@ -170,7 +225,7 @@ This is an incremental bring-up gate: we run named tests via upstream
                   (let ((bt (%maybe-upstream-ert-backtrace result)))
                     (when bt
                       (format stream "      backtrace:~%      ~S~%" bt)))
-                  (format stream "      ~S~%" (%maybe-upstream-ert-condition result)))))))
+                  (%debug-print-upstream-ert-condition result :stream stream))))))
         (error (e)
           (if (member name known-fail :test #'string=)
               (progn

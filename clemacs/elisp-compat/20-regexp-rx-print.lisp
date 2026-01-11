@@ -119,6 +119,44 @@ So we:
 	                     (#\| (write-char #\| out))
 	                     (#\{ (write-char #\{ out))
 	                     (#\} (write-char #\} out))
+                             ;; Emacs syntax-class escapes like \sw (word
+                             ;; constituent) and \s_ (symbol constituent).
+                             ;; Approximate with ASCII-ish classes sufficient
+                             ;; for ERT's result buffer xref scans.
+                             (#\s
+                              (let ((have-class (< (1+ i) n)))
+                                (if (not have-class)
+                                    (write-string "\\s" out)
+                                    (let ((cls (char regexp (1+ i))))
+                                      (incf i)
+                                      (case cls
+                                        ;; Emacs syntax-class escapes are not
+                                        ;; the same as PCRE's `\\s`/`\\S`.
+                                        ;; For bring-up, approximate:
+                                        ;;   \\sw / \\s_  -> word-ish
+                                        ;;   \\Sw / \\S_  -> non-word-ish
+                                        ;;
+                                        ;; Use PCRE `\\w`/`\\W` so this works
+                                        ;; both inside and outside bracket
+                                        ;; expressions (nested [...] is
+                                        ;; invalid PCRE and breaks rx/ERT).
+                                        (#\w (write-string "\\w" out))
+                                        (#\_ (write-string "\\w" out))
+                                        (otherwise
+                                         (write-string "\\s" out)
+                                         (write-char cls out)))))))
+                             (#\S
+                              (let ((have-class (< (1+ i) n)))
+                                (if (not have-class)
+                                    (write-string "\\S" out)
+                                    (let ((cls (char regexp (1+ i))))
+                                      (incf i)
+                                      (case cls
+                                        (#\w (write-string "\\W" out))
+                                        (#\_ (write-string "\\W" out))
+                                        (otherwise
+                                         (write-string "\\S" out)
+                                         (write-char cls out)))))))
 	                     ;; Emacs `\\`` and `\\'' mean beginning/end of buffer.
 	                     ;; Preserve those semantics even if we later treat `^`/`$`
 	                     ;; as line anchors.
@@ -891,35 +929,46 @@ Currently does not load code; it only records FEATURE as provided."
 Supports lists and vectors (and strings as a sequence of characters).
 This is sufficient for `lisp/emacs-lisp/backquote.el', which uses
 `(append VEC ())' to turn a vector into a list of its elements."
-  (labels ((seq->list (x &key (copy t))
-             (cond
-              ((null x) nil)
-              ((consp x) (if copy (copy-list x) x))
-              ((vectorp x) (coerce x 'list))
-              ((stringp x)
-               (loop for i from 0 below (length x)
-                     collect (aref x i)))
-              (t (error "ELISP:APPEND unsupported type: ~S" (type-of x))))))
-    (cond
-     ((null seqs) nil)
-     ((null (cdr seqs)) (seq->list (car seqs)))
-     (t
-      (let* ((last (car (last seqs)))
-             (prefix (butlast seqs))
-             (acc nil))
-        (dolist (s prefix)
-          (setf acc (nconc acc (seq->list s))))
-        (cond
-         ((listp last)
-          (nconc acc last))
-         ((or (vectorp last) (stringp last))
-          (nconc acc (seq->list last)))
-         (t
-          (if (null acc)
-              last
-              (progn
-                (setf (cdr (last acc)) last)
-                acc)))))))))
+  (let ((debugp (and (uiop:getenv "CLEMACS_DEBUG_APPEND") t)))
+    (labels ((seq->list (x &key (copy t))
+               (cond
+                ((null x) nil)
+                ((consp x) (if copy (copy-list x) x))
+                ((vectorp x) (coerce x 'list))
+                ((stringp x)
+                 (loop for i from 0 below (length x)
+                       collect (aref x i)))
+                (t
+                 (when debugp
+                   (cl:format *error-output*
+                              "[clemacs] append: unsupported seq: ~S (type ~S); full args: ~S~%"
+                              x (type-of x) seqs)
+                   (finish-output *error-output*)
+                   #+sbcl
+                   (ignore-errors
+                     (sb-debug:print-backtrace :stream *error-output* :count 60))
+                   (finish-output *error-output*))
+                 (error "ELISP:APPEND unsupported: %S" x)))))
+      (cond
+       ((null seqs) nil)
+       ((null (cdr seqs)) (seq->list (car seqs)))
+       (t
+        (let* ((last (car (last seqs)))
+               (prefix (butlast seqs))
+               (acc nil))
+          (dolist (s prefix)
+            (setf acc (nconc acc (seq->list s))))
+          (cond
+           ((listp last)
+            (nconc acc last))
+           ((or (vectorp last) (stringp last))
+            (nconc acc (seq->list last)))
+           (t
+            (if (null acc)
+                last
+                (progn
+                  (setf (cdr (last acc)) last)
+                  acc))))))))))
 
 (cl:defun mapcar (function &rest sequences)
   "ELisp-ish MAPCAR.

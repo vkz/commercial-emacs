@@ -368,13 +368,22 @@ need for bring-up:
                    (null (cddr form)))
           (return-from %clemacs-macroexpand-1
             (cl:values (funcall expander (cadr form)) t)))
+        ;; Treat ENV expanders as Emacs-style arg expanders.
         (return-from %clemacs-macroexpand-1
           (cl:values (cl:apply expander (cdr form)) t)))))
-  (if (and (consp form)
-           (symbolp (car form))
-           (eq (car form) 'function))
-      (cl:values form nil)
-      (cl:macroexpand-1 form (and (not (listp env)) env))))
+    (let ((env* (and (not (listp env)) env)))
+      ;; Expand ELisp macros through the function cell / indirection chain so that
+      ;; `defalias`ed macros and `nadvice`d macro expanders are visible.
+      (when (and (consp form) (symbolp (car form)))
+        (let ((head (car form)))
+          (when (eq head 'function)
+            (return-from %clemacs-macroexpand-1 (cl:values form nil)))
+          (let ((def (ignore-errors (indirect-function head t))))
+            (when (and (consp def) (eq (car def) 'macro) (cl:functionp (cdr def)))
+              (let ((expander (cdr def)))
+                (return-from %clemacs-macroexpand-1
+                  (cl:values (cl:apply expander (cdr form)) t)))))))
+      (cl:macroexpand-1 form env*)))
 
 (cl:defun macroexpand-1 (form &optional env)
   "Bring-up subset of ELisp `macroexpand-1'."
@@ -394,6 +403,15 @@ If ENV is an Emacs-style macro environment (an alist), ignore it: SBCL's
         (if expandedp
             (setf cur next)
             (return cur))))))
+
+(cl:defvar *macroexpand-1-compat* nil)
+(cl:defvar *macroexpand-compat* nil)
+
+(eval-when (:load-toplevel :execute)
+  (unless *macroexpand-1-compat*
+    (setf *macroexpand-1-compat* (fdefinition 'macroexpand-1)))
+  (unless *macroexpand-compat*
+    (setf *macroexpand-compat* (fdefinition 'macroexpand))))
 
 (cl:defun %macroexpand-all--normalize-lambda-list (lambda-list)
   (labels ((rw (xs)
@@ -1112,6 +1130,16 @@ Supports the common pattern of a self-referential closure (used by ERT)."
   "Bring-up subset of ELisp `indirect-function'."
   (handler-case
       (cond
+       ;; In Emacs, macro objects and autoload markers are valid "function
+       ;; values" to pass through `indirect-function' unchanged.
+       ((and (consp thing) (eq (car thing) 'macro)) thing)
+       ((and (consp thing) (eq (car thing) 'autoload)) thing)
+       ;; Emacs's `indirect-function' generally treats non-symbol objects as
+       ;; already "indirect", and just returns them.  This is relied upon by
+       ;; code that calls `macrop' on function definition objects like:
+       ;;   (advice lambda ...)
+       ;; which are conses but not actual macro objects.
+       ((consp thing) thing)
        ;; Some upstream code (e.g. `substitute-key-definition') uses
        ;; `indirect-function' on keymap objects while scanning bindings.
        ;; Treat concrete keymaps as already-indirect.
@@ -1121,7 +1149,7 @@ Supports the common pattern of a self-referential closure (used by ERT)."
               (cur thing))
           (loop
             (when (cl:member cur seen :test #'eq)
-              (error "ELISP:INDIRECT-FUNCTION circular definition: ~S" thing))
+              (error "ELISP:INDIRECT-FUNCTION circular definition: %S" thing))
             (push cur seen)
             (let ((special (gethash cur *special-operator-subrs*)))
               (when special
@@ -1135,7 +1163,7 @@ Supports the common pattern of a self-referential closure (used by ERT)."
                (t
                 (return def)))))))
        ((functionp thing) thing)
-       (t (error "ELISP:INDIRECT-FUNCTION bad value: ~S" thing)))
+       (t (error "ELISP:INDIRECT-FUNCTION bad value: %S" thing)))
     (cl:error (e)
       (if noerror nil (cl:error e)))))
 
@@ -1585,6 +1613,7 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
   (apply #'message (concat (string-to-unibyte "byte-compile-warn: ") format-string) args)
   nil)
 
+(defvar byte-compile-warnings nil)
 (defvar byte-compile-log-buffer nil)
 (defvar byte-compile-error-on-warn nil)
 
@@ -1619,6 +1648,11 @@ HOOK is a symbol naming a hook variable whose value is a list of functions."
           (cl:eval expanded))
          (t
           (cl:eval `(cl:function ,expanded))))))
+     ;; A function object is already in "compiled" form as far as clemacs bring-up
+     ;; is concerned.
+     ((cl:functionp raw) raw)
+     #+sbcl
+     ((typep raw 'sb-mop:funcallable-standard-object) raw)
      ((and (symbolp raw) (fboundp raw))
       (byte-compile (symbol-function raw)))
      ((and (consp raw) (eq (car raw) 'cl-defmethod))

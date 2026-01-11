@@ -187,6 +187,11 @@
   :expected "((a . b))"
   :emacs :match)
 
+ (:name "equal-functions-structural"
+  :expr "(let ((f1 (lambda (f y) (* (funcall f y) 5))) (f2 (lambda (f y) (* (funcall f y) 5))) (f3 (lambda (f y) (* (funcall f y) 2)))) (list (equal f1 f2) (equal f1 f3)))"
+  :expected "(t nil)"
+  :emacs :match)
+
  (:name "keymaps-ctl-x-r-map-bound-and-keymapp"
   :expr "(and (boundp 'ctl-x-r-map) (keymapp ctl-x-r-map))"
   :expected "t"

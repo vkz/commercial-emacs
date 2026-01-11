@@ -131,13 +131,31 @@
     (setf (get sym 'pure) t)
     (setf (get sym 'error-free) t)))
 
-(cl:defmacro interactive (&rest _spec)
-  "Bring-up stub for ELisp `interactive'.
+(cl:defvar *clemacs-interactive-capture* nil)
 
-For now, clemacs runs all ELisp non-interactively, so this expands to NIL
-without evaluating the interactive spec."
-  (declare (cl:ignore _spec))
+(cl:defun %interactive (&optional _spec _captured-spec)
+  "Runtime marker for ELisp `(interactive ...)` forms.
+
+This must *not* evaluate the interactive spec when called non-interactively.
+We keep the spec as data so `interactive-form` / `call-interactively` can
+recover it from function definitions (notably for lambdas)."
+  (declare (cl:ignore _spec)
+           (cl:ignorable _captured-spec))
+  (when *clemacs-interactive-capture*
+    (setf *clemacs-interactive-capture* _captured-spec)
+    (throw 'clemacs--interactive-captured :captured))
   nil)
+
+(cl:defmacro interactive (&rest spec)
+  "Bring-up subset of ELisp `interactive'.
+
+Expand into a runtime marker that preserves SPEC as data so the command-loop
+helpers (`interactive-form`, `call-interactively`) can recover it."
+  (let ((spec1 (if (consp spec) (car spec) nil)))
+    `(%interactive ',spec1
+                   (if *clemacs-interactive-capture*
+                       ,spec1
+                       nil))))
 
 (cl:defun ding (&optional _arg)
   "Bring-up stub for ELisp `ding'."
@@ -515,7 +533,17 @@ Returns NIL if SYMBOL has no function cell value."
     (cond
      (presentp value)
      ((cl:macro-function symbol)
-      (cons 'macro (cl:macro-function symbol)))
+      ;; Expose CL-defined macros as ELisp macro objects `(macro . EXPANDER)`,
+      ;; where EXPANDER is called with macro arguments (cdr of the macro form).
+      ;; This shape is important for `nadvice` which advises macro expanders by
+      ;; mutating the macro object (via (cdr (symbol-function ...))).
+      (let* ((mf (cl:macro-function symbol))
+             (cell
+               (cons 'macro
+                     (lambda (&rest args)
+                       (funcall mf (cons symbol args) nil)))))
+        (setf (gethash symbol *elisp-function-cells*) cell)
+        cell))
      ((cl:fboundp symbol) (cl:symbol-function symbol))
      (t nil))))
 
@@ -538,6 +566,9 @@ Returns NIL if SYMBOL has no function cell value."
    ;; we care about during bring-up.
    ((and (consp object) (eq (car object) 'macro)) t)
    ((and (consp object) (eq (car object) 'autoload)) t)
+   ;; OClosures (SBCL funcallable instances) are callable ELisp objects, used
+   ;; heavily by `nadvice` and `add-function`.
+   ((ignore-errors (typep object 'oclosure)) t)
    ;; Host function objects.
    ((cl:functionp object) t)
    (t nil)))

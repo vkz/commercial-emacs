@@ -384,12 +384,6 @@ Unicode; use `string-to-multibyte' to preserve raw-byte semantics."
               ;; Avoid LIST/LENGTH on dotted pairs (e.g. alists like (quote . "...")).
               ((and (consp x) (eq (car x) 'quote) (consp (cdr x)) (null (cddr x)))
                x)
-              ;; Rewrite FUNCTION only when it wraps a lambda form.
-              ((and (consp x) (eq (car x) 'function) (consp (cdr x)) (null (cddr x)))
-               (let ((arg (cadr x)))
-                 (if (and (consp arg) (eq (car arg) 'lambda))
-                     (list 'function (rw arg))
-                     x)))
               ;; ELisp IF allows multiple else forms; CL:IF does not.
               ;; Guard against non-expression lists like (IF INIT) in LET
               ;; bindings when a variable name happens to be CL:IF.
@@ -1103,7 +1097,14 @@ ordering constraint (AFTER): we delegate to `define-key`."
     (when (and (stringp name) (stringp type)
                (string= (string-downcase name) "subr")
                (string= (string-downcase type) "el"))
-      (%install-define-key-after-shim))
+      (%install-define-key-after-shim)
+      ;; `lisp/subr.el` defines its own `called-interactively-p' based on
+      ;; backtrace inspection.  For clemacs bring-up, override it with a
+      ;; simpler dynamic-flag implementation so upstream nadvice tests can
+      ;; assert interactive context without requiring full backtrace support.
+      (when (and (fboundp 'clemacs--called-interactively-p) (fboundp 'fset))
+        (ignore-errors
+          (fset 'called-interactively-p (cl:function clemacs--called-interactively-p)))))
     ;; Keep `macroexpand-all' stack-safe under SBCL.  `lisp/emacs-lisp/macroexp.el`
     ;; defines a full-featured expander, but it can blow the control stack while
     ;; bringing up larger preloads (e.g. lisp-mode's `let-when-compile`).  Use
@@ -1111,7 +1112,23 @@ ordering constraint (AFTER): we delegate to `define-key`."
     (when (and (stringp name) (stringp type)
                (string= (string-downcase name) "macroexp")
                (string= (string-downcase type) "el")
+               (boundp '*macroexpand-1-compat*)
+               *macroexpand-1-compat*
+               (boundp '*macroexpand-compat*)
+               *macroexpand-compat*
                (boundp '*macroexpand-all-compat*)
                *macroexpand-all-compat*)
+      ;; Avoid touching CL:MACROEXPAND-1/CL:MACROEXPAND (package-locked under
+      ;; SBCL) if this function was compiled before ELISP shadowed the names.
+      (multiple-value-bind (mx1 _status1)
+          (find-symbol "MACROEXPAND-1" (find-package "ELISP"))
+        (declare (cl:ignore _status1))
+        (when mx1
+          (setf (fdefinition mx1) *macroexpand-1-compat*)))
+      (multiple-value-bind (mx _status2)
+          (find-symbol "MACROEXPAND" (find-package "ELISP"))
+        (declare (cl:ignore _status2))
+        (when mx
+          (setf (fdefinition mx) *macroexpand-compat*)))
       (setf (fdefinition 'macroexpand-all) *macroexpand-all-compat*)))
   nil)

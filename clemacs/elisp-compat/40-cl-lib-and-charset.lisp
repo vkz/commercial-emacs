@@ -389,6 +389,12 @@ TYPE is a type descriptor as accepted by `cl-typep', which see."
   "Minimal subset of cl-lib's `cl-incf'."
   `(cl:incf ,place ,delta))
 
+(cl:defmacro cl-dolist (spec &body body)
+  "Minimal subset of cl-lib's `cl-dolist'."
+  (destructuring-bind (var listform &optional result) spec
+    `(cl:dolist (,var ,listform ,result)
+       ,@body)))
+
 (cl:defmacro cl-return (&optional value)
   "Minimal subset of cl-lib's `cl-return'."
   `(cl:return ,value))

@@ -258,15 +258,26 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
 (cl:defvar minibuffer-setup-hook nil)
 (cl:defvar font-lock-mode nil)
 (cl:defvar font-lock-function nil)
+(cl:defvar *clemacs-called-interactively-p* nil
+  "Non-nil when clemacs is in a `call-interactively'/`funcall-interactively' call.")
 
 ;; ---------------------------------------------------------------------------
 ;; Help buffers (minimal stubs for upstream ERT help output)
 ;; ---------------------------------------------------------------------------
 
-(cl:defun called-interactively-p (&optional _kind)
-  "Bring-up stub for ELisp `called-interactively-p'."
+(cl:defun clemacs--called-interactively-p (&optional _kind)
+  "Bring-up subset of ELisp `called-interactively-p'.
+
+In upstream Emacs this is implemented in Lisp (`subr.el`) and depends on
+backtrace inspection.  For clemacs bring-up, use a dynamic flag set by
+`call-interactively'/'funcall-interactively' so nadvice tests can assert
+interactive context."
   (declare (cl:ignore _kind))
-  nil)
+  (and *clemacs-called-interactively-p* t))
+
+(cl:defun called-interactively-p (&optional kind)
+  "Compatibility wrapper for ELisp `called-interactively-p'."
+  (clemacs--called-interactively-p kind))
 
 (cl:defun help-buffer ()
   "Bring-up subset of ELisp `help-buffer'."
@@ -309,10 +320,87 @@ arguments are not evaluated."
   (declare (cl:ignore _args))
   doc)
 
-(cl:defun help-function-arglist (&rest _args)
-  "Bring-up stub for ELisp `help-function-arglist'."
-  (declare (cl:ignore _args))
-  nil)
+(cl:defun help-function-arglist (function &optional _preserve-names &rest _rest)
+  "Bring-up subset of ELisp `help-function-arglist'.
+
+Return FUNCTION's argument list as a list, or T if it cannot be determined.
+
+This is used by upstream `advice.el` to build the wrapper lambda list for
+`defadvice` activation; returning NIL breaks that path by producing a wrapper
+that accepts no arguments."
+  (declare (cl:ignore _preserve-names _rest))
+  (let ((debugp (and (uiop:getenv "CLEMACS_DEBUG_HELP_FUNCTION_ARGLIST") t)))
+    (labels ((unknown ()
+               (when debugp
+                 (cl:format *error-output*
+                            "[clemacs] help-function-arglist: unknown for ~S (type ~S)~%"
+                            function (type-of function))
+                 (finish-output *error-output*)
+                 #+sbcl
+                 (ignore-errors
+                   (sb-debug:print-backtrace :stream *error-output* :count 40))
+                 (finish-output *error-output*))
+               t)
+             (lambda-form-p (x)
+               (and (consp x) (eq (car x) 'lambda) (consp (cdr x))))
+             (lambda-arglist (lambda-expr)
+               (unless (lambda-form-p lambda-expr)
+                 (return-from lambda-arglist nil))
+               (let ((ll (cadr lambda-expr)))
+                 (if (listp ll) ll (unknown))))
+             #+sbcl
+             (sbcl-lambda-list (fn)
+               (ignore-errors (cl:require :sb-introspect))
+               (let* ((pkg (find-package "SB-INTROSPECT"))
+                      (sym (and pkg (find-symbol "FUNCTION-LAMBDA-LIST" pkg))))
+                 (when (and sym (cl:fboundp sym))
+                   (let ((ll (ignore-errors (funcall sym fn))))
+                     (when (listp ll) ll))))))
+      (cond
+       ((symbolp function)
+        (let ((adv (ignore-errors (function-get function 'advertised-calling-convention))))
+          (cond
+           ;; `get'/`function-get' can't distinguish "missing" from "nil", so
+           ;; only trust non-nil advertised conventions here and fall back to
+           ;; introspection otherwise.
+           ((and adv (listp adv)) adv)
+           (t
+            (let ((def (ignore-errors (symbol-function function))))
+              (if def
+                  (help-function-arglist def)
+                  (unknown)))))))
+       ((lambda-form-p function)
+        (lambda-arglist function))
+       ;; Macro objects store the expander in the cdr.
+       ((and (consp function) (eq (car function) 'macro))
+        (help-function-arglist (cdr function)))
+       ;; Host function objects.
+       ((cl:functionp function)
+        (when (boundp '*advertised-calling-conventions*)
+          (multiple-value-bind (ll presentp)
+              (ignore-errors (gethash function *advertised-calling-conventions*))
+            (when (and presentp (listp ll))
+              (return-from help-function-arglist ll))))
+        (multiple-value-bind (lambda-expr _closed name)
+            (cl:function-lambda-expression function)
+          (declare (cl:ignore _closed))
+          (cond
+           ((lambda-form-p lambda-expr) (lambda-arglist lambda-expr))
+           ;; SBCL often keeps enough structure in the function's printed name
+           ;; even when it drops the full lambda expression.
+           ((lambda-form-p name) (lambda-arglist name))
+           (t
+            (or #+sbcl (sbcl-lambda-list function)
+                (unknown))))))
+       #+sbcl
+       ((typep function 'sb-mop:funcallable-standard-object)
+        (when (boundp '*advertised-calling-conventions*)
+          (multiple-value-bind (ll presentp)
+              (ignore-errors (gethash function *advertised-calling-conventions*))
+            (when (and presentp (listp ll))
+              (return-from help-function-arglist ll))))
+        (unknown))
+       (t (unknown))))))
 
 (cl:defun documentation (object &optional _raw)
   "Bring-up subset of ELisp `documentation'."

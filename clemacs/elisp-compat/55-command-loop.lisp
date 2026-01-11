@@ -501,19 +501,14 @@ return something cancelable."
 
 (cl:defun interactive-form (function)
   "Bring-up subset of ELisp `interactive-form'."
-  (labels ((function-name-symbol (fn)
-             (cond
-              ((symbolp fn) fn)
-              ((and (consp fn) (eq (car fn) 'macro))
-               (function-name-symbol (cdr fn)))
-              ((and (consp fn) (eq (car fn) 'autoload))
-               nil)
-              ((functionp fn)
-               (multiple-value-bind (_lambda _closed name)
-                   (cl:function-lambda-expression fn)
-                 (declare (cl:ignore _lambda _closed))
-                 (and (symbolp name) name)))
-              (t nil)))
+	   (labels ((function-name-symbol (fn)
+	             (cond
+	              ((symbolp fn) fn)
+	              ((and (consp fn) (eq (car fn) 'macro))
+	               (function-name-symbol (cdr fn)))
+	              ((and (consp fn) (eq (car fn) 'autoload))
+	               nil)
+	              (t nil)))
 
            (skip-decls-and-doc (body)
              (let ((b body))
@@ -527,117 +522,196 @@ return something cancelable."
 
            (scan-interactive (forms)
              (dolist (f forms nil)
-               (when (and (consp f) (eq (car f) 'interactive))
+               (when (and (consp f)
+                          (or (eq (car f) 'interactive)
+                              (eq (car f) '%interactive)))
                  (return f))))
+
+           (normalize-interactive-form (iform)
+             (cond
+              ((null iform) nil)
+              ;; `(interactive)` should roundtrip as `(interactive nil)`.
+              ((and (consp iform) (eq (car iform) 'interactive) (null (cdr iform)))
+               '(interactive nil))
+              ;; `interactive` is implemented as a macro in clemacs, but we
+              ;; expand it into a runtime marker so we can still recover the
+              ;; interactive spec from lambdas.
+              ((and (consp iform) (eq (car iform) '%interactive))
+               (let ((spec (cadr iform)))
+                 (when (and (consp spec)
+                            (eq (car spec) 'quote)
+                            (consp (cdr spec))
+                            (null (cddr spec)))
+                   (setf spec (cadr spec)))
+                 (list 'interactive spec)))
+              (t iform)))
 
            (interactive-form-from-lambda (lambda-expr)
              (when (and (consp lambda-expr) (eq (car lambda-expr) 'lambda))
                (let ((body (skip-decls-and-doc (cddr lambda-expr))))
-                 (or (scan-interactive body)
-                     ;; Many functions are compiled/normalized into a single
-                     ;; BLOCK; look for an `(interactive ...)' form inside it.
-                     (when (and (consp body)
-                                (consp (car body))
-                                (eq (caar body) 'block))
-                       (let ((block-body (cddr (car body))))
-                         (scan-interactive (skip-decls-and-doc block-body))))))))
+                 (normalize-interactive-form
+                  (or (scan-interactive body)
+                      ;; Many functions are compiled/normalized into a single
+                      ;; BLOCK; look for an `(interactive ...)' form inside it.
+                      (when (and (consp body)
+                                 (consp (car body))
+                                 (eq (caar body) 'block))
+                        (let ((block-body (cddr (car body))))
+                          (scan-interactive (skip-decls-and-doc block-body)))))))))
 
-           (lambda-expression-for (fn)
-             (cond
-              ((and (consp fn) (eq (car fn) 'lambda)) fn)
-              ((functionp fn)
-               (multiple-value-bind (lambda-expr _closed _name)
-                   (cl:function-lambda-expression fn)
-                 (declare (cl:ignore _closed _name))
-                 lambda-expr))
-              (t nil))))
-    (let* ((sym (function-name-symbol function))
-           (iform (and sym (function-get sym 'interactive-form))))
-      (cond
-       (iform iform)
-       (t
-        (let* ((fn (cond
-                    ((and (symbolp sym) (fboundp sym)) (symbol-function sym))
-                    (t function)))
-               (lambda-expr (lambda-expression-for fn)))
-          (and lambda-expr (interactive-form-from-lambda lambda-expr))))))))
+	   (lambda-expression-for (fn)
+	             (cond
+	              ((and (consp fn) (eq (car fn) 'lambda)) fn)
+	              ((cl:functionp fn)
+	               (multiple-value-bind (lambda-expr _closed _name)
+	                   (cl:function-lambda-expression fn)
+	                 (declare (cl:ignore _closed _name))
+	                 lambda-expr))
+	              (t nil))))
+	    (let* ((sym (function-name-symbol function))
+	           (fn (cond
+	                ((and (symbolp sym) (fboundp sym)) (symbol-function sym))
+	                (t function)))
+	           #+sbcl
+	           (advice-iform
+	             (when (and (typep fn 'sb-mop:funcallable-standard-object)
+	                        (fboundp 'advice--p)
+	                        (ignore-errors (advice--p fn))
+	                        (fboundp 'advice--car)
+	                        (fboundp 'advice--cdr))
+	               ;; clemacs bring-up: avoid relying on `oclosure-interactive-form`
+	               ;; dispatch (which requires more cl-generic substrate) and
+	               ;; compute the combined interactive form directly.
+	               (let* ((carfun (ignore-errors (advice--car fn)))
+	                      (cdrfun (ignore-errors (advice--cdr fn)))
+	                      (ifa (and carfun (ignore-errors (interactive-form carfun))))
+	                      (ifd (and cdrfun (ignore-errors (interactive-form cdrfun)))))
+	                 (cond
+	                  ((and (or ifa ifd) (fboundp 'advice--make-interactive-form))
+	                   (list 'interactive (advice--make-interactive-form ifa ifd)))
+	                  (t (or ifa ifd))))))
+	           #+sbcl
+	           (oclosure-iform
+	             (and (typep fn 'sb-mop:funcallable-standard-object)
+	                  (fboundp 'oclosure-interactive-form)
+	                  (ignore-errors (oclosure-interactive-form fn))))
+	           (lambda-expr (lambda-expression-for fn))
+	           (iform-prop (and sym (function-get sym 'interactive-form)))
+	           (lambda-iform
+	             (let ((iform (and lambda-expr (interactive-form-from-lambda lambda-expr))))
+	               ;; If the interactive spec is a `lambda` that depends on a
+	               ;; closure's lexical environment (e.g. nadvice bug#61179),
+	               ;; the `%interactive` marker captures it as data.  Reify it by
+	               ;; probing the function in a special capture mode so the
+	               ;; spec is evaluated in its lexical context.
+	               (when (and iform
+	                          (consp iform)
+	                          (eq (car iform) 'interactive)
+	                          (consp (cadr iform))
+	                          (eq (car (cadr iform)) 'lambda)
+	                          (cl:functionp fn)
+	                          (boundp '*clemacs-interactive-capture*))
+	                 (let ((*clemacs-interactive-capture* :pending))
+	                   (declare (special *clemacs-interactive-capture*))
+	                   (let ((captured
+	                          (catch 'clemacs--interactive-captured
+	                            (ignore-errors (funcall fn))
+	                            :not-captured)))
+	                     (when (eq captured :captured)
+	                       (setf iform (list 'interactive *clemacs-interactive-capture*))))))
+	               iform)))
+	      ;; Prefer the interactive spec attached to the current function object
+	      ;; (notably nadvice-wrapped oclosures).  The symbol property is a useful
+	      ;; fallback but can become stale across advice redefinitions.
+	      (or advice-iform
+	          oclosure-iform
+	          lambda-iform
+	          iform-prop))))
 
 (cl:defun commandp (function &optional _for-call-interactively)
   "Bring-up subset of ELisp `commandp'."
   (declare (cl:ignore _for-call-interactively))
   (and (interactive-form function) t))
 
+(cl:defun funcall-interactively (function &rest args)
+  "Bring-up subset of the C primitive `funcall-interactively'."
+  (let ((*clemacs-called-interactively-p* t))
+    (declare (special *clemacs-called-interactively-p*))
+    (apply function args)))
+
 (cl:defun call-interactively (command &optional _record-flag _keys)
   "Bring-up subset of ELisp `call-interactively'."
   (declare (cl:ignore _record-flag _keys))
-  (let* ((iform (interactive-form command))
-         (spec (and (consp iform) (eq (car iform) 'interactive) (cadr iform))))
-    (labels ((split-lines (s)
-               (let ((out nil)
-                     (start 0)
-                     (len (cl:length s)))
-                 (loop for i from 0 to len do
-                   (when (or (= i len) (cl:char= (cl:aref s i) #\Newline))
-                     (push (cl:subseq s start i) out)
-                     (setf start (1+ i))))
-                 (nreverse out)))
-             (parse-spec-string (spec-string)
-               ;; Return a list of args (or signal an error).
-               (let ((args nil))
-                 (dolist (line (split-lines spec-string))
-                   (when (> (cl:length line) 0)
-                     (let* ((i 0)
-                            (len (cl:length line)))
-                       ;; Prefix chars.  For now, only * is meaningful (read-only check).
-                       (loop while (< i len) do
-                         (let ((ch (cl:aref line i)))
-                           (cond
-                            ((cl:char= ch #\*)
-                             (when (fboundp 'barf-if-buffer-read-only)
-                               (barf-if-buffer-read-only))
-                             (incf i))
-                            ((or (cl:char= ch #\@) (cl:char= ch #\^))
-                             (incf i))
-                            (t (return)))))
-                       (when (< i len)
-                         (let* ((code (cl:aref line i))
-                                (prompt (cl:subseq line (1+ i))))
-                           (case code
-                             (#\p
-                              (push (prefix-numeric-value current-prefix-arg) args))
-                             (#\P
-                              (push current-prefix-arg args))
-                             (#\s
-                              (push (read-from-minibuffer (string-to-unibyte prompt)) args))
-                             (#\b
-                              ;; `interactive "b"` yields a buffer name string.
-                              (push (read-from-minibuffer (string-to-unibyte prompt)) args))
-                             (#\f
-                              (push (read-file-name (string-to-unibyte prompt)) args))
-                             (#\F
-                              (push (read-file-name (string-to-unibyte prompt)) args))
-                             (#\r
-                              (push (region-beginning) args)
-                              (push (region-end) args))
-                             (otherwise
-                              (error "ELISP:CALL-INTERACTIVELY unsupported interactive code: ~S"
-                                     (string code)))))))))
-                 (nreverse args))))
-      (cond
-       ((and (stringp spec)
-             (not (cl:string= (%elisp-string->cl-string spec) "")))
-        (let ((args (parse-spec-string (%elisp-string->cl-string spec))))
-          (apply command args)))
-       ((consp spec)
-        ;; Emacs allows `(interactive (list ...))` forms.  Bring-up subset:
-        ;; evaluate SPEC and treat the result as an arg list.
-        (let ((args (eval spec)))
-          (cond
-           ((null args) (funcall command))
-           ((listp args) (apply command args))
-           (t (funcall command args)))))
-       (t
-        (funcall command))))))
+  (let ((*clemacs-called-interactively-p* t))
+    (declare (special *clemacs-called-interactively-p*))
+    (let* ((iform (interactive-form command))
+           (spec (and (consp iform) (eq (car iform) 'interactive) (cadr iform))))
+      (labels ((split-lines (s)
+                 (let ((out nil)
+                       (start 0)
+                       (len (cl:length s)))
+                   (loop for i from 0 to len do
+                     (when (or (= i len) (cl:char= (cl:aref s i) #\Newline))
+                       (push (cl:subseq s start i) out)
+                       (setf start (1+ i))))
+                   (nreverse out)))
+               (parse-spec-string (spec-string)
+                 ;; Return a list of args (or signal an error).
+                 (let ((args nil))
+                   (dolist (line (split-lines spec-string))
+                     (when (> (cl:length line) 0)
+                       (let* ((i 0)
+                              (len (cl:length line)))
+                         ;; Prefix chars.  For now, only * is meaningful (read-only check).
+                         (loop while (< i len) do
+                           (let ((ch (cl:aref line i)))
+                             (cond
+                              ((cl:char= ch #\*)
+                               (when (fboundp 'barf-if-buffer-read-only)
+                                 (barf-if-buffer-read-only))
+                               (incf i))
+                              ((or (cl:char= ch #\@) (cl:char= ch #\^))
+                               (incf i))
+                              (t (return)))))
+                         (when (< i len)
+                           (let* ((code (cl:aref line i))
+                                  (prompt (cl:subseq line (1+ i))))
+                             (case code
+                               (#\p
+                                (push (prefix-numeric-value current-prefix-arg) args))
+                               (#\P
+                                (push current-prefix-arg args))
+                               (#\s
+                                (push (read-from-minibuffer (string-to-unibyte prompt)) args))
+                               (#\b
+                                ;; `interactive "b"` yields a buffer name string.
+                                (push (read-from-minibuffer (string-to-unibyte prompt)) args))
+                               (#\f
+                                (push (read-file-name (string-to-unibyte prompt)) args))
+                               (#\F
+                                (push (read-file-name (string-to-unibyte prompt)) args))
+                               (#\r
+                                (push (region-beginning) args)
+                                (push (region-end) args))
+                               (otherwise
+                                (error "ELISP:CALL-INTERACTIVELY unsupported interactive code: ~S"
+                                       (string code)))))))))
+                   (nreverse args))))
+        (cond
+         ((and (stringp spec)
+               (not (cl:string= (%elisp-string->cl-string spec) "")))
+          (let ((args (parse-spec-string (%elisp-string->cl-string spec))))
+            (apply #'funcall-interactively command args)))
+         ((consp spec)
+          ;; Emacs allows `(interactive (list ...))` forms.  Bring-up subset:
+          ;; evaluate SPEC and treat the result as an arg list.
+          (let ((args (eval spec)))
+            (cond
+             ((null args) (funcall-interactively command))
+             ((listp args) (apply #'funcall-interactively command args))
+             (t (funcall-interactively command args)))))
+         (t
+          (funcall-interactively command)))))))
 
 (cl:defun clemacs-command-execute (command &optional _record-flag _keys _special)
   "Bring-up subset of ELisp `command-execute' used by the clemacs TTY loop."
