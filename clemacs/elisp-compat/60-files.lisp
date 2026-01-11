@@ -130,6 +130,31 @@ Return t so `save-buffer' can proceed without modtime tracking yet."
   (declare (cl:ignore _buffer))
   t)
 
+(cl:defun visited-file-modtime ()
+  "Bring-up subset of the C primitive `visited-file-modtime'."
+  (let ((file (and (boundp 'buffer-file-name) (symbol-value 'buffer-file-name))))
+    (cond
+     ((not (stringp file)) 0)
+     (t
+      (let ((attrs (file-attributes file)))
+        ;; file-attributes: (TYPE NLINK UID GID ATIME MTIME CTIME ...).
+        (or (nth 5 attrs) 0))))))
+
+(cl:defun set-visited-file-modtime (&optional _time)
+  "Bring-up subset of the C primitive `set-visited-file-modtime'."
+  (declare (cl:ignore _time))
+  ;; For now, we do not track per-buffer visited modtime state.  Most callers
+  ;; already gate user-visible behavior through `verify-visited-file-modtime'.
+  t)
+
+(cl:defun lock-buffer ()
+  "Bring-up stub for file locking (no-op)."
+  nil)
+
+(cl:defun unlock-buffer ()
+  "Bring-up stub for file locking (no-op)."
+  nil)
+
 (cl:defun read-file-name (prompt &optional dir default-filename _mustmatch initial _predicate)
   "Bring-up subset of the C primitive `read-file-name' (TTY only).
 
@@ -277,6 +302,33 @@ expanded file name string."
   #-sbcl
   nil)
 
+(cl:defun set-file-modes (filename mode &optional _flag)
+  "Bring-up subset of the C primitive `set-file-modes'."
+  (declare (cl:ignore _flag))
+  (unless (stringp filename)
+    (error "ELISP:SET-FILE-MODES expected string FILENAME, got: ~S" filename))
+  (unless (integerp mode)
+    (error "ELISP:SET-FILE-MODES expected integer MODE, got: ~S" mode))
+  #+sbcl
+  (handler-case
+      (progn
+        (sb-posix:chmod (%file-name->cl-string filename) mode)
+        t)
+    (sb-posix:syscall-error () nil)
+    (cl:error () nil))
+  #-sbcl
+  nil)
+
+(cl:defun directory-name-p (filename)
+  "Bring-up subset of the C primitive `directory-name-p'."
+  (unless (stringp filename)
+    (error "ELISP:DIRECTORY-NAME-P expected string, got: ~S" filename))
+  (let* ((s (%file-name->cl-string filename))
+         (n (length s)))
+    (and (> n 0)
+         (char= (char s (1- n)) #\/)
+         t)))
+
 (cl:defun file-name-with-extension (filename extension)
   "Bring-up subset of ELisp `file-name-with-extension'."
   (unless (stringp filename)
@@ -312,6 +364,11 @@ For now, return NAME unchanged.  clemacs does not yet implement file name
 handlers or Tramp-style remote file parsing."
   (declare (cl:ignore _top))
   name)
+
+(cl:defun file-name-quoted-p (_name)
+  "Bring-up subset of the C primitive `file-name-quoted-p'."
+  ;; clemacs does not implement file-name quoting yet; treat names as unquoted.
+  nil)
 
 (cl:defun file-relative-name (filename &optional directory)
   "Bring-up subset of ELisp `file-relative-name'."
@@ -810,6 +867,111 @@ FEATURE as provided."
               ino
               0)))))
 
+(cl:defun file-attribute-type (attributes)
+  "Bring-up subset of ELisp `file-attribute-type'."
+  (nth 0 attributes))
+
+(cl:defun file-attribute-link-number (attributes)
+  "Bring-up subset of ELisp `file-attribute-link-number'."
+  (nth 1 attributes))
+
+(cl:defun file-attribute-user-id (attributes)
+  "Bring-up subset of ELisp `file-attribute-user-id'."
+  (nth 2 attributes))
+
+(cl:defun file-attribute-group-id (attributes)
+  "Bring-up subset of ELisp `file-attribute-group-id'."
+  (nth 3 attributes))
+
+(cl:defun file-attribute-access-time (attributes)
+  "Bring-up subset of ELisp `file-attribute-access-time'."
+  (nth 4 attributes))
+
+(cl:defun file-attribute-modification-time (attributes)
+  "Bring-up subset of ELisp `file-attribute-modification-time'."
+  (nth 5 attributes))
+
+(cl:defun file-attribute-status-change-time (attributes)
+  "Bring-up subset of ELisp `file-attribute-status-change-time'."
+  (nth 6 attributes))
+
+(cl:defun file-attribute-size (attributes)
+  "Bring-up subset of ELisp `file-attribute-size'."
+  (nth 7 attributes))
+
+(cl:defun file-attribute-modes (attributes)
+  "Bring-up subset of ELisp `file-attribute-modes'."
+  (nth 8 attributes))
+
+(cl:defun file-attribute-inode-number (attributes)
+  "Bring-up subset of ELisp `file-attribute-inode-number'."
+  (nth 10 attributes))
+
+(cl:defun file-attribute-device-number (attributes)
+  "Bring-up subset of ELisp `file-attribute-device-number'."
+  (nth 11 attributes))
+
+(cl:defun file-attribute-file-identifier (attributes)
+  "Bring-up subset of ELisp `file-attribute-file-identifier'."
+  (cons (file-attribute-inode-number attributes)
+        (file-attribute-device-number attributes)))
+
+(cl:defun copy-file (file newname &optional ok-if-already-exists _time _preserve-uid-gid _preserve-permissions)
+  "Bring-up subset of the C primitive `copy-file'."
+  (declare (cl:ignore _time _preserve-uid-gid _preserve-permissions))
+  (unless (stringp file)
+    (error "ELISP:COPY-FILE expected string FILE, got: ~S" file))
+  (unless (stringp newname)
+    (error "ELISP:COPY-FILE expected string NEWNAME, got: ~S" newname))
+  (let* ((src (%expand-tilde-file-name (%file-name->cl-string file)))
+         (dst (%expand-tilde-file-name (%file-name->cl-string newname))))
+    (unless (probe-file src)
+      (error "ELISP:COPY-FILE missing source: %S" (string-to-unibyte src)))
+    (when (and (probe-file dst) (not ok-if-already-exists))
+      (error "ELISP:COPY-FILE destination exists: %S" (string-to-unibyte dst)))
+    (with-open-file (in src :direction :input :element-type '(unsigned-byte 8))
+      (with-open-file (out dst
+                           :direction :output
+                           :if-does-not-exist :create
+                           :if-exists (if ok-if-already-exists :supersede :error)
+                           :element-type '(unsigned-byte 8))
+        (let ((buf (make-array 8192 :element-type '(unsigned-byte 8))))
+          (loop for n = (read-sequence buf in)
+                while (plusp n) do
+                  (write-sequence buf out :end n)))))
+    t))
+
+(cl:defun make-symbolic-link (target linkname &optional ok-if-already-exists)
+  "Bring-up subset of the C primitive `make-symbolic-link'."
+  (unless (stringp target)
+    (error "ELISP:MAKE-SYMBOLIC-LINK expected string TARGET, got: ~S" target))
+  (unless (stringp linkname)
+    (error "ELISP:MAKE-SYMBOLIC-LINK expected string LINKNAME, got: ~S" linkname))
+  #+sbcl
+  (let* ((src (%expand-tilde-file-name (%file-name->cl-string target)))
+         (dst (%expand-tilde-file-name (%file-name->cl-string linkname))))
+    (when (and (probe-file dst) (not ok-if-already-exists))
+      (error "ELISP:MAKE-SYMBOLIC-LINK destination exists: %S" (string-to-unibyte dst)))
+    (handler-case
+        (progn
+          (when (and ok-if-already-exists (probe-file dst))
+            (ignore-errors (uiop:delete-file-if-exists dst)))
+          (sb-posix:symlink src dst)
+          t)
+      (sb-posix:syscall-error (e)
+        (error "ELISP:MAKE-SYMBOLIC-LINK failed: %S" e))
+      (cl:error (e)
+        (error "ELISP:MAKE-SYMBOLIC-LINK failed: %S" e))))
+  #-sbcl
+  (declare (cl:ignore target linkname ok-if-already-exists))
+  #-sbcl
+  (error "ELISP:MAKE-SYMBOLIC-LINK unsupported on this host"))
+
+(cl:defun set-file-times (_filename &optional _times _follow-flag)
+  "Bring-up stub for the C primitive `set-file-times'."
+  (declare (cl:ignore _filename _times _follow-flag))
+  t)
+
 (cl:defun %directory-files--basename (pathname)
   (let* ((p (uiop:ensure-pathname pathname :want-pathname t :want-absolute t))
          (name (pathname-name p))
@@ -860,6 +1022,22 @@ FEATURE as provided."
           (full (concatenate 'cl:string dir-prefix n))
           (t n)))))))
 
+(cl:defun file-name-all-completions (file directory)
+  "Bring-up subset of the C primitive `file-name-all-completions'."
+  (unless (stringp file)
+    (error "ELISP:FILE-NAME-ALL-COMPLETIONS expected string FILE, got: ~S" file))
+  (unless (stringp directory)
+    (error "ELISP:FILE-NAME-ALL-COMPLETIONS expected string DIRECTORY, got: ~S" directory))
+  (let* ((prefix (%file-name->cl-string file))
+         (prefix-len (cl:length prefix))
+         (names (directory-files directory nil nil t)))
+    (loop for n in names
+          for s = (%file-name->cl-string n)
+          unless (or (cl:string= s ".") (cl:string= s ".."))
+            when (and (cl:>= (cl:length s) prefix-len)
+                      (cl:string= prefix (cl:subseq s 0 prefix-len)))
+              collect n)))
+
 (cl:defun directory-files-and-attributes (directory &optional full match nosort id-format count)
   "Bring-up subset of ELisp `directory-files-and-attributes'."
   (let* ((names (directory-files directory full match nosort count))
@@ -885,6 +1063,28 @@ FEATURE as provided."
       ;; Best-effort empty dir delete.
       (uiop:delete-empty-directory p)
       t))))
+
+(cl:defun make-directory-internal (dir)
+  "Bring-up subset of the C primitive `make-directory-internal'."
+  (unless (stringp dir)
+    (error "ELISP:MAKE-DIRECTORY-INTERNAL expected string, got: ~S" dir))
+  #+sbcl
+  (let* ((path (%expand-tilde-file-name (%file-name->cl-string dir)))
+         (mode #o777))
+    (handler-case
+        (progn
+          (sb-posix:mkdir path mode)
+          nil)
+      (sb-posix:syscall-error (e)
+        (error "ELISP:MAKE-DIRECTORY-INTERNAL failed for %S: %S"
+               (string-to-unibyte path) e))
+      (cl:error (e)
+        (error "ELISP:MAKE-DIRECTORY-INTERNAL failed for %S: %S"
+               (string-to-unibyte path) e))))
+  #-sbcl
+  (declare (cl:ignore dir))
+  #-sbcl
+  (error "ELISP:MAKE-DIRECTORY-INTERNAL unsupported on this host"))
 
 (cl:defun make-temp-file (prefix &optional dir-flag suffix text)
   "Bring-up subset of ELisp `make-temp-file'."

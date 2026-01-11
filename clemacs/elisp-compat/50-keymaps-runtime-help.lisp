@@ -256,6 +256,10 @@ Supports the conversion specs needed by ERT: %Y %m %d %T %z."
 (cl:defvar meta-prefix-char 27)
 (cl:defvar minibuffer-prompt-properties nil)
 (cl:defvar minibuffer-setup-hook nil)
+(cl:defvar minibuffer-default-prompt-format (string-to-unibyte " (default %s)")
+  "Format used by `format-prompt' to display DEFAULT values.
+
+Bring-up default; upstream defines this in `minibuffer.el'.")
 (cl:defvar font-lock-mode nil)
 (cl:defvar font-lock-function nil)
 (cl:defvar *clemacs-called-interactively-p* nil
@@ -283,6 +287,25 @@ interactive context."
   "Bring-up subset of ELisp `help-buffer'."
   (get-buffer-create "*Help*")
   "*Help*")
+
+(cl:defun format-prompt (prompt default &rest format-args)
+  "Format PROMPT with DEFAULT according to `minibuffer-default-prompt-format'."
+  (unless (stringp prompt)
+    (error "ELISP:FORMAT-PROMPT expected string PROMPT, got: ~S" prompt))
+  (let* ((sub (if (fboundp 'substitute-command-keys)
+                  #'substitute-command-keys
+                  (lambda (s) s)))
+         (base (if (null format-args)
+                   (funcall sub prompt)
+                   (apply #'format (funcall sub prompt) format-args)))
+         (def (cond
+               ((consp default) (car default))
+               (t default)))
+         (default-suffix
+           (and def
+                (or (not (stringp def)) (> (length def) 0))
+                (format (funcall sub minibuffer-default-prompt-format) def))))
+    (concat base default-suffix (string-to-unibyte ": "))))
 
 (cl:defmacro make-help-screen (name &rest _args)
   "Bring-up stub for ELisp `make-help-screen'.
@@ -319,6 +342,40 @@ arguments are not evaluated."
   "Bring-up stub for ELisp `help-add-fundoc-usage'."
   (declare (cl:ignore _args))
   doc)
+
+(cl:defun help--make-usage-docstring (fn arglist)
+  "Bring-up subset of ELisp `help--make-usage-docstring'."
+  (let* ((fn-name
+           (cond
+            ((symbolp fn) (%elisp-string->cl-string (symbol-name fn)))
+            (t (%elisp-string->cl-string (prin1-to-string fn)))))
+         (args
+           (mapcar (lambda (arg)
+                     (cond
+                      ((symbolp arg)
+                       (cl:string-upcase
+                        (%elisp-string->cl-string (symbol-name arg))))
+                      (t (%elisp-string->cl-string (prin1-to-string arg)))))
+                   arglist))
+         (usage
+           (cond
+            (args (cl:format nil "(~A ~{~A~^ ~})" fn-name args))
+            (t (cl:format nil "(~A)" fn-name)))))
+    (help--docstring-quote (string-to-unibyte usage))))
+
+(cl:defun help--docstring-quote (doc)
+  "Bring-up subset of ELisp `help--docstring-quote'.
+
+Upstream replaces quoting constructs in DOC so help buffers display them
+faithfully.  For clemacs bring-up, accept DOC and return it unchanged."
+  (unless (stringp doc)
+    (error "ELISP:HELP--DOCSTRING-QUOTE expected string, got: ~S" doc))
+  doc)
+
+(cl:defun interpreted-function-p (_function)
+  "Bring-up stub for the C primitive `interpreted-function-p'."
+  (declare (cl:ignore _function))
+  nil)
 
 (cl:defun help-function-arglist (function &optional _preserve-names &rest _rest)
   "Bring-up subset of ELisp `help-function-arglist'.

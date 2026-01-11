@@ -127,6 +127,26 @@
   :expected "t"
   :emacs :match)
 
+ (:name "files-directory-name-p-trailing-slash"
+  :expr "(list (directory-name-p \"/tmp/foo/\") (directory-name-p \"/tmp/foo\"))"
+  :expected "(t nil)"
+  :emacs :match)
+
+ (:name "files-make-directory-internal-basic"
+  :expr "(let* ((base (file-name-as-directory (make-temp-file \"clemacs-mkdir-\" t))) (sub (concat base \"subdir\"))) (make-directory-internal sub) (file-directory-p sub))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "files-file-name-all-completions-basic"
+  :expr "(let* ((dir (make-temp-file \"clemacs-fnac-\" t)) (dir* (file-name-as-directory dir)) (aa (concat dir* \"aa\")) (ab (concat dir* \"ab\")) (b (concat dir* \"b\"))) (write-region \"x\" nil aa nil 0) (write-region \"x\" nil ab nil 0) (write-region \"x\" nil b nil 0) (file-name-all-completions \"a\" dir))"
+  :expected "(\"aa\" \"ab\")"
+  :emacs :match)
+
+ (:name "files-file-attribute-modification-time-basic"
+  :expr "(let ((f (make-temp-file \"clemacs-fat-\"))) (write-region \"x\" nil f nil 0) (not (null (file-attribute-modification-time (file-attributes f)))))"
+  :expected "t"
+  :emacs :match)
+
  (:name "core-vars-files-and-inhibit-boundp"
   :expr "(mapcar #'boundp '(inhibit-point-motion-hooks inhibit-file-name-handlers inhibit-file-name-operation buffer-undo-list default-frame-alist shell-file-name command-history))"
   :expected "(t t t t t t t)"
@@ -175,6 +195,31 @@
  (:name "function-compiled-function-p-lambda-nil"
   :expr "(compiled-function-p (lambda (x) x))"
   :expected "nil"
+  :emacs :match)
+
+ (:name "autoload-set-advertised-calling-convention-does-not-load"
+  :expr "(progn (fmakunbound 'clemacs--tmp-autoload-fn) (autoload 'clemacs--tmp-autoload-fn \"clemacs--nonexistent-file\") (set-advertised-calling-convention 'clemacs--tmp-autoload-fn '(x)) (and (consp (symbol-function 'clemacs--tmp-autoload-fn)) (eq (car (symbol-function 'clemacs--tmp-autoload-fn)) 'autoload) t))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "help-help--docstring-quote-basic"
+  :expr "(help--docstring-quote \"abc\")"
+  :expected "\"abc\""
+  :emacs :match)
+
+ (:name "help-help--make-usage-docstring-basic"
+  :expr "(help--make-usage-docstring 'clemacs--tmp-hud '(a b))"
+  :expected "\"(clemacs--tmp-hud A B)\""
+  :emacs :match)
+
+ (:name "minibuffer-format-prompt-basic"
+  :expr "(format-prompt \"Hi\" nil)"
+  :expected "\"Hi: \""
+  :emacs :match)
+
+ (:name "eval-lexical-alist-binds"
+  :expr "(eval '(+ x y) '((x . 1) (y . 2)))"
+  :expected "3"
   :emacs :match)
 
  (:name "rewrite-let-binding-if-variable"

@@ -656,10 +656,20 @@ Supports the Emacs extension where `(apply (list FN ARG...))` is equivalent to
 (cl:defun eval (form &optional lexical)
   "ELisp-ish EVAL.
 
-ELisp `eval' accepts an optional LEXICAL argument; for bring-up we ignore it
-and evaluate the (already CL-shaped) FORM."
-  (declare (cl:ignore lexical))
-  (cl:eval (%elisp-rewrite form)))
+ELisp `eval' accepts an optional LEXICAL argument.
+
+For bring-up, support the common internal representation where LEXICAL is an
+alist of (SYMBOL . VALUE) pairs; bind those symbols dynamically for the
+duration of the evaluation."
+  (cond
+   ((and (consp lexical) (listp lexical))
+    (let ((lets nil))
+      (dolist (cell lexical)
+        (when (and (consp cell) (symbolp (car cell)))
+          (push (list (car cell) (cdr cell)) lets)))
+      (cl:eval (%elisp-rewrite `(let ,(nreverse lets) ,form)))))
+   (t
+    (cl:eval (%elisp-rewrite form)))))
 
 (cl:defun sxhash-equal (object)
   "Compatibility shim for the C primitive `sxhash-equal'."

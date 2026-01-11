@@ -565,15 +565,26 @@ Supports the usage exercised by `map-tests.el' via `cl-defgeneric' declares."
                      (cl:function-lambda-expression fn)
                    (declare (cl:ignore _lambda _closed))
                    (and (symbolp name) name))))))
-      (let* ((sym (function-name-symbol function))
-             (fnobj
-               (cond
-                ((and (symbolp function) (fboundp function))
-                 (ignore-errors (%resolve-function function)))
-                ((cl:functionp function) function)
-                #+sbcl
-                ((typep function 'sb-mop:funcallable-standard-object) function)
-                (t nil))))
+	    (let* ((sym (function-name-symbol function))
+	           (fnobj
+	             (cond
+	              ;; Do not force autoload while registering metadata.
+	              ;; `loaddefs.el` calls this on many autoloaded symbols (notably
+	              ;; `byte-compile-file`), and Emacs does not load the autoloaded
+	              ;; library for this.
+	              ((and (symbolp function) (fboundp function))
+	               (let ((sf (ignore-errors (symbol-function function))))
+	                 (cond
+	                  ((and (consp sf) (eq (car sf) 'autoload)) nil)
+	                  ((and (consp sf) (eq (car sf) 'macro)) (cdr sf))
+	                  ((cl:functionp sf) sf)
+	                  #+sbcl
+	                  ((typep sf 'sb-mop:funcallable-standard-object) sf)
+	                  (t nil))))
+	              ((cl:functionp function) function)
+	              #+sbcl
+	              ((typep function 'sb-mop:funcallable-standard-object) function)
+	              (t nil))))
         (when sym
           (function-put sym 'advertised-calling-convention arglist))
         (when fnobj
@@ -605,16 +616,24 @@ Supports the usage exercised by `map-tests.el' via `cl-defgeneric' declares."
                     (cl:function-lambda-expression fn)
                   (declare (cl:ignore _lambda _closed))
                   (and (symbolp name) name))))))
-      (let* ((sym (function-name-symbol function))
-             (stored (and sym (function-get sym 'advertised-calling-convention)))
-             (fnobj
-               (cond
-                ((and (symbolp function) (fboundp function))
-                 (ignore-errors (%resolve-function function)))
-                ((cl:functionp function) function)
-                #+sbcl
-                ((typep function 'sb-mop:funcallable-standard-object) function)
-                (t nil)))
+	    (let* ((sym (function-name-symbol function))
+	           (stored (and sym (function-get sym 'advertised-calling-convention)))
+	           (fnobj
+	             (cond
+	              ;; Do not force autoload while looking up metadata.
+	              ((and (symbolp function) (fboundp function))
+	               (let ((sf (ignore-errors (symbol-function function))))
+	                 (cond
+	                  ((and (consp sf) (eq (car sf) 'autoload)) nil)
+	                  ((and (consp sf) (eq (car sf) 'macro)) (cdr sf))
+	                  ((cl:functionp sf) sf)
+	                  #+sbcl
+	                  ((typep sf 'sb-mop:funcallable-standard-object) sf)
+	                  (t nil))))
+	              ((cl:functionp function) function)
+	              #+sbcl
+	              ((typep function 'sb-mop:funcallable-standard-object) function)
+	              (t nil)))
              (direct (and fnobj (gethash fnobj *advertised-calling-conventions*))))
         (or stored
             direct
