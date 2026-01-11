@@ -31,8 +31,8 @@ lisp/window.el 1
 lisp/files.el 1
 
 # pdump: macroexp, pcase, cus-face, faces, regexp-opt, rx.
-lisp/emacs-lisp/macroexp.el 1
-lisp/emacs-lisp/pcase.el 1
+lisp/emacs-lisp/macroexp.el 200
+lisp/emacs-lisp/pcase.el 200
 lisp/cus-face.el 1
 lisp/faces.el 1
 lisp/emacs-lisp/regexp-opt.el 1
@@ -43,11 +43,11 @@ lisp/ldefs-boot.el 203
 
 # pdump: button, gv, cl-lib, cl-macs, cl-preloaded, oclosure, cl-seq, seq.
 lisp/button.el 1
-lisp/emacs-lisp/gv.el 1
-lisp/emacs-lisp/cl-lib.el 1
-lisp/emacs-lisp/cl-macs.el 1
-lisp/emacs-lisp/cl-preloaded.el 1
-lisp/emacs-lisp/oclosure.el 1
+lisp/emacs-lisp/gv.el -
+lisp/emacs-lisp/cl-lib.el 10
+lisp/emacs-lisp/cl-macs.el 10
+lisp/emacs-lisp/cl-preloaded.el -
+lisp/emacs-lisp/oclosure.el -
 lisp/emacs-lisp/cl-seq.el 1
 lisp/emacs-lisp/seq.el 1
 

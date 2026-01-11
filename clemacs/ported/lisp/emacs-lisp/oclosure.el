@@ -62,10 +62,14 @@
 
   (cl:defmethod initialize-instance :after ((o oclosure) &key)
     (let ((call (%oclosure-call o)))
-      (sb-mop:set-funcallable-instance-function
-       o
+       (sb-mop:set-funcallable-instance-function
+        o
        (lambda (&rest args)
-         (apply call o args))))))
+         (apply call o args)))))
+
+  ;; SBCL sometimes defers class finalization enough that early `cl-generic`
+  ;; bootstrapping can trip over an unbound CPL slot.  Force finalization now.
+  (sb-mop:finalize-inheritance (cl:find-class 'oclosure)))
 
 #-sbcl
 (progn

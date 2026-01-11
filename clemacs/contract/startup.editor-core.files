@@ -30,7 +30,7 @@ lisp/window.el 10
 lisp/files.el -
 
 # pdump: macroexp, pcase, cus-face, faces, regexp-opt, rx.
-lisp/emacs-lisp/macroexp.el 60
+lisp/emacs-lisp/macroexp.el 200
 lisp/emacs-lisp/pcase.el 200
 lisp/cus-face.el 10
 lisp/faces.el 10
@@ -39,12 +39,15 @@ lisp/emacs-lisp/rx.el 10
 lisp/emacs-lisp/pp.el 50
 lisp/ldefs-boot.el 50
 
+# pdump: loaddefs.
+lisp/loaddefs.el -
+
 # pdump: button, gv, cl-lib, cl-macs, cl-preloaded, oclosure, cl-seq, seq.
 lisp/button.el 10
 lisp/emacs-lisp/gv.el -
 lisp/emacs-lisp/cl-lib.el 10
 lisp/emacs-lisp/cl-macs.el 10
-lisp/emacs-lisp/cl-preloaded.el 60
+lisp/emacs-lisp/cl-preloaded.el 120
 lisp/emacs-lisp/oclosure.el -
 lisp/emacs-lisp/cl-seq.el 10
 lisp/emacs-lisp/seq.el -
@@ -144,6 +147,12 @@ lisp/newcomment.el -
 lisp/replace.el 19
 lisp/emacs-lisp/tabulated-list.el -
 lisp/buff-menu.el -
+
+# pdump: image.
+lisp/image.el -
+
+# pdump: fontset.
+lisp/international/fontset.el -
 
 # pdump: elisp-mode, float-sup, vc-hooks, ediff-hook, uniquify, electric, paren, shorthands.
 lisp/progmodes/elisp-mode.el 20
