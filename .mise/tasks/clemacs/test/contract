@@ -3,8 +3,9 @@ set -eEuo pipefail
 
 #MISE description="Run clemacs contract gate (successor to Emacs test:smoke for clemacs)"
 #USAGE flag "-h --help" help="Print help"
-#USAGE flag "--level <level>" help="Contract level: smoke|check" default="smoke"
+#USAGE flag "--level <level>" help="Contract level: smoke|elisp-core|check" default="smoke"
 #USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--skip-tty" help="Skip the clemacs:test:tty task (useful when running it separately)" default="false"
 
 if [[ "${usage_help:-false}" == "true" ]]; then
   mise tasks info "${MISE_TASK_NAME}"
@@ -16,6 +17,7 @@ cd "${project_root}"
 
 level="${usage_level}"
 build_dir="${usage_build_dir}"
+skip_tty="${usage_skip_tty:-false}"
 mkdir -p "${build_dir}"
 
 stamp_dir="${project_root}/${build_dir}/stamps"
@@ -61,6 +63,9 @@ fi
 while IFS= read -r task; do
   [[ -z "${task}" ]] && continue
   [[ "${task}" =~ ^# ]] && continue
+  if [[ "${skip_tty}" == "true" && "${task}" == "clemacs:test:tty" ]]; then
+    continue
+  fi
   cur_task="${task}"
   mise run "${task}" -- --build-dir "${build_dir}"
 done < "${manifest}"
