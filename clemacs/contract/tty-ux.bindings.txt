@@ -1,0 +1,30 @@
+# Keybinding UX contract for clemacs TTY bring-up (tty-editor startup slice).
+#
+# Format: <kbd string><TAB><expected command symbol>
+# Notes:
+# - This is a target list (what we want to be true), not a description of what
+#   is currently true. Expect it to grow over time.
+# - Checked by `mise run clemacs:report:progress` (batch, -Q, startup-level tty-editor).
+
+C-n	next-line
+C-p	previous-line
+C-f	forward-char
+C-b	backward-char
+C-a	move-beginning-of-line
+C-e	move-end-of-line
+ESC <	beginning-of-buffer
+ESC >	end-of-buffer
+C-v	scroll-up-command
+ESC v	scroll-down-command
+C-s	isearch-forward
+C-r	isearch-backward
+ESC %	query-replace
+C-x C-f	find-file
+C-x C-s	save-buffer
+C-x b	switch-to-buffer
+C-x k	kill-buffer
+C-x 2	split-window-below
+C-x o	other-window
+C-x 0	delete-window
+ESC x	execute-extended-command
+ESC :	eval-expression

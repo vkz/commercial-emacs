@@ -55,6 +55,29 @@ summarize_manifest() {
   ' "${path}"
 }
 
+render_bar() {
+  local cur="$1"
+  local total="$2"
+  local width="${3:-24}"
+  if [[ "${total}" -le 0 ]]; then
+    printf "[%*s]" "${width}" ""
+    return
+  fi
+  local filled=$(( (cur * width) / total ))
+  if [[ "${filled}" -gt "${width}" ]]; then
+    filled="${width}"
+  fi
+  local empty=$(( width - filled ))
+  printf "["
+  if [[ "${filled}" -gt 0 ]]; then
+    printf "%0.s#" $(seq 1 "${filled}")
+  fi
+  if [[ "${empty}" -gt 0 ]]; then
+    printf "%0.s." $(seq 1 "${empty}")
+  fi
+  printf "]"
+}
+
 startup_smoke="clemacs/contract/startup.smoke.files"
 startup_check="clemacs/contract/startup.check.files"
 startup_editor="clemacs/contract/startup.editor-core.files"
@@ -70,6 +93,133 @@ startup_smoke_summary="$(summarize_manifest "${startup_smoke}")"
 startup_check_summary="$(summarize_manifest "${startup_check}")"
 startup_editor_summary="$(summarize_manifest "${startup_editor}")"
 startup_tty_summary="$(summarize_manifest "${startup_tty}")"
+
+pdump_json="$(
+  python3 - <<'PY'
+import json
+import os
+import re
+from pathlib import Path
+
+project_root = Path(os.environ.get("MISE_PROJECT_ROOT") or os.getcwd())
+lisp_root = project_root / "lisp"
+pdump = project_root / "admin" / "pdump-common.el"
+
+def read_manifest(path: Path):
+    out = []
+    if not path.exists():
+        return out
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        out.append(line.split()[0])
+    return out
+
+def _ensure_el_suffix(path: str) -> str:
+    return path if path.endswith(".el") else f"{path}.el"
+
+def resolve_pdump_load(name: str) -> str:
+    if "/" in name:
+        rel = name[5:] if name.startswith("lisp/") else f"lisp/{name}"
+        return _ensure_el_suffix(rel)
+
+    base = name[:-3] if name.endswith(".el") else name
+    preferred = [
+        lisp_root / f"{base}.el",
+        lisp_root / "emacs-lisp" / f"{base}.el",
+    ]
+    for p in preferred:
+        if p.exists():
+            return p.relative_to(project_root).as_posix()
+
+    matches = sorted(lisp_root.rglob(f"{base}.el"))
+    if len(matches) == 1:
+        return matches[0].relative_to(project_root).as_posix()
+    if matches:
+        return matches[0].relative_to(project_root).as_posix()
+
+    return f"lisp/{base}.el"
+
+text = pdump.read_text(encoding="utf-8")
+loads = re.findall(r'\(load\s+"([^"]+)"', text)
+pdump_paths_all = [resolve_pdump_load(name) for name in loads]
+
+existing = [p for p in pdump_paths_all if (project_root / p).exists()]
+
+seen = set()
+pdump_existing_unique = []
+for p in existing:
+    if p in seen:
+        continue
+    seen.add(p)
+    pdump_existing_unique.append(p)
+
+def coverage(manifest_rel: str):
+    manifest_path = project_root / manifest_rel
+    startup = read_manifest(manifest_path)
+    startup_set = set(startup)
+    present = [p for p in pdump_existing_unique if p in startup_set]
+    return {
+        "manifest": manifest_rel,
+        "startup_entries": len(startup),
+        "pdump_total": len(pdump_existing_unique),
+        "pdump_present": len(present),
+        "pdump_missing": len(pdump_existing_unique) - len(present),
+    }
+
+out = {
+    "pdump_total": len(pdump_existing_unique),
+    "check": coverage("clemacs/contract/startup.check.files"),
+    "tty_editor": coverage("clemacs/contract/startup.tty-editor.files"),
+}
+print(json.dumps(out))
+PY
+)"
+
+pdump_total="$(python3 - <<PY
+import json
+d=json.loads('''${pdump_json}''')
+print(d.get('pdump_total', 0))
+PY
+)"
+pdump_check_present="$(python3 - <<PY
+import json
+d=json.loads('''${pdump_json}''')
+print(d.get('check', {}).get('pdump_present', 0))
+PY
+)"
+pdump_tty_present="$(python3 - <<PY
+import json
+d=json.loads('''${pdump_json}''')
+print(d.get('tty_editor', {}).get('pdump_present', 0))
+PY
+)"
+
+ert_total_estimate="$(
+  rg -n "^\\(ert-deftest\\s" test/lisp -g'*.el' 2>/dev/null | wc -l | tr -d ' '
+)"
+
+tty_ux_ok="0"
+tty_ux_total="0"
+tty_ux_contract="clemacs/contract/tty-ux.bindings.txt"
+if [[ -f "${tty_ux_contract}" && -x "${project_root}/${build_dir}/bin/emacs" ]]; then
+  export CLEMACS_SUBSTRATE_DYLIB="${project_root}/${build_dir}/bin/libemxsubstrate.dylib"
+  tty_ux_total="$(count_noncomment_lines "${tty_ux_contract}")"
+  tty_ux_out_path="${project_root}/${build_dir}/tmp/tty-ux.bindings.out"
+  tty_ux_err_path="${tty_ux_out_path}.err"
+  mkdir -p "$(dirname "${tty_ux_out_path}")"
+  "${project_root}/${build_dir}/bin/emacs" \
+    --batch \
+    -Q \
+    --startup-level tty-editor \
+    --eval "(let ((ok 0) (total 0)) (dolist (line (split-string (with-temp-buffer (insert-file-contents \"${project_root}/${tty_ux_contract}\") (buffer-string)) \"\\\\n\" t)) (unless (or (string= line \"\") (eq (aref line 0) ?#)) (let* ((parts (split-string line \"\\\\t\")) (k (car parts)) (expect (intern (cadr parts))) (got (key-binding (kbd k) t)) (pass (eq got expect))) (setq total (1+ total)) (when pass (setq ok (1+ ok))) (princ (format \"%s\\t%s\\t%S\\n\" (if pass \"ok\" \"fail\") k got))))) (princ (format \"summary\\t%d/%d\\n\" ok total)))" \
+    >"${tty_ux_out_path}" 2>"${tty_ux_err_path}" || true
+
+  tty_ux_ok="$(
+    rg -o "[0-9]+/[0-9]+" "${tty_ux_out_path}" | tail -n 1 | cut -d/ -f1 || echo 0
+  )"
+fi
 
 mise run clemacs:inventory:used-startup-check -- --build-dir "${build_dir}" >/dev/null
 
@@ -139,12 +289,20 @@ stamp_check_summary="$(stamp_summary "${stamp_check}")"
   echo "## Upstream ERT bring-up"
   echo
   echo "- must-pass tests: ${ert_upstream_count} (\`${ert_upstream_tests}\`)"
+  echo "- total upstream tests (est): ${ert_total_estimate} (\`test/lisp/**/*.el\`)"
   echo "- known-fail tests: ${ert_known_fail_count} (\`${ert_known_fail}\`)"
   echo
   echo "## Inventory usage (checkpoint-aware)"
   echo
   echo "- ${inv_line}"
   echo "- details: \`${inv_json}\`"
+  echo
+  echo "## Meters (toward targets)"
+  echo
+  echo "- pdump.check coverage: ${pdump_check_present}/${pdump_total} $(render_bar "${pdump_check_present}" "${pdump_total}")"
+  echo "- pdump.tty-editor coverage: ${pdump_tty_present}/${pdump_total} $(render_bar "${pdump_tty_present}" "${pdump_total}")"
+  echo "- tty UX keybindings (target list): ${tty_ux_ok}/${tty_ux_total} $(render_bar "${tty_ux_ok}" "${tty_ux_total}") (\`${tty_ux_contract}\`)"
+  echo "- upstream ERT must-pass size: ${ert_upstream_count}/${ert_total_estimate} $(render_bar "${ert_upstream_count}" "${ert_total_estimate}")"
 } >"${report_path}"
 
 echo "[clemacs:report:progress] wrote ${report_path}"

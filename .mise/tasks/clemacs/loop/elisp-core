@@ -26,9 +26,11 @@ status=$?
 set -e
 
 if [[ "${status}" -eq 0 ]]; then
+  mise run clemacs:report:progress -- --build-dir "${build_dir}" || true
   exit 0
 fi
 
 echo "[clemacs:loop:elisp-core] elisp-core failed; extracting first startup-check failure" >&2
 mise run clemacs:report:first-failure-startup-check-debug -- --build-dir "${build_dir}"
+mise run clemacs:report:progress -- --build-dir "${build_dir}" || true
 exit "${status}"
