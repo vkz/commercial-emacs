@@ -58,9 +58,12 @@ esac
 
 set +e
 if [[ "${usage_debug:-false}" == "true" ]]; then
+  echo "[clemacs:report:first-failure] capturing output: ${log_path}" >&2
+  echo "[clemacs:report:first-failure] loader debug: ${debug_path}" >&2
   : >"${debug_path}"
   env "CLEMACS_LOAD_DEBUG_FILE=${debug_path}" "${cmd[@]}" >"${log_path}" 2>&1
 else
+  echo "[clemacs:report:first-failure] capturing output: ${log_path}" >&2
   "${cmd[@]}" >"${log_path}" 2>&1
 fi
 status=$?

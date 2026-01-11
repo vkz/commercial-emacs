@@ -29,6 +29,8 @@ Repo-local skills live under `.codex/skills/` in this repo. Use them as the defa
 2) If it fails, extract the *first* actionable failure (do not eyeball the full log):
    - `mise run clemacs:report:first-failure -- --mode startup-check`
    - Read: `build/clemacs/reports/first-failure.startup-check.md`
+   - If `startup-check` is slow, bisect cheaply without editing manifests:
+     `mise run clemacs:report:first-failure -- --mode startup-check --limit <n> --debug`
 
 3) Apply the decision tree below (missing primitive vs checkpoint vs skip vs ported rewrite).
 
@@ -107,7 +109,7 @@ Then choose one:
 - **Raising startup checkpoints (default strategy)**
   - Default to bigger cap jumps to maintain pace (rule of thumb: `loaddefs.el` +1000; most other files +300–800), then run `mise run clemacs:loop:elisp-core`.
   - To quickly reproduce a failure in a prefix of the startup manifest without editing manifests, use `--limit`:
-    - `mise run clemacs:test:startup-check -- --limit <n>`
+    - `mise run clemacs:report:first-failure -- --mode startup-check --limit <n>`
   - If it fails, do not “creep” in tiny increments: bisect immediately when the failing point is unclear or too far into the file:
     - `mise run clemacs:bisect:file -- --file <lisp/.../foo.el> --manifest clemacs/contract/startup.check.files`
   - Set the manifest checkpoint to the reported “max passing max-forms”, fix only the top offender from `build/clemacs/reports/first-failure.startup-check.md`, then repeat with another big jump.
@@ -167,6 +169,7 @@ When reporting a failure or opening a PR, attach (or paste excerpts from):
 - `build/clemacs/reports/first-failure.startup-check.md`
 - `build/clemacs/reports/progress.md`
 - Any relevant bisect report: `build/clemacs/reports/bisect-*.md`
+- The SBCL log path printed by the failing `mise` task (also symlinked at `build/clemacs/tmp/sbcl.latest.log`)
 
 ## No-rediscovery checklist (required)
 

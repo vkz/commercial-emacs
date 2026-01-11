@@ -66,6 +66,8 @@ clemacs_sbcl_eval() {
   local tmp_dir="${project_root}/${build_dir}/tmp"
   mkdir -p "${tmp_dir}"
   local log_path="${tmp_dir}/sbcl.$(date -u +%Y%m%dT%H%M%SZ).$$.log"
+  ln -sf "${log_path}" "${tmp_dir}/sbcl.latest.log" 2>/dev/null || true
+  echo "[clemacs] sbcl log: ${log_path}" >&2
   local filter_py="${project_root}/.mise/tasks/clemacs/lib/sbcl-output-filter.py"
 
   local common_args=(
