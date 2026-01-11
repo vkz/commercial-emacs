@@ -18,6 +18,7 @@ out_dir="${project_root}/${build_dir}/reports"
 mkdir -p "${out_dir}"
 
 report_path="${out_dir}/progress.md"
+report_json_path="${out_dir}/progress.json"
 now_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 git_rev="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
 
@@ -225,6 +226,8 @@ mise run clemacs:inventory:used-startup-check -- --build-dir "${build_dir}" >/de
 
 inv_json="${project_root}/${build_dir}/tmp/inventory-used.json"
 inv_line="(missing inventory-used.json)"
+inv_used="0"
+inv_total="0"
 if [[ -f "${inv_json}" ]]; then
   inv_line="$(
     python3 - <<PY
@@ -233,6 +236,24 @@ from pathlib import Path
 p=Path("${inv_json}")
 d=json.loads(p.read_text())
 print(f"used_runtime_subrs_unique={d.get('used_runtime_subrs_unique')} runtime_subrs_total={d.get('runtime_subrs_total')} respect_maxforms={d.get('respect_maxforms')}")
+PY
+  )"
+  inv_used="$(
+    python3 - <<PY
+import json
+from pathlib import Path
+p=Path("${inv_json}")
+d=json.loads(p.read_text())
+print(int(d.get("used_runtime_subrs_unique") or 0))
+PY
+  )"
+  inv_total="$(
+    python3 - <<PY
+import json
+from pathlib import Path
+p=Path("${inv_json}")
+d=json.loads(p.read_text())
+print(int(d.get("runtime_subrs_total") or 0))
 PY
   )"
 fi
@@ -264,6 +285,39 @@ stamp_summary() {
 stamp_smoke_summary="$(stamp_summary "${stamp_smoke}")"
 stamp_elisp_summary="$(stamp_summary "${stamp_elisp}")"
 stamp_check_summary="$(stamp_summary "${stamp_check}")"
+
+meters_json="$(
+  python3 - <<PY
+import json
+
+def meter(label, current, total, bar):
+    current = int(current)
+    total = int(total)
+    return {
+        "label": label,
+        "current": current,
+        "total": total,
+        "value": f"{current}/{total}" if total else str(current),
+        "bar": bar,
+    }
+
+out = {
+    "git": "${git_rev}",
+    "generated": "${now_utc}",
+    "build_dir": "${build_dir}",
+    "meters": [
+        meter("pdump.check coverage", ${pdump_check_present}, ${pdump_total}, "$(render_bar "${pdump_check_present}" "${pdump_total}")"),
+        meter("pdump.tty-editor coverage", ${pdump_tty_present}, ${pdump_total}, "$(render_bar "${pdump_tty_present}" "${pdump_total}")"),
+        meter("tty UX keybindings", ${tty_ux_ok}, ${tty_ux_total}, "$(render_bar "${tty_ux_ok}" "${tty_ux_total}")"),
+        meter("upstream ERT must-pass", ${ert_upstream_count}, ${ert_total_estimate}, "$(render_bar "${ert_upstream_count}" "${ert_total_estimate}")"),
+        meter("inventory used (subrs)", ${inv_used}, ${inv_total}, "$(render_bar "${inv_used}" "${inv_total}")"),
+    ],
+}
+print(json.dumps(out, indent=2, sort_keys=True))
+PY
+)"
+
+printf "%s\n" "${meters_json}" >"${report_json_path}"
 
 {
   echo "# clemacs progress dashboard"
@@ -299,10 +353,18 @@ stamp_check_summary="$(stamp_summary "${stamp_check}")"
   echo
   echo "## Meters (toward targets)"
   echo
-  echo "- pdump.check coverage: ${pdump_check_present}/${pdump_total} $(render_bar "${pdump_check_present}" "${pdump_total}")"
-  echo "- pdump.tty-editor coverage: ${pdump_tty_present}/${pdump_total} $(render_bar "${pdump_tty_present}" "${pdump_total}")"
-  echo "- tty UX keybindings (target list): ${tty_ux_ok}/${tty_ux_total} $(render_bar "${tty_ux_ok}" "${tty_ux_total}") (\`${tty_ux_contract}\`)"
-  echo "- upstream ERT must-pass size: ${ert_upstream_count}/${ert_total_estimate} $(render_bar "${ert_upstream_count}" "${ert_total_estimate}")"
+  echo "| Meter | Current | Bar |"
+  echo "| --- | ---: | --- |"
+  echo "| pdump.check coverage | ${pdump_check_present}/${pdump_total} | \`$(render_bar "${pdump_check_present}" "${pdump_total}")\` |"
+  echo "| pdump.tty-editor coverage | ${pdump_tty_present}/${pdump_total} | \`$(render_bar "${pdump_tty_present}" "${pdump_total}")\` |"
+  echo "| tty UX keybindings (target list) | ${tty_ux_ok}/${tty_ux_total} | \`$(render_bar "${tty_ux_ok}" "${tty_ux_total}")\` |"
+  echo "| upstream ERT must-pass size | ${ert_upstream_count}/${ert_total_estimate} | \`$(render_bar "${ert_upstream_count}" "${ert_total_estimate}")\` |"
+  echo "| inventory used (subrs) | ${inv_used}/${inv_total} | \`$(render_bar "${inv_used}" "${inv_total}")\` |"
+  echo
+  echo "Details:"
+  echo "- tty UX per-binding: \`${tty_ux_out_path}\`"
+  echo "- tty UX stderr: \`${tty_ux_err_path}\`"
+  echo "- meters JSON: \`${report_json_path}\`"
 } >"${report_path}"
 
 echo "[clemacs:report:progress] wrote ${report_path}"

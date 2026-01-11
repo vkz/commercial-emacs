@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Show clemacs progress meters (cached by git rev)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--force" help="Regenerate progress report even if cached" default="false"
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+force="${usage_force:-false}"
+
+report_md="${project_root}/${build_dir}/reports/progress.md"
+report_json="${project_root}/${build_dir}/reports/progress.json"
+
+git_rev="$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)"
+
+is_fresh=false
+if [[ "${force}" != "true" ]]; then
+  if [[ -f "${report_json}" ]]; then
+    if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("git")=="'"${git_rev}"'")' "${report_json}" | rg -q "^True$"; then
+      is_fresh=true
+    fi
+  elif [[ -f "${report_md}" ]]; then
+    if rg -n "^- git: ${git_rev}$" "${report_md}" >/dev/null 2>&1; then
+      is_fresh=true
+    fi
+  fi
+fi
+
+if [[ "${is_fresh}" != "true" ]]; then
+  mise run clemacs:report:progress -- --build-dir "${build_dir}" >/dev/null
+fi
+
+python3 - <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+project_root = Path(os.environ.get("MISE_PROJECT_ROOT") or os.getcwd())
+build_dir = os.environ.get("usage_build_dir") or "build/clemacs"
+report_json = project_root / build_dir / "reports" / "progress.json"
+if not report_json.exists():
+    raise SystemExit(f"missing {report_json}")
+
+d = json.loads(report_json.read_text(encoding="utf-8"))
+metrics = d.get("meters") or []
+
+def bar_color(cur: int, total: int) -> str:
+    if total <= 0:
+        return ""
+    pct = 0.0 if total == 0 else (cur / total)
+    if pct >= 0.75:
+        return "\033[32m"  # green
+    if pct >= 0.50:
+        return "\033[36m"  # cyan
+    if pct >= 0.25:
+        return "\033[33m"  # yellow
+    return "\033[31m"      # red
+
+use_color = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+reset = "\033[0m" if use_color else ""
+
+label_w = max([len(m.get("label", "")) for m in metrics] + [5])
+val_w = max([len(m.get("value", "")) for m in metrics] + [9])
+
+print(f"clemacs progress ({d.get('git','unknown')})")
+print("")
+print(f"| {'Meter'.ljust(label_w)} | {'Current'.rjust(val_w)} | Bar |")
+print(f"| {'-'*label_w} | {'-'*val_w} | --- |")
+for m in metrics:
+    label = m.get("label", "")
+    value = m.get("value", "")
+    bar = m.get("bar", "")
+    cur = int(m.get("current") or 0)
+    total = int(m.get("total") or 0)
+    if use_color:
+        bar = f"{bar_color(cur, total)}{bar}{reset}"
+    print(f"| {label.ljust(label_w)} | {value.rjust(val_w)} | {bar} |")
+PY
