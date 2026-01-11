@@ -12,6 +12,9 @@
 lisp/emacs-lisp/subr-x.el -
 test/lisp/emacs-lisp/subr-x-tests.el -
 
+# 2026-01-11: Bring up backquote tests (startup-adjacent; pdump prelude).
+test/lisp/emacs-lisp/backquote-tests.el -
+
 # 2026-01-08: Bring up `rx` + `seq` upstream tests.
 lisp/emacs-lisp/regexp-opt.el -
 lisp/emacs-lisp/rx.el -

@@ -125,6 +125,11 @@ rx-char-any
 rx-kleene
 rx-repeat
 
+# 2026-01-11: Expand rx bring-up (pcase integration; keep small and green).
+rx-def-in-or
+rx-let-pcase
+rx-not
+
 # seq bring-up (sequence library).
 test-setf-seq-elt
 test-seq-drop
@@ -282,3 +287,7 @@ cl-lib-test-minusp
 cl-lib-test-oddp
 cl-lib-test-evenp
 cl-digit-char-p
+
+# backquote bring-up (startup-adjacent; pdump prelude).
+backquote-test-basic
+backquote-test-nested
