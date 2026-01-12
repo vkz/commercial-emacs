@@ -86,3 +86,9 @@ lisp/simple.el -
 # bring-up: nadvice/minibuffer (first slice; caps will rise over time).
 lisp/emacs-lisp/nadvice.el 20
 lisp/minibuffer.el 20
+
+# bring-up: frame/startup (first slice; caps will rise over time).
+lisp/frame.el 1
+lisp/startup.el 1
+lisp/term/tty-colors.el 1
+lisp/font-core.el 1

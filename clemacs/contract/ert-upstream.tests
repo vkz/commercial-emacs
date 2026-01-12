@@ -207,6 +207,10 @@ completion-pcm--optimize-pattern
 completion-test--pcm-bug38458
 completion-pcm-test-1
 completion-pcm-test-2
+completion-pcm-test-3
+completion-pcm-test-4
+completion-pcm-test-5
+completion-pcm-test-6
 test-map-nested-elt
 test-map-nested-elt-default
 test-mapp
