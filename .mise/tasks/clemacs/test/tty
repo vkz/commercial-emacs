@@ -76,6 +76,9 @@ def run_pty(*, level, tty_path, data, expect_file_bytes):
     env = dict(os.environ)
     env["CLEMACS_TTY_STARTUP_LEVEL"] = level
     env["CLEMACS_TTY_PATH"] = tty_path
+    # Fail fast on any command-loop error so the PTY gate doesn't silently
+    # "go green" while printing errors and beeping.
+    env["CLEMACS_TTY_STRICT"] = "1"
 
     pid, fd = pty.fork()
     if pid == 0:
@@ -192,6 +195,7 @@ finally:
 fd2, outfile2 = tempfile.mkstemp(prefix="tty-test.", dir=tmpdir)
 os.close(fd2)
 try:
+    file_bufname = os.path.basename(outfile2)
     # Start in *scratch*; visit OUTFILE via C-x C-f.
     data2 = bytearray()
     data2 += bytes([24, 6])  # C-x C-f (find-file)
@@ -225,13 +229,24 @@ try:
     data2 += bytes([27, ord("x")])  # M-x (ESC x)
     data2 += b"execute-kbd-macro\n"
     data2 += b"C-a C-e\n"
-    # Crash shield gate: an unknown command error returns to the loop.
-    data2 += bytes([27, ord("x")])  # M-x (ESC x)
-    data2 += b"clemacs-definitely-not-a-command\n"
-    # Basic multi-window surface: split/other/delete.
+    # Basic multi-window surface: split/other/delete (both orientations).
+    data2 += bytes([24, 51])  # C-x 3 (split-window-right)
+    data2 += bytes([24, ord("o")])  # C-x o (other-window)
+    data2 += bytes([24, 49])  # C-x 1 (delete-other-windows)
     data2 += bytes([24, 50])  # C-x 2 (split-window-below)
     data2 += bytes([24, ord("o")])  # C-x o (other-window)
     data2 += bytes([24, 48])  # C-x 0 (delete-window)
+    # Buffer basics: create/switch/kill without prompts.
+    data2 += bytes([24, ord("b")])  # C-x b (switch-to-buffer)
+    data2 += b"clemacs-test-buf\n"
+    data2 += bytes([24, ord("b")])  # C-x b (back to visited file buffer)
+    data2 += file_bufname.encode("utf-8") + b"\n"
+    data2 += bytes([24, ord("b")])  # C-x b (back to temp buffer)
+    data2 += b"clemacs-test-buf\n"
+    data2 += bytes([24, ord("k")])  # C-x k (kill-buffer)
+    data2 += b"\n"  # accept default (current buffer)
+    data2 += bytes([24, ord("b")])  # C-x b (back to visited file buffer)
+    data2 += file_bufname.encode("utf-8") + b"\n"
     data2 += bytes([27, ord("x")])  # M-x (ESC x)
     data2 += b"save-buffers-kill-terminal\n"
 

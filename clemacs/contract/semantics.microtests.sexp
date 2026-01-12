@@ -167,6 +167,11 @@
   :expected "(nil 7 7)"
   :emacs :match)
 
+ (:name "windows-command-execute-delete-window"
+  :expr "(progn (delete-other-windows) (split-window-right) (other-window 1) (command-execute 'delete-window) (length (window-list)))"
+  :expected "1"
+  :emacs :match)
+
  (:name "core-internal-define-uninitialized-variable-does-not-bind"
   :expr "(progn (makunbound 'clemacs--tmp-uninit-var) (internal--define-uninitialized-variable 'clemacs--tmp-uninit-var \"doc\") (list (boundp 'clemacs--tmp-uninit-var) (special-variable-p 'clemacs--tmp-uninit-var) (get 'clemacs--tmp-uninit-var 'variable-documentation)))"
   :expected "(nil t \"doc\")"
@@ -1572,5 +1577,10 @@
  (:name "string-match-p-blank-unicode"
   :expr "(list (string-match-p \"\\\\`[[:blank:]]\\\\'\" \"\\N{HAIR SPACE}\") (string-match-p \"\\\\`[[:blank:]]\\\\'\" \"\\u3000\") (string-match-p \"\\\\`[[:blank:]]\\\\'\" \"\\n\"))"
   :expected "(0 0 nil)"
+  :emacs :match)
+
+ (:name "time-convert-zero-list"
+  :expr "(time-convert 0 'list)"
+  :expected "(0 0 0 0)"
   :emacs :match)
 )

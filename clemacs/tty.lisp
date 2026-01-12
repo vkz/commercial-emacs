@@ -357,6 +357,8 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
 (defun tty-main (&key path)
   (let* ((dump (uiop:getenv "CLEMACS_GRID_PATCH_DUMP"))
          (path* (and path (not (string= path "")) path))
+         (strict (uiop:getenv "CLEMACS_TTY_STRICT"))
+         (strictp (and strict (not (string= strict ""))))
          (state (make-tty-state)))
     (when (and dump (not (string= dump "")))
       (setf *grid-patch-sinks*
@@ -488,6 +490,10 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
                           (format *error-output* "[clemacs] tty debug: interactive-form=~S~%"
                                   (ignore-errors (elisp::interactive-form cmd)))))
                       (finish-output *error-output*)
+                      (when strictp
+                        (format *error-output* "[clemacs] tty strict: failing on error~%")
+                        (finish-output *error-output*)
+                        (return 1))
                       (tty-write-string "\a"))))))))
       (ignore-errors (tty-exit-raw))
       (%tty-clear))))

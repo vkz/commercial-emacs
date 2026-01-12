@@ -187,6 +187,38 @@ return something cancelable."
   (declare (cl:ignore time repeat function args))
   (%make-clemacs-timer (incf *clemacs--next-timer-id*)))
 
+(cl:defun run-with-idle-timer (secs repeat function &rest args)
+  "Bring-up subset of ELisp `run-with-idle-timer' (no real timers)."
+  (apply #'run-at-time secs repeat function args))
+
+(cl:defparameter *clemacs--main-thread* :clemacs-main-thread)
+
+(cl:defvar timer-list nil
+  "Bring-up stub for the global `timer-list' (normally C-defined).")
+
+(cl:defvar timer-idle-list nil
+  "Bring-up stub for the global `timer-idle-list' (normally C-defined).")
+
+(cl:defun current-thread ()
+  "Bring-up stub for ELisp `current-thread'.
+
+clemacs is single-threaded for now; return a stable token."
+  *clemacs--main-thread*)
+
+(cl:defun threadp (object)
+  "Bring-up subset of ELisp `threadp'."
+  (eq object *clemacs--main-thread*))
+
+(cl:defun (setf timer--time) (time timer)
+  "Support `timer.el' pseudo-field `timer--time' in bring-up.
+
+Upstream `lisp/emacs-lisp/timer.el' uses (setf (timer--time TIMER) TIME) with a
+`gv-setter'.  clemacs currently models generalized variables via a `(setf
+SYMBOL)' function name, so provide the setter explicitly."
+  (unless (fboundp 'timer--time-setter)
+    (error "ELISP:(SETF TIMER--TIME) needs timer.el (missing timer--time-setter)"))
+  (timer--time-setter timer time))
+
 (cl:defun command-remapping (_command &optional _position _keymaps)
   "Bring-up stub for the C primitive `command-remapping'."
   (declare (cl:ignore _command _position _keymaps))
@@ -1216,6 +1248,49 @@ no default is provided)."
 	          ;; command" error without trapping the user in minibuffer completion.
 	          input))))))
 
+(cl:defun internal-complete-buffer-except (&optional buffer)
+  "Bring-up stub for `internal-complete-buffer-except'.
+
+Upstream `lisp/window.el` uses this when prompting in `read-buffer-to-switch`.
+In full Emacs this returns a completion table function; for clemacs bring-up we
+return a simple list of buffer names, which is sufficient for our small
+`completing-read` implementation."
+  (let* ((buf (cond
+               ((null buffer) (current-buffer))
+               ((bufferp buffer) buffer)
+               ((stringp buffer) buffer)
+               (t buffer)))
+         (except-name
+           (cond
+            ((stringp buf) buf)
+            ((bufferp buf) (buffer-name buf))
+            (t nil)))
+         (except* (and (stringp except-name) (%elisp-string->cl-string except-name)))
+         (names nil))
+    (dolist (b (buffer-list))
+      (when (bufferp b)
+        (let* ((bn (buffer-name b))
+               (bn* (and (stringp bn) (%elisp-string->cl-string bn))))
+          (when (and bn (or (null except*) (not (cl:string= bn* except*))))
+            (push bn names)))))
+    (nreverse names)))
+
+(cl:defun read-buffer (prompt &optional default require-match _predicate)
+  "Bring-up subset of ELisp `read-buffer'.
+
+This is intentionally small: prompt via `completing-read` over current buffer
+names.  It is sufficient for `switch-to-buffer` and friends in the clemacs TTY
+loop."
+  (declare (cl:ignore _predicate))
+  (let* ((def
+           (cond
+            ((null default) nil)
+            ((stringp default) default)
+            ((bufferp default) (buffer-name default))
+            (t nil)))
+         (cands (internal-complete-buffer-except)))
+    (completing-read prompt cands nil (and require-match t) nil nil def nil)))
+
 (cl:defun read-key-sequence (&optional _prompt &rest _args)
   "Bring-up subset of ELisp `read-key-sequence'.
 
@@ -1485,6 +1560,22 @@ The first non-argument event is pushed back onto `unread-command-events'."
 
 (cl:defun clemacs-tty-setup (&key path)
   (setf clemacs-tty-path (and path (not (cl:string= path "")) path))
+
+  ;; For bring-up, disable file-local and dir-local variables.  Upstream
+  ;; `find-file' may attempt to read `.dir-locals.el' from this repo, and we
+  ;; intentionally don't support that surface area yet.
+  (when (boundp 'enable-local-variables)
+    (set 'enable-local-variables nil))
+  (when (boundp 'enable-local-eval)
+    (set 'enable-local-eval nil))
+  (when (boundp 'enable-dir-local-variables)
+    (set 'enable-dir-local-variables nil))
+
+  ;; Startup manifests load upstream `window.el`, which redefines core
+  ;; interactive window commands.  Ensure the clemacs TTY loop uses the minimal
+  ;; compat window model consistently.
+  (when (fboundp '%install-window-display-shims)
+    (ignore-errors (%install-window-display-shims)))
 
   (let* ((level (or (ignore-errors (uiop:getenv "CLEMACS_TTY_STARTUP_LEVEL")) "tty-editor"))
          (force-bringup-p (or (cl:string= level "none")

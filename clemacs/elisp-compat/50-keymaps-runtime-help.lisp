@@ -648,12 +648,3 @@ For bring-up we implement only:
      ((and dot (plusp dot))
       (subseq name 0 dot))
 	     (t name))))
-
-(cl:defun file-name-nondirectory (filename)
-  "Bring-up subset of ELisp `file-name-nondirectory'."
-  (unless (stringp filename)
-    (error "ELISP:FILE-NAME-NONDIRECTORY expects a string, got: ~S" filename))
-  (let* ((s (%file-name->cl-string filename))
-         (slash (or (position #\/ s :from-end t)
-                    (position #\\ s :from-end t))))
-    (subseq s (if slash (1+ slash) 0))))

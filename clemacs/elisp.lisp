@@ -45,24 +45,33 @@ returns nil."
   nil)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  ;; Define numeric-only `+' / `-' early without redefinition warnings when the
-  ;; system is loaded repeatedly (e.g. during core rebuilds).
-  (unless (cl:fboundp '+)
-    (setf (cl:symbol-function '+)
-          (lambda (&rest args)
-            (if (null args)
-                0
-                (cl:apply #'cl:+ args))))
-    (setf (cl:documentation '+ 'cl:function)
-          "Temporary numeric-only ELisp `+'."))
-  (unless (cl:fboundp '-)
-    (setf (cl:symbol-function '-)
-          (lambda (x &rest more)
-            (if (null more)
-                (cl:- x)
-                (cl:reduce #'cl:- more :initial-value x))))
-    (setf (cl:documentation '- 'cl:function)
-          "Temporary numeric-only ELisp `-'.")))
+  ;; Define `+' / `-' early so earlier compat layers can use them.  Keep a
+  ;; single definition to avoid SBCL "redefining ELISP::..." warnings.
+  (labels ((num (x)
+             (cond
+              ((integerp x) x)
+              ((realp x) x)
+              ((and (cl:fboundp 'markerp) (ignore-errors (markerp x)))
+               (let ((p (ignore-errors (marker-position x))))
+                 (or p (error "Marker has no position: ~S" x))))
+              (t
+               (signal 'wrong-type-argument (list 'number-or-marker-p x))))))
+    (unless (cl:fboundp '+)
+      (setf (cl:symbol-function '+)
+            (lambda (&rest args)
+              (if (null args)
+                  0
+                  (reduce #'cl:+ args :key #'num :initial-value 0))))
+      (setf (cl:documentation '+ 'cl:function)
+            "Bring-up subset of ELisp `+' (numbers and markers)."))
+    (unless (cl:fboundp '-)
+      (setf (cl:symbol-function '-)
+            (lambda (x &rest more)
+              (if (null more)
+                  (cl:- (num x))
+                  (reduce #'cl:- more :key #'num :initial-value (num x)))))
+      (setf (cl:documentation '- 'cl:function)
+            "Bring-up subset of ELisp `-' (numbers and markers)."))))
 
 (defconstant +raw-byte-base+ #x3fff00)
 (defconstant +raw-byte-max+ #x3fffff)
@@ -1322,6 +1331,20 @@ but skips the validation step."
   nil)
   nil)
 
+(cl:defun %clemacs--maybe-fset (symbol definition)
+  "Install DEFINITION as SYMBOL's ELisp function cell (and CL-visible binding).
+
+When shipped lisp/ files define functions, clemacs stores them in
+`*elisp-function-cells*`.  Overriding only CL's `fdefinition` is insufficient
+because ELisp `apply`/`funcall` resolve symbols via `symbol-function`."
+  (when (and symbol definition)
+    (cond
+     ((cl:fboundp 'fset)
+      (ignore-errors (fset symbol definition)))
+     (t
+      (setf (fdefinition symbol) definition))))
+  nil)
+
 (cl:defun %install-window-display-shims ()
   "Reinstall clemacs' minimal window/display helpers after loading window.el.
 
@@ -1331,43 +1354,44 @@ single-window model, so prefer the small compat implementations from
 `clemacs/elisp-compat/70-buffers-and-editor.lisp`."
   (when (and (boundp '*clemacs-display-buffer-shim*)
              *clemacs-display-buffer-shim*)
-    (setf (fdefinition 'display-buffer) *clemacs-display-buffer-shim*))
+    (%clemacs--maybe-fset 'display-buffer *clemacs-display-buffer-shim*))
   (when (and (boundp '*clemacs-pop-to-buffer-shim*)
              *clemacs-pop-to-buffer-shim*)
-    (setf (fdefinition 'pop-to-buffer) *clemacs-pop-to-buffer-shim*))
+    (%clemacs--maybe-fset 'pop-to-buffer *clemacs-pop-to-buffer-shim*))
   (when (and (boundp '*clemacs-pop-to-buffer-same-window-shim*)
              *clemacs-pop-to-buffer-same-window-shim*)
-    (setf (fdefinition 'pop-to-buffer-same-window) *clemacs-pop-to-buffer-same-window-shim*))
+    (%clemacs--maybe-fset 'pop-to-buffer-same-window *clemacs-pop-to-buffer-same-window-shim*))
   (when (and (boundp '*clemacs-switch-to-buffer-shim*)
              *clemacs-switch-to-buffer-shim*)
-    (setf (fdefinition 'switch-to-buffer) *clemacs-switch-to-buffer-shim*))
+    (%clemacs--maybe-fset 'switch-to-buffer *clemacs-switch-to-buffer-shim*))
   (when (and (boundp '*clemacs-switch-to-buffer-other-window-shim*)
              *clemacs-switch-to-buffer-other-window-shim*)
-    (setf (fdefinition 'switch-to-buffer-other-window)
-          *clemacs-switch-to-buffer-other-window-shim*))
+    (%clemacs--maybe-fset 'switch-to-buffer-other-window
+                          *clemacs-switch-to-buffer-other-window-shim*))
 
   ;; window.el defines a full window-tree + layout model.  During clemacs TTY
   ;; bring-up we keep the single-window model, so prefer the small compat
   ;; implementations for interactive window commands.
   (when (and (boundp '*clemacs-split-window-shim*) *clemacs-split-window-shim*)
-    (setf (fdefinition 'split-window) *clemacs-split-window-shim*))
+    (%clemacs--maybe-fset 'split-window *clemacs-split-window-shim*))
   (when (and (boundp '*clemacs-split-window-internal-shim*) *clemacs-split-window-internal-shim*)
-    (setf (fdefinition 'split-window-internal) *clemacs-split-window-internal-shim*))
+    (%clemacs--maybe-fset 'split-window-internal *clemacs-split-window-internal-shim*))
   (when (and (boundp '*clemacs-split-window-below-shim*) *clemacs-split-window-below-shim*)
-    (setf (fdefinition 'split-window-below) *clemacs-split-window-below-shim*))
+    (%clemacs--maybe-fset 'split-window-below *clemacs-split-window-below-shim*))
   (when (and (boundp '*clemacs-split-window-right-shim*) *clemacs-split-window-right-shim*)
-    (setf (fdefinition 'split-window-right) *clemacs-split-window-right-shim*))
+    (%clemacs--maybe-fset 'split-window-right *clemacs-split-window-right-shim*))
   (when (and (boundp '*clemacs-delete-window-shim*) *clemacs-delete-window-shim*)
-    (setf (fdefinition 'delete-window) *clemacs-delete-window-shim*))
+    (%clemacs--maybe-fset 'delete-window *clemacs-delete-window-shim*))
   (when (and (boundp '*clemacs-delete-window-internal-shim*) *clemacs-delete-window-internal-shim*)
-    (setf (fdefinition 'delete-window-internal) *clemacs-delete-window-internal-shim*))
+    (%clemacs--maybe-fset 'delete-window-internal *clemacs-delete-window-internal-shim*))
   (when (and (boundp '*clemacs-delete-other-windows-shim*) *clemacs-delete-other-windows-shim*)
-    (setf (fdefinition 'delete-other-windows) *clemacs-delete-other-windows-shim*))
+    (%clemacs--maybe-fset 'delete-other-windows *clemacs-delete-other-windows-shim*))
   (when (and (boundp '*clemacs-delete-other-windows-internal-shim*)
              *clemacs-delete-other-windows-internal-shim*)
-    (setf (fdefinition 'delete-other-windows-internal) *clemacs-delete-other-windows-internal-shim*))
+    (%clemacs--maybe-fset 'delete-other-windows-internal
+                          *clemacs-delete-other-windows-internal-shim*))
   (when (and (boundp '*clemacs-other-window-shim*) *clemacs-other-window-shim*)
-    (setf (fdefinition 'other-window) *clemacs-other-window-shim*))
+    (%clemacs--maybe-fset 'other-window *clemacs-other-window-shim*))
   nil)
 
 (cl:defun %maybe-install-post-load-shims (path)

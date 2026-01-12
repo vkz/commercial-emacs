@@ -413,6 +413,17 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
         (cons cur (remove cur live :test #'eq))
         live)))
 
+(cl:defun other-buffer (&optional buffer _visible-ok _frame)
+  "Bring-up subset of the C primitive `other-buffer'.
+
+Return a live buffer other than BUFFER (default: current buffer).  This ignores
+VISIBILE-OK and FRAME during bring-up."
+  (declare (cl:ignore _visible-ok _frame))
+  (let* ((cur (or (and (bufferp buffer) buffer) (current-buffer))))
+    (dolist (b (buffer-list) cur)
+      (when (and (bufferp b) (%buffer-live-p b) (not (eq b cur)))
+        (return b)))))
+
 (cl:defun find-buffer (variable value)
   "Bring-up subset of the C primitive `find-buffer'."
   (unless (symbolp variable)
@@ -475,9 +486,13 @@ This is a small indentation model sufficient for pp.el/ERT bring-up."
     (%register-buffer buf)
     target))
 
-(cl:defun kill-buffer (buffer-or-name)
+(cl:defun kill-buffer (&optional buffer-or-name)
   "Bring-up subset of ELisp `kill-buffer'."
-  (let ((buf (get-buffer buffer-or-name)))
+  (let* ((buf (or (and buffer-or-name (get-buffer buffer-or-name))
+                  (and (null buffer-or-name) (current-buffer))
+                  (and (stringp buffer-or-name)
+                       (cl:string= (%elisp-string->cl-string buffer-or-name) "")
+                       (current-buffer)))))
     (unless buf
       (return-from kill-buffer nil))
     (remhash (%buffer-name-key (elisp-buffer-name buf)) *buffer-table*)
@@ -1452,18 +1467,6 @@ This checks overlays first (when OBJECT is a buffer), then falls back to
        ((eq x '-) -1)
        (t (error "ELISP:PREFIX-NUMERIC-VALUE bad raw prefix: ~S" raw)))))
    (t (error "ELISP:PREFIX-NUMERIC-VALUE bad raw prefix: ~S" raw))))
-
-(cl:defun + (&rest args)
-  "Bring-up subset of ELisp `+'."
-  (if (null args)
-      0
-      (reduce #'cl:+ args :key #'%num :initial-value 0)))
-
-(cl:defun - (x &rest more)
-  "Bring-up subset of ELisp `-'."
-  (if (null more)
-      (cl:- (%num x))
-      (reduce #'cl:- more :key #'%num :initial-value (%num x))))
 
 (cl:defun 1+ (x)
   "Bring-up subset of ELisp `1+'."
@@ -3540,8 +3543,13 @@ When PARTIALLY is non-nil and POS is visible, return a small (X Y) list."
     (select-window w 'norecord)
     nil))
 
-(cl:defun delete-other-windows (&optional window)
-  "Bring-up subset of ELisp `delete-other-windows' (window list only)."
+(cl:defun delete-other-windows (&optional window _interactive)
+  "Bring-up subset of ELisp `delete-other-windows' (window list only).
+
+Upstream `lisp/window.el` defines `(delete-other-windows &optional window interactive)`
+with an `(interactive \"i\\np\")` spec.  Accept the extra INTERACTIVE argument
+for compatibility but ignore it."
+  (declare (cl:ignore _interactive))
   (let ((w (or window (selected-window))))
     (unless (window-live-p w)
       (error "ELISP:DELETE-OTHER-WINDOWS expected live window, got: ~S" w))
@@ -3571,7 +3579,24 @@ When PARTIALLY is non-nil and POS is visible, return a small (X Y) list."
   (ignore-errors (function-put 'split-window-right 'interactive-form '(interactive)))
   (ignore-errors (function-put 'delete-window 'interactive-form '(interactive)))
   (ignore-errors (function-put 'delete-other-windows 'interactive-form '(interactive)))
-  (ignore-errors (function-put 'other-window 'interactive-form '(interactive))))
+  (ignore-errors (function-put 'other-window 'interactive-form '(interactive)))
+  ;; Buffer basics used by the PTY editor gate: `C-x k` prompts for a buffer and
+  ;; accepts an empty input as "current buffer" (like upstream defaults).
+  (ignore-errors
+    (function-put
+     'kill-buffer
+     'interactive-form
+     '(interactive
+       (list
+        (completing-read
+         (string-to-unibyte "Kill buffer: ")
+         (mapcar #'buffer-name (buffer-list))
+         nil
+         t
+         nil
+         nil
+         (buffer-name (current-buffer))
+         nil))))))
 
 (cl:defun display-buffer (buffer-or-name &optional _action _frame)
   "Bring-up subset of ELisp `display-buffer' (TTY; minimal window list)."
@@ -3733,7 +3758,10 @@ When PARTIALLY is non-nil and POS is visible, return a small (X Y) list."
 (cl:defun float-time (&optional time)
   "Bring-up subset of ELisp `float-time'."
   (cond
-   ((null time) (cl:coerce (get-universal-time) 'double-float))
+   ((null time)
+    ;; In Emacs, (float-time) is seconds since the Unix epoch (same basis as
+    ;; `current-time' / `format-time-string').
+    (float-time (current-time)))
    ((numberp time) (cl:coerce time 'double-float))
    ((and (consp time) (integerp (car time)) (consp (cdr time)) (integerp (cadr time)))
     ;; Emacs time values are typically (HI LO USEC PSEC) where seconds are
@@ -3744,6 +3772,36 @@ When PARTIALLY is non-nil and POS is visible, return a small (X Y) list."
            (psec (cl:coerce (or (cadddr time) 0) 'double-float)))
       (+ (* hi 65536.0d0) lo (/ usec 1000000.0d0) (/ psec 1000000000000.0d0))))
    (t (error "ELISP:FLOAT-TIME unsupported time: ~S" time))))
+
+(cl:defun time-convert (time unit)
+  "Bring-up subset of ELisp `time-convert'.
+
+Support the cases needed by upstream `lisp/emacs-lisp/timer.el':
+- UNIT = 'list: return (HI LO USEC PSEC)
+- UNIT = t: return (TICKS . HZ)"
+  (cond
+   ((eq unit 'list)
+    (cond
+     ((null time) (current-time))
+     ((and (consp time) (integerp (car time)) (consp (cdr time)) (integerp (cadr time)))
+      (list (car time) (cadr time) (or (caddr time) 0) (or (cadddr time) 0)))
+     (t
+      (let* ((x (float-time time))
+             (sec (floor x))
+             (frac (- x sec))
+             (usec (floor (* frac 1000000.0d0)))
+             (hi (floor sec 65536))
+             (lo (mod sec 65536)))
+        (list hi lo usec 0)))))
+   ((eq unit t)
+    ;; Represent as integer ticks with a fixed Hz to preserve fractional
+    ;; seconds when TIME is a float.
+    (let* ((x (float-time time))
+           (hz 1000000)
+           (ticks (round (* x hz))))
+      (cons ticks hz)))
+   (t
+    (error "ELISP:TIME-CONVERT unsupported unit: ~S" unit))))
 
 (cl:defun time-add (time-a time-b)
   "Bring-up subset of ELisp `time-add'."

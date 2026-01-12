@@ -947,15 +947,6 @@ match to Elisp than CL:EQUAL.
   (pushnew feature features :test 'eq)
   feature)
 
-(cl:defun require (feature &optional _filename _noerror)
-  "Stub for ELisp `require'.
-
-Currently does not load code; it only records FEATURE as provided."
-  (declare (cl:ignore _filename _noerror))
-  (unless (featurep feature)
-    (provide feature))
-  feature)
-
 (cl:defmacro |`| (structure)
   "ELisp backquote reader form: (` STRUCTURE) -> (backquote STRUCTURE)."
   `(backquote ,structure))

@@ -536,29 +536,6 @@ process exit code."
         (cl:error 'clemacs:clemacs-quit)
         (uiop:quit code))))
 
-(defstruct elisp-timer
-  (secs 0)
-  (repeat nil)
-  (function nil)
-  (args nil)
-  (cancelled nil))
-
-(cl:defvar *elisp-timers* nil)
-
-(cl:defun run-with-idle-timer (secs repeat function &rest args)
-  "Bring-up stub for ELisp `run-with-idle-timer' (no real timers)."
-  (let ((t0 (make-elisp-timer :secs secs :repeat repeat :function function :args args)))
-    (push t0 *elisp-timers*)
-    t0))
-
-(cl:defun cancel-timer (timer)
-  "Bring-up stub for ELisp `cancel-timer'."
-  (unless (elisp-timer-p timer)
-    (error "ELISP:CANCEL-TIMER expected timer, got: ~S" timer))
-  (setf (elisp-timer-cancelled timer) t)
-  (setf *elisp-timers* (remove timer *elisp-timers* :test #'eq))
-  nil)
-
 (cl:defun make-obsolete (&rest _args)
   "Stub for ELisp `make-obsolete'."
   (declare (cl:ignore _args))

@@ -69,6 +69,11 @@ We drive the remaining work with three synced loops:
 2) Load: attempt to load more of `lisp/` under clemacs, recording missing pieces.
 3) Tests: run increasingly large upstream ERT suites under clemacs with explicit skip lists.
 
+Priority note (2026-01-12)
+- Deprioritize menu/UI chrome (`menu-bar`, `tab-bar`, GUI-ish surfaces) in favor of
+  core TTY editor behavior (buffers/windows/minibuffer/M-x/find-file) and ELisp
+  engine correctness (upstream ERT + shipped `lisp/` loads).
+
 Decision checkpoint (must ask the user)
 - If/when we hit a point where clemacs must diverge from upstream ELisp syntax or semantics beyond
   mechanical rewrites, stop and ask for an explicit decision with concrete examples and tradeoffs.
@@ -106,6 +111,16 @@ P3: Upstream ERT bring-up (coverage as a guardrail)
 - TODO: When something must be skipped, record it in `clemacs/contract/ert-upstream.known-fail.tests` with a dated reason (XPASS is a gate failure).
 
 ### Top TODOs (keep short)
+
+- DONE (2026-01-12): Make the PTY editor gate fail on any command-loop error (no
+  silent beeps), extend it to exercise buffer switching + window layout ops
+  reliably, and fix the underlying CL/ELisp function-cell mismatch (post-load
+  shims now use `fset`, not just `fdefinition`) plus minimal buffer-prompt
+  primitives (`read-buffer`, `internal-complete-buffer-except`, `other-buffer`,
+  `kill-buffer` interactive) to keep `mise run clemacs:test:tty` and
+  `mise run clemacs:verify` green.
+- TODO (2026-01-12): Bring up upstream minibuffer behavior: start loading `lisp/minibuffer.el` under `startup.tty-editor` (bisect+fix) and promote a small `test/lisp/minibuffer-tests.el` cluster into `clemacs:test:ert-upstream` (must-pass monotonic).
+- DONE (2026-01-12): Reduce CL-side noise: eliminate SBCL "redefining ELISP::..." warnings by keeping exactly one definition per ELisp surface symbol (prefer the newest bring-up version).
 
 - DONE (2026-01-11): Raise startup manifests in pdump order, skipping legacy encodings/LEIM (UTF-8 only); keep iterating with `--limit` bisection and `clemacs:report:first-failure`.
 - DONE (2026-01-11): Improve agent bring-up ergonomics: document `startup-check --limit` bisection clearly and make `clemacs:report:first-failure`/SBCL log paths discoverable.
