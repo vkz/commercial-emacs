@@ -78,3 +78,11 @@ lisp/emacs-lisp/cl-generic.el -
 
 # pdump: simple.
 lisp/simple.el -
+
+# pdump: loaddefs (covered by ldefs-boot).
+# NOTE: We intentionally do not load both `lisp/loaddefs.el` and
+# `lisp/ldefs-boot.el` here since they are identical in content.
+
+# bring-up: nadvice/minibuffer (first slice; caps will rise over time).
+lisp/emacs-lisp/nadvice.el 20
+lisp/minibuffer.el 20

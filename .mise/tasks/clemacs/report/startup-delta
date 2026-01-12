@@ -129,10 +129,20 @@ def ordered_unique(items):
     return out
 
 existing_unique = ordered_unique(existing)
-present_unique = [p for p in existing_unique if p in startup_set]
+def is_covered(p: str) -> bool:
+    if p in startup_set or p in skip_set:
+        return True
+    # `lisp/loaddefs.el` and `lisp/ldefs-boot.el` are identical in content.
+    if p == "lisp/loaddefs.el" and "lisp/ldefs-boot.el" in startup_set:
+        return True
+    if p == "lisp/ldefs-boot.el" and "lisp/loaddefs.el" in startup_set:
+        return True
+    return False
+
+present_unique = [p for p in existing_unique if p in startup_set or (p == "lisp/loaddefs.el" and "lisp/ldefs-boot.el" in startup_set)]
 skipped_unique = [p for p in existing_unique if p in skip_set]
-covered_unique = [p for p in existing_unique if p in startup_set or p in skip_set]
-missing_unique = [p for p in existing_unique if p not in startup_set and p not in skip_set]
+covered_unique = [p for p in existing_unique if is_covered(p)]
+missing_unique = [p for p in existing_unique if not is_covered(p)]
 
 out_dir.mkdir(parents=True, exist_ok=True)
 
