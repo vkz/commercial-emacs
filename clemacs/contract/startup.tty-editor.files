@@ -59,6 +59,10 @@ lisp/simple.el -
 lisp/isearch.el -
 lisp/replace.el -
 
+# pdump: syntax, font-lock.
+lisp/emacs-lisp/syntax.el -
+lisp/font-lock.el 200
+
 # bring-up: comint/shell (first slice; caps will rise over time).
 lisp/comint.el 60
 lisp/shell.el 80
