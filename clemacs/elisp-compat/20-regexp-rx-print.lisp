@@ -1076,6 +1076,15 @@ terminates at the shortest sequence."
             (advance st)))
         (nreverse out)))))
 
+(cl:defun mapcan (function &rest sequences)
+  "ELisp-ish MAPCAN.
+
+Like `mapcar', but concatenate list results with `nconc'."
+  (when (null sequences)
+    (error "ELISP:MAPCAN expects at least one sequence"))
+  (let ((parts (apply #'mapcar function sequences)))
+    (cl:reduce #'nconc parts :initial-value nil)))
+
 (cl:defun mapc (function &rest sequences)
   "ELisp-ish MAPC.
 

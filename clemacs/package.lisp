@@ -74,6 +74,7 @@
 	           #:typep
 	           #:mapcar
 	           #:mapc
+	           #:mapcan
 	           #:map-into
 	           #:prin1 #:princ #:prin1-to-string #:princ-to-string #:read-from-string
 	           #:read
@@ -84,6 +85,7 @@
            #:vectorp
            #:characterp
            #:type-of
+	           #:char-equal
 	           #:symbol-function #:symbol-name #:fboundp #:values #:symbol-value
 	           #:signal #:handler-bind #:error
 	           #:< #:<= #:= #:> #:>=

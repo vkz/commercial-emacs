@@ -148,6 +148,16 @@
    (t
     (error "ELISP:UPCASE expects a string or character code, got: ~S" s))))
 
+(cl:defun char-equal (a b &rest more)
+  "ELisp-ish CHAR-EQUAL (case-insensitive)."
+  (let ((ca (%elisp-code->char a))
+        (cb (%elisp-code->char b)))
+    (unless (cl:char-equal ca cb)
+      (return-from char-equal nil))
+    (dolist (x more t)
+      (unless (cl:char-equal ca (%elisp-code->char x))
+        (return nil)))))
+
 (cl:defun string= (a b)
   "ELisp-ish STRING=.
 

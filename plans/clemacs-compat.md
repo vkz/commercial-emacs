@@ -190,6 +190,17 @@ Runtime
   - Test breadcrumbs: `clemacs/contract/semantics.microtests.sexp`
     (`query-replace-noninteractive-replaces-all`).
 
+- 2026-01-12: `easy-menu-do-define` is a no-op when `x-popup-menu` is missing
+  - Decision: when `x-popup-menu` is not `fboundp`, `easy-menu-do-define`
+    returns nil (leaving the menu variable defined but empty) instead of
+    constructing menu keymaps.
+  - Rationale: clemacs currently lacks the menu UI plumbing; core modes define
+    menus via `easy-menu-define`, and those definitions should not block TTY
+    bring-up or tests.
+  - Breadcrumbs:
+    - Guard: `lisp/emacs-lisp/easymenu.el` (`easy-menu-do-define` early return)
+    - UX probe: `clemacs/contract/tty-ux.bindings.txt` via `mise run clemacs:report:progress`
+
 ## Compiler/codegen notes (for later)
 
 These are constraints the eventual ELisp→CL compiler must preserve; if a new

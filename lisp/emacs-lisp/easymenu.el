@@ -171,30 +171,37 @@ This is expected to be bound to a mouse event."
   ;; `easy-menu-define' in order to make byte compiled files
   ;; compatible.  Therefore everything interesting is done in this
   ;; function.
-  (let ((keymap (easy-menu-create-menu (car menu) (cdr menu))))
-    (when symbol
-      (set symbol keymap)
-      (defalias symbol
-	(lambda (event) (:documentation doc) (interactive "@e")
-	   (x-popup-menu event
-			 (or (and (symbolp keymap)
-				  (funcall
-				   (or (plist-get (get keymap 'menu-prop)
-						  :filter)
-                                       #'identity)
-				   (symbol-function keymap)))
-			     keymap))))
-      ;; These symbols are commands, but not interesting for users
-      ;; to `M-x TAB'.
-      (function-put symbol 'completion-predicate #'ignore))
-    (dolist (map (if (keymapp maps) (list maps) maps))
-      (define-key map
-        (vector 'menu-bar (if (symbolp (car menu))
-                              (car menu)
-                            ;; If a string, then use the downcased
-                            ;; version for greater backwards compatibility.
-                            (intern (downcase (car menu)))))
-        (easy-menu-binding keymap (car menu))))))
+  (if (not (fboundp 'x-popup-menu))
+      (progn
+        ;; clemacs: we currently do not implement the menu UI.  Avoid
+        ;; letting menu definitions block loading core modes in TTY bring-up.
+        (when symbol
+          (set symbol nil))
+        nil)
+    (let ((keymap (easy-menu-create-menu (car menu) (cdr menu))))
+      (when symbol
+        (set symbol keymap)
+        (defalias symbol
+	  (lambda (event) (:documentation doc) (interactive "@e")
+	     (x-popup-menu event
+			   (or (and (symbolp keymap)
+				    (funcall
+				     (or (plist-get (get keymap 'menu-prop)
+						    :filter)
+                                         #'identity)
+				     (symbol-function keymap)))
+			       keymap))))
+        ;; These symbols are commands, but not interesting for users
+        ;; to `M-x TAB'.
+        (function-put symbol 'completion-predicate #'ignore))
+      (dolist (map (if (keymapp maps) (list maps) maps))
+        (define-key map
+          (vector 'menu-bar (if (symbolp (car menu))
+                                (car menu)
+                              ;; If a string, then use the downcased
+                              ;; version for greater backwards compatibility.
+                              (intern (downcase (car menu)))))
+          (easy-menu-binding keymap (car menu)))))))
 
 (defun easy-menu-filter-return (menu &optional name)
  "Convert MENU to the right thing to return from a menu filter.

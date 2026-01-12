@@ -79,6 +79,7 @@ Common patterns:
 
 - `SB-EXT:SYMBOL-PACKAGE-LOCKED-ERROR` when adding an ELisp compat definition that collides with CL (e.g. `string-trim`)
   - Add the symbol to `clemacs/package.lisp` `defpackage #:elisp` `:shadow`, and qualify host uses as `cl:...` (e.g. `cl:string-trim`) where needed.
+- If you add new `:shadow` entries, audit `clemacs/elisp.lisp` (and other CL-side macros) for unqualified uses of those symbols and switch them to `cl:...` so the system still compiles before the compat definition is loaded.
 - NaN/INF-related failures: SBCL traps IEEE exceptions by default (e.g. comparing NaNs can signal `FLOATING-POINT-INVALID-OPERATION`); disable traps early via `sb-int:set-floating-point-modes :traps nil` (see `clemacs/elisp.lisp`).
 - When writing CL-level helpers in the `ELISP` package, qualify `cl:format` (since `format` is an ELisp function) and use `~%` or `(string #\Newline)` for newlines (CL does not treat `\"\\n\"` as a newline escape).
 - SBCL's `cl:dolist` expansion may insert `SB-EXT:TRULY-THE (member ...)` for literal lists, which breaks when the elements are themselves lists; prefer `ELISP::DOLIST` (shadowed in `clemacs/package.lisp`) for ELisp code and compat helpers.

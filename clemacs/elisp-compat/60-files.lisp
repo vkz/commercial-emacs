@@ -244,6 +244,24 @@ expanded file name string."
   "Bring-up stub for the C primitive `user-uid'."
   0)
 
+(cl:defvar user-login-name nil)
+
+(cl:defun user-login-name (&optional _uid)
+  "Bring-up subset of the C primitive `user-login-name'."
+  (or user-login-name
+      (let ((name (or (uiop:getenv "LOGNAME")
+                      (uiop:getenv "USER"))))
+        (when name
+          (setf user-login-name name))
+        name)))
+
+(cl:defvar data-directory
+  (let* ((clemacs-dir (uiop:ensure-directory-pathname
+                       (asdf:system-source-directory :clemacs)))
+         (root (uiop:pathname-parent-directory-pathname clemacs-dir))
+         (etc (merge-pathnames #p"etc/" (uiop:ensure-directory-pathname root))))
+    (namestring etc)))
+
 (cl:defun %posix-access-ok-p (path mode)
   #+sbcl
   (handler-case

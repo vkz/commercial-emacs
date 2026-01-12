@@ -1608,4 +1608,24 @@
   :expr "(time-convert 0 'list)"
   :expected "(0 0 0 0)"
   :emacs :match)
+
+ (:name "mapcan-over-string"
+  :expr "(mapcan (lambda (c) (list c)) \"ab\")"
+  :expected "(97 98)"
+  :emacs :match)
+
+ (:name "user-login-name-matches-env"
+  :expr "(string= (user-login-name) (or (getenv \"LOGNAME\") (getenv \"USER\")))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "data-directory-is-accessible"
+  :expr "(and (boundp 'data-directory) (stringp data-directory) (file-accessible-directory-p data-directory))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "char-equal-accepts-char-codes"
+  :expr "(and (char-equal ?A ?a) (not (= ?A ?a)) (= ?a ?a ?a))"
+  :expected "t"
+  :emacs :match)
 )
