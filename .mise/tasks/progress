@@ -37,6 +37,35 @@ fi
 
 if [[ "${is_fresh}" != "true" ]]; then
   mise run clemacs:report:progress -- --build-dir "${build_dir}" >/dev/null
+else
+  # Invalidate git-rev cache when local inputs changed without a commit, or when
+  # the clemacs executable was rebuilt since the last report.
+  report_ref=""
+  if [[ -f "${report_json}" ]]; then
+    report_ref="${report_json}"
+  elif [[ -f "${report_md}" ]]; then
+    report_ref="${report_md}"
+  fi
+
+  if [[ -n "${report_ref}" ]]; then
+    if [[ -x "${project_root}/${build_dir}/bin/emacs" && "${project_root}/${build_dir}/bin/emacs" -nt "${report_ref}" ]]; then
+      is_fresh=false
+    fi
+    if [[ -f "${project_root}/clemacs/contract/tty-ux.bindings.txt" && "${project_root}/clemacs/contract/tty-ux.bindings.txt" -nt "${report_ref}" ]]; then
+      is_fresh=false
+    fi
+    if find "${project_root}/clemacs" \
+        -type f \
+        \( -name '*.lisp' -o -name '*.asd' -o -name 'qlfile' -o -name 'qlfile.lock' \) \
+        -newer "${report_ref}" \
+        -print -quit | rg -q .; then
+      is_fresh=false
+    fi
+  fi
+
+  if [[ "${is_fresh}" != "true" ]]; then
+    mise run clemacs:report:progress -- --build-dir "${build_dir}" >/dev/null
+  fi
 fi
 
 python3 - <<'PY'

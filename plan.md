@@ -120,7 +120,10 @@ P3: Upstream ERT bring-up (coverage as a guardrail)
 - DONE (2026-01-12): Stabilize the PTY editor gate input stream (handle partial PTY writes; treat query-replace confirmation as a single keystroke).
 - DONE (2026-01-12): Implement TTY window geometry primitives used by upstream `window.el` (pixelwise sizes + edges deps), remove window post-load size shims to avoid recursion, and add one semantics microtest per primitive.
 - DONE (2026-01-12): Fix two bring-up correctness bugs uncovered while gating: `symbol-value` now signals `void-variable` for truly unbound vars, and `function-get` no longer loops forever on circular function indirections.
-- TODO: Improve `clemacs:test:contract -- --level elisp-core` iteration time/visibility: make `startup-check` emit periodic progress (or chunk checkpoints) so long runs are obviously live.
+- DONE (2026-01-12): Improve `clemacs:test:contract -- --level elisp-core` iteration time/visibility: make `startup-check` emit periodic progress + async heartbeat output (and optional async backtrace) so long runs are obviously live.
+- DONE (2026-01-12): Fix `startup-check` hang in `lisp/textmodes/text-mode.el` (form 6): ensure `text-mode-map` is an early empty keymap (not nil) so the `defcustom` setter's `keymap-unset` does not stall the loader.
+- DONE (2026-01-12): Make `mise run progress` stable across builds: rebuild `build/clemacs/bin/emacs` before probing tty UX keybindings and invalidate cached progress when inputs are newer (fixes occasional `0/22` false-red display).
+- DONE (2026-01-12): Make interactive clemacs default to a usable editor: `emacs-main` defaults `--startup-level` to `tty-editor` (batch default stays `smoke`).
 
 ### Milestone B1-8: load the shipped `lisp/` tree under clemacs
 

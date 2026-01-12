@@ -119,34 +119,126 @@ ported copy instead of the original source tree path."
              (namestring (merge-pathnames #p"clemacs/ported/lisp/" project-root))
              (namestring (merge-pathnames #p"lisp/emacs-lisp/" project-root))
              (namestring (merge-pathnames #p"lisp/" project-root)))))
-    (dolist (line (%read-noncomment-lines manifest))
-      (when (and limit (>= loaded limit))
-        (return))
-      (multiple-value-bind (rel-path entry-max-forms) (%parse-manifest-entry line)
-        (cond
-         ((gethash rel-path skips)
-          (cl:format t "[clemacs:load] skip ~A~%" rel-path))
-         (t
-          (let* ((src-path (merge-pathnames rel-path project-root))
-                 (ported-path (merge-pathnames rel-path ported-root))
-                 (path (if (probe-file ported-path) ported-path src-path))
-                 (eff-max-forms
-                   (cond
-                    ((eq entry-max-forms :no-limit) nil)
-                    ((eq entry-max-forms :inherit) max-forms)
-                    (t (or entry-max-forms max-forms)))))
-            (when show-progress
-              (cl:format t "[clemacs:load] load ~A~@[ max-forms=~D~]~%"
-                         rel-path eff-max-forms))
-            (let ((t0 (and show-timings (get-internal-real-time))))
-            (load-elisp-file path :max-forms eff-max-forms)
-              (when t0
-                (let* ((dt (- (get-internal-real-time) t0))
-                       (secs (/ (float dt) internal-time-units-per-second)))
-                  (cl:format t "[clemacs:load] done ~A seconds=~,3F~%"
-                             rel-path secs))))
-            (incf loaded))))))
-    0))
+    (setf *clemacs-load-current-rel-path* nil
+          *clemacs-load-current-form-index* 0
+          *clemacs-load-current-max-forms* nil
+          *clemacs-load-current-loaded-count* 0)
+    (let* ((async-heartbeat (%truthy-env-p "CLEMACS_LOAD_ASYNC_HEARTBEAT"))
+           (async-secs
+             (let ((s (uiop:getenv "CLEMACS_LOAD_ASYNC_HEARTBEAT_SECS")))
+               (handler-case
+                   (let ((n (and s (parse-integer s :junk-allowed t))))
+                     (if (and (integerp n) (> n 0)) n 10))
+                 (error () 10))))
+           (async-backtrace-secs
+             (let ((s (uiop:getenv "CLEMACS_LOAD_ASYNC_BACKTRACE_SECS")))
+               (handler-case
+                   (let ((n (and s (parse-integer s :junk-allowed t))))
+                     (and (integerp n) (> n 0) n))
+                 (error () nil))))
+           (async-backtrace-count
+             (let ((s (uiop:getenv "CLEMACS_LOAD_ASYNC_BACKTRACE_COUNT")))
+               (handler-case
+                   (let ((n (and s (parse-integer s :junk-allowed t))))
+                     (if (and (integerp n) (> n 0)) n 50))
+                 (error () 50))))
+           (stop nil)
+           #+sbcl
+           (th nil)
+           #+sbcl
+           (main-thread sb-thread:*current-thread*))
+      #+sbcl
+      (when async-heartbeat
+        (setf th
+              (sb-thread:make-thread
+               (lambda ()
+                 (let ((last-rel nil)
+                       (last-idx -1)
+                       (last-mf nil)
+                       (last-done -1)
+                       (stuck-secs 0)
+                       (dumped-backtrace nil))
+                   (loop until stop do
+                     (sleep async-secs)
+                     (let ((rel *clemacs-load-current-rel-path*)
+                           (idx *clemacs-load-current-form-index*)
+                           (mf *clemacs-load-current-max-forms*)
+                           (done *clemacs-load-current-loaded-count*))
+                       (when rel
+                         (cl:format t "[clemacs:load] alive loaded=~D file=~A form=~D~@[ /~D~]~%"
+                                    done rel idx mf)
+                         (finish-output))
+                       (when (and async-backtrace-secs rel)
+                         (if (and (equal rel last-rel)
+                                  (= idx last-idx)
+                                  (= done last-done)
+                                  (eql mf last-mf))
+                             (incf stuck-secs async-secs)
+                             (setf last-rel rel
+                                   last-idx idx
+                                   last-mf mf
+                                   last-done done
+                                   stuck-secs 0
+                                   dumped-backtrace nil))
+                         (when (and (not dumped-backtrace)
+                                    (>= stuck-secs async-backtrace-secs))
+                           (setf dumped-backtrace t)
+                           (ignore-errors
+                             (sb-thread:interrupt-thread
+                              main-thread
+                              (lambda ()
+                                (cl:format t "[clemacs:load] backtrace (stuck ~D secs): loaded=~D file=~A form=~D~@[ /~D~]~%"
+                                           stuck-secs done rel idx mf)
+                                (finish-output)
+                                (ignore-errors
+                                  (sb-debug:print-backtrace
+                                   :stream *standard-output*
+                                   :count async-backtrace-count))
+                                (finish-output))))))))))
+               :name "clemacs-load-heartbeat")))
+      (unwind-protect
+          (progn
+            (dolist (line (%read-noncomment-lines manifest))
+              (when (and limit (>= loaded limit))
+                (return))
+              (multiple-value-bind (rel-path entry-max-forms) (%parse-manifest-entry line)
+                (setf *clemacs-load-current-rel-path* rel-path
+                      *clemacs-load-current-form-index* 0
+                      *clemacs-load-current-max-forms* nil
+                      *clemacs-load-current-loaded-count* loaded)
+                (cond
+                 ((gethash rel-path skips)
+                  (cl:format t "[clemacs:load] skip ~A~%" rel-path)
+                  (finish-output))
+                 (t
+                  (let* ((src-path (merge-pathnames rel-path project-root))
+                         (ported-path (merge-pathnames rel-path ported-root))
+                         (path (if (probe-file ported-path) ported-path src-path))
+                         (eff-max-forms
+                           (cond
+                            ((eq entry-max-forms :no-limit) nil)
+                            ((eq entry-max-forms :inherit) max-forms)
+                            (t (or entry-max-forms max-forms)))))
+                    (setf *clemacs-load-current-max-forms* eff-max-forms)
+                    (when show-progress
+                      (cl:format t "[clemacs:load] load ~A~@[ max-forms=~D~]~%"
+                                 rel-path eff-max-forms)
+                      (finish-output))
+                    (let ((t0 (and show-timings (get-internal-real-time))))
+                      (load-elisp-file path :max-forms eff-max-forms)
+                      (when t0
+                        (let* ((dt (- (get-internal-real-time) t0))
+                               (secs (/ (float dt) internal-time-units-per-second)))
+                          (cl:format t "[clemacs:load] done ~A seconds=~,3F~%"
+                                     rel-path secs))))
+                    (incf loaded)
+                    (setf *clemacs-load-current-loaded-count* loaded)))))))
+            (setf *clemacs-load-current-rel-path* nil)
+            0)
+        (setf stop t)
+        #+sbcl
+        (when th
+          (ignore-errors (sb-thread:join-thread th))))))
 
 (cl:defun load-bootstrap-set (&key (project-root (uiop:getcwd))
                                    (manifest #p"clemacs/contract/bootstrap.files")

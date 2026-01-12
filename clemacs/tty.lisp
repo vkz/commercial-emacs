@@ -159,6 +159,24 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
       (multiple-value-call #'values (tty-winsize))
     (error () (values 24 80))))
 
+(defun %tty-window-status-suffix ()
+  (handler-case
+      (let* ((wins (and (fboundp 'elisp::window-list)
+                        (ignore-errors (elisp::window-list))))
+             (win-count (and (listp wins) (length wins)))
+             (sel-win (and (fboundp 'elisp::selected-window)
+                           (ignore-errors (elisp::selected-window))))
+             (sel-buf (and sel-win (fboundp 'elisp::window-buffer)
+                           (ignore-errors (elisp::window-buffer sel-win))))
+             (sel-name (and sel-buf (fboundp 'elisp::buffer-name)
+                            (ignore-errors (elisp::buffer-name sel-buf))))
+             (sel-name* (and sel-name (elisp::%elisp-string->cl-string sel-name))))
+        (cond
+         ((and (integerp win-count) (> win-count 1))
+          (format nil "  (windows: ~D~@[ selected: ~A~])" win-count sel-name*))
+         (t "")))
+    (error () "")))
+
 (defun %buffer-line-starts (text)
   (let ((starts (list 0)))
     (loop for i from 0 below (length text) do
@@ -186,11 +204,12 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
            (line-starts (%buffer-line-starts text))
            (frame (make-empty-grid-frame rows cols)))
       (setf (aref (grid-frame-lines frame) 0)
-            (format nil "clemacs tty: ~A"
+            (format nil "clemacs tty: ~A~A"
                     (or (and path (not (string= path "")) path)
                         (let ((bn (elisp::buffer-name buf)))
                           (if bn (elisp::%elisp-string->cl-string bn) "<buffer>"))
-                        "<buffer>")))
+                        "<buffer>")
+                    (%tty-window-status-suffix)))
       (setf (aref (grid-frame-lines frame) 1)
             (or (%tty-echo-line) ""))
 
@@ -223,7 +242,7 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
           (let ((help-row (+ header-lines content-lines 1)))
             (when (< help-row rows)
               (setf (aref (grid-frame-lines frame) help-row)
-                    "C-x C-c quit  C-x C-s save  arrows/C-b/C-f/C-p/C-n move")))
+                    "C-x C-c quit  C-x C-s save  C-x 2 split  C-x o other  C-x 0 delete")))
 
           (setf (grid-frame-cursor-row frame) (+ header-lines 1 (- cursor-line top))
                 (grid-frame-cursor-col frame) (min cols (1+ cursor-col)))

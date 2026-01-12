@@ -15,6 +15,13 @@
   (declare (cl:ignore _name))
   (list 'keymap nil (make-elisp-keymap)))
 
+(cl:defvar text-mode-map (make-sparse-keymap)
+  "Bring-up placeholder for `text-mode-map'.
+
+Upstream defines this in `lisp/textmodes/text-mode.el` via `defvar-keymap`, but
+we want it bound early enough that custom setters can safely adjust bindings
+during startup bring-up.")
+
 (cl:defvar special-event-map (make-sparse-keymap)
   "Bring-up default for the C-defined variable `special-event-map'.")
 

@@ -1082,6 +1082,11 @@ We currently preserve:
            while (cl:< ins pos)
            count 1))
 
+(cl:defvar *clemacs-load-current-rel-path* nil)
+(cl:defvar *clemacs-load-current-form-index* 0)
+(cl:defvar *clemacs-load-current-max-forms* nil)
+(cl:defvar *clemacs-load-current-loaded-count* 0)
+
 (cl:defun load-elisp-file (path &key (package (find-package "ELISP")) (max-forms nil))
   (let ((raw (uiop:read-file-string path :external-format :utf-8)))
     (multiple-value-bind (sanitized _insertions)
@@ -1094,9 +1099,21 @@ We currently preserve:
                (load-file-name (namestring path))
                (current-load-list nil)
                (debug-file (uiop:getenv "CLEMACS_LOAD_DEBUG_FILE"))
-               (debugp (or debug-file (and (uiop:getenv "CLEMACS_LOAD_DEBUG") t))))
+               (debugp (or debug-file (and (uiop:getenv "CLEMACS_LOAD_DEBUG") t)))
+               (show-progress (%truthy-env-p "CLEMACS_LOAD_PROGRESS")))
           (declare (special load-file-name current-load-list load-history))
-          (flet ((%maybe-log-load-error (e form-index)
+          (setf *clemacs-load-current-form-index* 0)
+          (setf *clemacs-load-current-max-forms* max-forms)
+          (flet ((%env-posint (name default)
+                   (let ((v (uiop:getenv name)))
+                     (cond
+                      ((or (null v) (string= v "")) default)
+                      (t
+                       (handler-case
+                           (let ((n (parse-integer v :junk-allowed t)))
+                             (and (integerp n) (> n 0) n))
+                         (error () default))))))
+                 (%maybe-log-load-error (e form-index)
                    (when debugp
                      (let ((out (if debug-file
                                     (open debug-file
@@ -1116,62 +1133,95 @@ We currently preserve:
             (let ((ok nil))
               (unwind-protect
                   (progn
-                    (loop with form-index = 0 do
-                      (let ((form
-                              (handler-case
-                                  (cl:read in nil :eof)
-                                (cl:error (e)
-                                  (let ((next-index (1+ form-index)))
-                                    (%maybe-log-load-error e next-index)
-                                    (let ((inv (inventory-entry-for-condition
-                                                e
-                                                :start-dir (uiop:pathname-directory-pathname path))))
-                                      (cl:error 'elisp-load-error
-                                                :path path
-                                                :form-index next-index
-                                                :form :read-error
-                                                :cause e
-                                                :inventory-entry inv)))))))
-                        (when (eq form :eof)
-                          (setf ok t)
-                          (return))
-                        (incf form-index)
-                        (handler-case
-                            (cl:handler-bind
-                                ((cl:error
-                                   (lambda (e)
-                                     (%maybe-log-load-error e form-index)
-                                     nil)))
-                              #+sbcl
-                              (cl:handler-bind
-                                  ((sb-kernel:redefinition-warning #'muffle-warning))
-                                (cl:eval (%elisp-rewrite form)))
-                              #-sbcl
-                              (cl:eval (%elisp-rewrite form)))
-                          (cl:error (e)
-                            (let ((inv (inventory-entry-for-condition
-                                        e
-                                        :start-dir (uiop:pathname-directory-pathname path))))
-                              (cl:error 'elisp-load-error
-                                        :path path
-                                        :form-index form-index
-                                        :form form
-                                        :cause e
-                                        :inventory-entry inv))))
-                        (when (and max-forms (>= form-index max-forms))
-                          (setf ok t)
-                          (return))))
+                    (let* ((hb-secs (and show-progress (%env-posint "CLEMACS_LOAD_HEARTBEAT_SECS" 10)))
+                           (hb-forms (and show-progress (%env-posint "CLEMACS_LOAD_HEARTBEAT_FORMS" 1000)))
+                           (t0 (and show-progress (get-internal-real-time)))
+                           (next-time
+                             (and t0 hb-secs
+                                  (+ t0 (* hb-secs internal-time-units-per-second))))
+                           (next-form
+                             (and hb-forms hb-forms)))
+                      (labels ((maybe-heartbeat (form-index)
+                                 (when show-progress
+                                   (let ((now (get-internal-real-time)))
+                                     (when (or (and next-form (>= form-index next-form))
+                                               (and next-time (>= now next-time)))
+                                       (let* ((dt (- now (or t0 now)))
+                                              (secs (/ (float dt) internal-time-units-per-second))
+                                              (pct (and max-forms (> max-forms 0)
+                                                        (/ (* 100.0 form-index) max-forms))))
+                                         (cl:format t "[clemacs:load] heartbeat ~A form=~D~@[ /~D~]~@[ (~,1F%%)~] seconds=~,1F~%"
+                                                    load-file-name
+                                                    form-index
+                                                    max-forms
+                                                    pct
+                                                    secs)
+                                         (finish-output))
+                                       (when (and hb-forms next-form)
+                                         (setf next-form (+ form-index hb-forms)))
+                                       (when (and hb-secs next-time)
+                                         (setf next-time
+                                               (+ now (* hb-secs internal-time-units-per-second)))))))))
+                        (loop with form-index = 0 do
+                          (let ((form
+                                  (handler-case
+                                      (cl:read in nil :eof)
+                                    (cl:error (e)
+                                      (let ((next-index (1+ form-index)))
+                                        (%maybe-log-load-error e next-index)
+                                        (let ((inv (inventory-entry-for-condition
+                                                    e
+                                                    :start-dir (uiop:pathname-directory-pathname path))))
+                                          (cl:error 'elisp-load-error
+                                                    :path path
+                                                    :form-index next-index
+                                                    :form :read-error
+                                                    :cause e
+                                                    :inventory-entry inv)))))))
+                            (when (eq form :eof)
+                              (setf ok t)
+                              (return))
+                            (incf form-index)
+                            (setf *clemacs-load-current-form-index* form-index)
+                            (maybe-heartbeat form-index)
+                            (handler-case
+                                (cl:handler-bind
+                                    ((cl:error
+                                       (lambda (e)
+                                         (%maybe-log-load-error e form-index)
+                                         nil)))
+                                  #+sbcl
+                                  (cl:handler-bind
+                                      ((sb-kernel:redefinition-warning #'muffle-warning))
+                                    (cl:eval (%elisp-rewrite form)))
+                                  #-sbcl
+                                  (cl:eval (%elisp-rewrite form)))
+                              (cl:error (e)
+                                (let ((inv (inventory-entry-for-condition
+                                            e
+                                            :start-dir (uiop:pathname-directory-pathname path))))
+                                  (cl:error 'elisp-load-error
+                                            :path path
+                                            :form-index form-index
+                                            :form form
+                                            :cause e
+                                            :inventory-entry inv))))
+                            (when (and max-forms (>= form-index max-forms))
+                              (setf ok t)
+                              (return)))))))
                     (%maybe-install-post-load-shims path)
                     (setf ok t))
                 ;; Minimal `load-history` support: capture `define-symbol-prop`
                 ;; registrations so `symbol-file` can locate tests.
                 (when ok
-                  (push (cons load-file-name current-load-list) load-history))))))))))
+                  (push (cons load-file-name current-load-list) load-history)))))))))
 
 (cl:defvar *pp-to-string-orig* nil)
 (cl:defvar *pp-to-string-shim* nil)
 (cl:defvar *define-key-after-orig* nil)
 (cl:defvar *define-key-after-shim* nil)
+(cl:defvar *keymap-unset-orig* nil)
+(cl:defvar *keymap-unset-shim* nil)
 
 (cl:defun %pp--whitespace-only-line-p (s start end)
   (and (< start end)
@@ -1244,6 +1294,32 @@ ordering constraint (AFTER): we delegate to `define-key`."
                 (setf km (cdr km)))
               (define-key km key definition))))
     (setf (fdefinition 'define-key-after) *define-key-after-shim*))
+
+(cl:defun %install-keymap-unset-shim ()
+  "Wrap `keymap-unset' to avoid validator-related hangs during bring-up.
+
+Upstream `lisp/keymap.el`'s `keymap-unset' is a thin wrapper around `define-key`,
+but it also performs syntax validation via `key-valid-p'.  During clemacs
+bring-up we prefer to keep the loader moving even if key validation is
+incomplete, and we have observed pathological stalls in that validation path.
+
+This shim preserves the operational behavior of `keymap-unset' (unset vs remove)
+but skips the validation step."
+  (when (and (fboundp 'keymap-unset)
+             (fboundp 'define-key)
+             (not (and *keymap-unset-shim*
+                       (eq (fdefinition 'keymap-unset) *keymap-unset-shim*))))
+    (setf *keymap-unset-orig* (fdefinition 'keymap-unset))
+    (setf *keymap-unset-shim*
+          (lambda (keymap key &optional remove)
+            ;; Match upstream: KEY is expected to be `kbd' syntax.  Accept
+            ;; already-parsed vectors as well, since some callers pass those.
+            (let ((key* (cond
+                         ((stringp key) (key-parse (string-to-multibyte key)))
+                         (t key))))
+              (define-key keymap key* nil remove))))
+    (setf (fdefinition 'keymap-unset) *keymap-unset-shim*))
+  nil)
   nil)
 
 (cl:defun %install-window-display-shims ()
@@ -1318,6 +1394,12 @@ single-window model, so prefer the small compat implementations from
       (when (and (fboundp 'clemacs--called-interactively-p) (fboundp 'fset))
         (ignore-errors
           (fset 'called-interactively-p (cl:function clemacs--called-interactively-p)))))
+    ;; `keymap-unset' in `lisp/keymap.el` is operationally simple, but its
+    ;; validator can stall under clemacs; install a shim after loading keymap.
+    (when (and (stringp name) (stringp type)
+               (string= (string-downcase name) "keymap")
+               (string= (string-downcase type) "el"))
+      (%install-keymap-unset-shim))
     ;; Keep `macroexpand-all' stack-safe under SBCL.  `lisp/emacs-lisp/macroexp.el`
     ;; defines a full-featured expander, but it can blow the control stack while
     ;; bringing up larger preloads (e.g. lisp-mode's `let-when-compile`).  Use

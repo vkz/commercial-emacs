@@ -70,6 +70,7 @@ Common patterns:
 - If an upstream defun assumes list-keymap internals (e.g. `define-key-after` from `lisp/subr.el`), prefer a post-load shim in `clemacs/elisp.lisp` `%maybe-install-post-load-shims` to replace the definition after that file loads.
 - CL type errors / wrong arity wrapped by `condition-case`
   - Re-run with `CLEMACS_DEBUG_CONDITION_CASE=1` to print the host backtrace at the catch boundary.
+- If `startup-check` looks "hung" (no progress output), set `CLEMACS_LOAD_ASYNC_BACKTRACE_SECS=30` (optionally `CLEMACS_LOAD_ASYNC_BACKTRACE_COUNT=60`) to print an SBCL backtrace for the stuck form.
 
 - `:READ-ERROR` “Package X does not exist” / “Symbol ... not found in the X package” while loading ELisp
   - Usually indicates an upstream ELisp symbol containing `:` (e.g. `GUI:bottom`) which the current reader treats as CL package syntax.

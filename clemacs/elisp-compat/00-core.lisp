@@ -67,7 +67,7 @@
 (cl:defvar auto-mode-alist nil)
 (cl:defvar magic-fallback-mode-alist nil)
 (cl:defvar minor-mode-map-alist nil)
-(cl:defvar text-mode-map nil)
+(cl:defvar text-mode-map)
 (cl:defvar load-path nil)
 (cl:defvar load-file-rep-suffixes nil)
 (cl:defvar temporary-file-directory nil)

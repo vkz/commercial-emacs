@@ -210,11 +210,29 @@ ert_total_estimate="$(
 tty_ux_ok="0"
 tty_ux_total="0"
 tty_ux_contract="clemacs/contract/tty-ux.bindings.txt"
+tty_ux_out_path="${project_root}/${build_dir}/tmp/tty-ux.bindings.out"
+tty_ux_err_path="${tty_ux_out_path}.err"
+if [[ -f "${tty_ux_contract}" ]]; then
+  stale=true
+  if [[ -x "${project_root}/${build_dir}/bin/emacs" ]]; then
+    stale=false
+    if find "${project_root}/clemacs" \
+        -type f \
+        \( -name '*.lisp' -o -name '*.asd' -o -name 'qlfile' -o -name 'qlfile.lock' \) \
+        -newer "${project_root}/${build_dir}/bin/emacs" \
+        -print -quit | rg -q .; then
+      stale=true
+    fi
+  fi
+  if [[ "${stale}" == "true" ]]; then
+    mise run clemacs:emacs:build -- --build-dir "${build_dir}" >/dev/null
+  fi
+fi
+
+tty_ux_probe_status="missing"
 if [[ -f "${tty_ux_contract}" && -x "${project_root}/${build_dir}/bin/emacs" ]]; then
   export CLEMACS_SUBSTRATE_DYLIB="${project_root}/${build_dir}/bin/libemxsubstrate.dylib"
   tty_ux_total="$(count_noncomment_lines "${tty_ux_contract}")"
-  tty_ux_out_path="${project_root}/${build_dir}/tmp/tty-ux.bindings.out"
-  tty_ux_err_path="${tty_ux_out_path}.err"
   mkdir -p "$(dirname "${tty_ux_out_path}")"
   "${project_root}/${build_dir}/bin/emacs" \
     --batch \
@@ -226,6 +244,10 @@ if [[ -f "${tty_ux_contract}" && -x "${project_root}/${build_dir}/bin/emacs" ]];
   tty_ux_ok="$(
     rg -o "[0-9]+/[0-9]+" "${tty_ux_out_path}" | tail -n 1 | cut -d/ -f1 || echo 0
   )"
+  tty_ux_probe_status="ok"
+  if ! rg -q "^summary\\t" "${tty_ux_out_path}"; then
+    tty_ux_probe_status="fail"
+  fi
 fi
 
 mise run clemacs:inventory:used-startup-check -- --build-dir "${build_dir}" >/dev/null
@@ -368,6 +390,7 @@ printf "%s\n" "${meters_json}" >"${report_json_path}"
   echo "| inventory used (subrs) | ${inv_used}/${inv_total} | \`$(render_bar "${inv_used}" "${inv_total}")\` |"
   echo
   echo "Details:"
+  echo "- tty UX probe status: ${tty_ux_probe_status}"
   echo "- tty UX per-binding: \`${tty_ux_out_path}\`"
   echo "- tty UX stderr: \`${tty_ux_err_path}\`"
   echo "- meters JSON: \`${report_json_path}\`"
