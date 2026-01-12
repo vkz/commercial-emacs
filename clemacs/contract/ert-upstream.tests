@@ -211,6 +211,11 @@ completion-pcm-test-3
 completion-pcm-test-4
 completion-pcm-test-5
 completion-pcm-test-6
+completion-substring-test-1
+completion-substring-test-2
+completion-substring-test-3
+completion-substring-test-4
+completion-substring-test-5
 test-map-nested-elt
 test-map-nested-elt-default
 test-mapp
