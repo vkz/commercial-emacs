@@ -528,9 +528,10 @@ This supports COLLECTION as either:
     (when (null cands)
       (return-from try-completion nil))
     (setf cands (nreverse cands))
-    ;; NOTE: even with completion-ignore-case non-nil, Emacs returns T only
-    ;; when STRING exactly equals the sole completion (case-sensitive).
-    (when (and (null (cdr cands)) (cl:string= (cdar cands) prefix))
+    ;; NOTE: completion tables are sets; repeated candidates should behave like
+    ;; a single entry.  In particular, if every candidate is already exactly
+    ;; PREFIX, Emacs returns T (even with duplicates in COLLECTION).
+    (when (cl:every (lambda (c) (cl:string= (cdr c) prefix)) cands)
       (return-from try-completion t))
     (let* ((test (if completion-ignore-case #'char-equal #'char=))
            (multiplep (and (consp cands) (consp (cdr cands))))
@@ -610,16 +611,16 @@ This supports COLLECTION as either:
     (error "ELISP:ASSOC-STRING expects string key, got: %S" key))
   (let* ((k (%elisp-string->cl-string key))
          (fold (and case-fold t)))
-    (dolist (elt list)
+    (cl:dolist (elt list)
       (cond
        ((and (consp elt) (stringp (car elt)))
         (let ((cs (%elisp-string->cl-string (car elt))))
           (when (if fold (cl:string-equal k cs) (cl:string= k cs))
-            (return elt))))
+            (return-from assoc-string elt))))
        ((stringp elt)
         (let ((cs (%elisp-string->cl-string elt)))
           (when (if fold (cl:string-equal k cs) (cl:string= k cs))
-            (return elt))))))
+            (return-from assoc-string elt))))))
     nil))
 
 (cl:defun intern (name &optional (package (find-package "ELISP")))

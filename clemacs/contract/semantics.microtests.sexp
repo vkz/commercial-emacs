@@ -147,6 +147,11 @@
   :expected "(\"test: \" \"test\" (\"barfoo\"))"
   :emacs :match)
 
+ (:name "completion-try-completion-dedup-t"
+  :expr "(list (try-completion \"\" '(\"\" \"\")) (try-completion \"b\" '(\"b\" \"b\")))"
+  :expected "(t t)"
+  :emacs :match)
+
  (:name "files-file-attribute-modification-time-basic"
   :expr "(let ((f (make-temp-file \"clemacs-fat-\"))) (write-region \"x\" nil f nil 0) (not (null (file-attribute-modification-time (file-attributes f)))))"
   :expected "t"
