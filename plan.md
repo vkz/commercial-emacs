@@ -94,6 +94,7 @@ P2: Load more shipped `lisp/` under clemacs (monotonic)
 - DONE (2026-01-11): Unblock `startup.check` bring-up iteration: add loader progress/timing output, stub `clemacs/ported/lisp/loaddefs.el` to avoid huge generated autoloads, raise early `widget`/`custom`/`startup` checkpoints, and implement missing compat primitives discovered by startup-check.
 - TODO: Keep growing `clemacs/contract/startup.{smoke,tty-editor,check,editor-core}.files` following pdump order; bisect early when checkpoints get unstable.
 - DONE (2026-01-12): Extend `clemacs/contract/startup.tty-editor.files` with `syntax.el` and an initial `font-lock.el` slice, keeping `mise run clemacs:verify` green.
+- DONE (2026-01-12): Extend `clemacs/contract/startup.tty-editor.files` with `jit-lock.el` and `timer.el`, keeping `mise run clemacs:verify` green.
 
 P3: Upstream ERT bring-up (coverage as a guardrail)
 - DONE (2026-01-10): Expand `clemacs/contract/ert-upstream.tests` with a cl-lib cluster (gensym + numeric predicates + helpers), backed by compat fixes and microtests; keep the suite green.

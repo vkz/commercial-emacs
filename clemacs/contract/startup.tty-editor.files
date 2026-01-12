@@ -63,6 +63,10 @@ lisp/replace.el -
 lisp/emacs-lisp/syntax.el -
 lisp/font-lock.el 200
 
+# pdump: jit-lock, timer.
+lisp/jit-lock.el 200
+lisp/emacs-lisp/timer.el -
+
 # bring-up: comint/shell (first slice; caps will rise over time).
 lisp/comint.el 60
 lisp/shell.el 80
