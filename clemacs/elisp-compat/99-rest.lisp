@@ -443,15 +443,27 @@ and ignores the FRAME argument."
   (declare (cl:ignore _value))
   nil)
 
-(cl:defun internal-set-alternative-font-family-alist (_value)
-  "TTY-only stub for the C primitive `internal-set-alternative-font-family-alist'."
-  (declare (cl:ignore _value))
-  nil)
+(cl:defvar *alternative-font-family-alist* nil)
 
-(cl:defun internal-set-alternative-font-registry-alist (_value)
-  "TTY-only stub for the C primitive `internal-set-alternative-font-registry-alist'."
-  (declare (cl:ignore _value))
-  nil)
+(cl:defun internal-set-alternative-font-family-alist (value)
+  "Bring-up subset of the C primitive `internal-set-alternative-font-family-alist'."
+  (let ((out
+          (mapcar
+           (lambda (entry)
+             (mapcar
+              (lambda (s)
+                (if (stringp s) (intern s) s))
+              entry))
+           value)))
+    (setf *alternative-font-family-alist* out)
+    out))
+
+(cl:defvar *alternative-font-registry-alist* nil)
+
+(cl:defun internal-set-alternative-font-registry-alist (value)
+  "Bring-up subset of the C primitive `internal-set-alternative-font-registry-alist'."
+  (setf *alternative-font-registry-alist* value)
+  value)
 
 (cl:defun %map--plist-p (xs)
   "Return non-nil when XS looks like an ELisp plist (bring-up heuristic)."
@@ -1938,6 +1950,23 @@ CL forms (e.g. calls like (foo ...)) works during bootstrap."
   (when (and (symbolp symbol)
              (eq (symbol-package symbol) (find-package "CL")))
     (return-from fset symbol))
+  ;; Match Emacs: setting a symbol-function to itself (or creating a symbol
+  ;; indirection cycle) signals `cyclic-function-indirection'.
+  (when (and (symbolp symbol) (symbolp definition))
+    (when (eq symbol definition)
+      (signal 'cyclic-function-indirection (list symbol)))
+    (let ((seen (list symbol))
+          (cur definition))
+      (loop
+        (when (cl:member cur seen :test #'eq)
+          (signal 'cyclic-function-indirection (list symbol)))
+        (push cur seen)
+        (let ((def (ignore-errors (symbol-function cur))))
+          (cond
+           ((and (symbolp def) (not (eq def cur)))
+            (setf cur def))
+           (t
+            (return)))))))
   (when (null definition)
     (remhash symbol *elisp-function-cells*)
     (when (symbolp symbol)

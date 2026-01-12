@@ -2941,7 +2941,7 @@ Interactive incremental search is not supported yet."
 (cl:defun window-top-line (&optional _window)
   "Bring-up stub for the C primitive `window-top-line' (single-window, TTY)."
   (declare (cl:ignore _window))
-  0)
+  1)
 
 (cl:defun frame-live-p (frame)
   "Bring-up subset of ELisp `frame-live-p' (single-frame)."
@@ -3116,6 +3116,16 @@ Interactive incremental search is not supported yet."
       (error "ELISP:WINDOW-DEDICATED-P expected live window, got: ~S" w))
     (or (window-parameter w 'window-dedicated)
         (window-parameter w 'dedicated))))
+
+(cl:defun set-window-dedicated-p (window flag)
+  "Bring-up subset of the C primitive `set-window-dedicated-p'."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:SET-WINDOW-DEDICATED-P expected live window, got: ~S" w))
+    ;; Store dedicated state in the window parameters so `window-dedicated-p'
+    ;; can observe it (clemacs has no window structure fields yet).
+    (set-window-parameter w 'window-dedicated flag)
+    flag))
 
 (cl:defun window-edges (&optional _window _body)
   "Bring-up stub for the C primitive `window-edges' (no layout)."

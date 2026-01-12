@@ -1146,44 +1146,45 @@ Supports the common pattern of a self-referential closure (used by ERT)."
 
 (cl:defun indirect-function (thing &optional noerror)
   "Bring-up subset of ELisp `indirect-function'."
-  (handler-case
-      (cond
-       ;; In Emacs, macro objects and autoload markers are valid "function
-       ;; values" to pass through `indirect-function' unchanged.
-       ((and (consp thing) (eq (car thing) 'macro)) thing)
-       ((and (consp thing) (eq (car thing) 'autoload)) thing)
-       ;; Emacs's `indirect-function' generally treats non-symbol objects as
-       ;; already "indirect", and just returns them.  This is relied upon by
-       ;; code that calls `macrop' on function definition objects like:
-       ;;   (advice lambda ...)
-       ;; which are conses but not actual macro objects.
-       ((consp thing) thing)
-       ;; Some upstream code (e.g. `substitute-key-definition') uses
-       ;; `indirect-function' on keymap objects while scanning bindings.
-       ;; Treat concrete keymaps as already-indirect.
-       ((and (not (symbolp thing)) (keymapp thing)) thing)
-       ((symbolp thing)
-        (let ((seen nil)
-              (cur thing))
-          (loop
-            (when (cl:member cur seen :test #'eq)
-              (error "ELISP:INDIRECT-FUNCTION circular definition: %S" thing))
-            (push cur seen)
-            (let ((special (gethash cur *special-operator-subrs*)))
-              (when special
-                (return special)))
-            (let ((def (symbol-function cur)))
-              (cond
-               ((null def)
-                (return nil))
-               ((and (symbolp def) (not (eq def cur)))
-                (setf cur def))
-               (t
-                (return def)))))))
-       ((functionp thing) thing)
-       (t (error "ELISP:INDIRECT-FUNCTION bad value: %S" thing)))
-    (cl:error (e)
-      (if noerror nil (cl:error e)))))
+  (declare (cl:ignore noerror))
+  (cond
+   ;; In Emacs, macro objects and autoload markers are valid "function
+   ;; values" to pass through `indirect-function' unchanged.
+   ((and (consp thing) (eq (car thing) 'macro)) thing)
+   ((and (consp thing) (eq (car thing) 'autoload)) thing)
+   ;; Emacs's `indirect-function' generally treats non-symbol objects as
+   ;; already "indirect", and just returns them.  This is relied upon by
+   ;; code that calls `macrop' on function definition objects like:
+   ;;   (advice lambda ...)
+   ;; which are conses but not actual macro objects.
+   ((consp thing) thing)
+   ;; Some upstream code (e.g. `substitute-key-definition') uses
+   ;; `indirect-function' on keymap objects while scanning bindings.
+   ;; Treat concrete keymaps as already-indirect.
+   ((and (not (symbolp thing)) (keymapp thing)) thing)
+   ((symbolp thing)
+    (let ((seen nil)
+          (cur thing))
+      (loop
+        (push cur seen)
+        (let ((special (gethash cur *special-operator-subrs*)))
+          (when special
+            (return special)))
+        (let ((def (symbol-function cur)))
+          (cond
+           ((null def)
+            (return nil))
+           ((and (symbolp def) (not (eq def cur)))
+            ;; Match Emacs: NOERROR does not suppress cyclic indirection.
+            ;; Emacs reports the symbol whose function cell points back into
+            ;; the already-seen chain.
+            (when (cl:member def seen :test #'eq)
+              (signal 'cyclic-function-indirection (list cur)))
+            (setf cur def))
+           (t
+            (return def)))))))
+   ((functionp thing) thing)
+   (t (error "ELISP:INDIRECT-FUNCTION bad value: %S" thing))))
 
 (defstruct elisp-subr
   (arity (cons 0 0)))

@@ -198,13 +198,13 @@
   :emacs :match)
 
  (:name "faces-internal-set-alternative-font-family-alist-basic"
-  :expr "(internal-set-alternative-font-family-alist '((\"Monospace\" \"courier\")))"
-  :expected "nil"
+  :expr "(mapcar (lambda (entry) (mapcar (lambda (sym) (intern (downcase (symbol-name sym)))) entry)) (internal-set-alternative-font-family-alist '((\"Monospace\" \"courier\"))))"
+  :expected "((monospace courier))"
   :emacs :match)
 
  (:name "faces-internal-set-alternative-font-registry-alist-basic"
   :expr "(internal-set-alternative-font-registry-alist '((\"iso8859-1\" \"ms-oemlatin\")))"
-  :expected "nil"
+  :expected "((\"iso8859-1\" \"ms-oemlatin\"))"
   :emacs :match)
 
  (:name "help-documentation-stringp-basic"
@@ -283,7 +283,7 @@
   :emacs :match)
 
  (:name "autoload-set-advertised-calling-convention-does-not-load"
-  :expr "(progn (fmakunbound 'clemacs--tmp-autoload-fn) (autoload 'clemacs--tmp-autoload-fn \"clemacs--nonexistent-file\") (set-advertised-calling-convention 'clemacs--tmp-autoload-fn '(x)) (and (consp (symbol-function 'clemacs--tmp-autoload-fn)) (eq (car (symbol-function 'clemacs--tmp-autoload-fn)) 'autoload) t))"
+  :expr "(progn (fmakunbound 'clemacs--tmp-autoload-fn) (autoload 'clemacs--tmp-autoload-fn \"clemacs--nonexistent-file\") (set-advertised-calling-convention 'clemacs--tmp-autoload-fn '(x) nil) (and (consp (symbol-function 'clemacs--tmp-autoload-fn)) (eq (car (symbol-function 'clemacs--tmp-autoload-fn)) 'autoload) t))"
   :expected "t"
   :emacs :match)
 
@@ -390,7 +390,7 @@
 
  (:name "windows-window-top-line-zero"
   :expr "(window-top-line)"
-  :expected "0"
+  :expected "1"
   :emacs :match)
 
  (:name "windows-window-total-width-positive-integer"
@@ -887,8 +887,8 @@
   :emacs :match)
 
  (:name "indirect-function-circular-noerror"
-  :expr "(progn (fset 'clemacs--ifca 'clemacs--ifcb) (fset 'clemacs--ifcb 'clemacs--ifca) (indirect-function 'clemacs--ifca t))"
-  :expected "nil"
+  :expr "(condition-case _ (progn (fset 'clemacs--ifca 'clemacs--ifcb) (fset 'clemacs--ifcb 'clemacs--ifca) (indirect-function 'clemacs--ifca t)) (cyclic-function-indirection :cyclic-function-indirection))"
+  :expected ":cyclic-function-indirection"
   :emacs :match)
 
  (:name "indirect-function-keymap-returns-itself"
