@@ -82,6 +82,9 @@
 (cl:defvar default-frame-alist nil)
 (cl:defvar shell-file-name nil)
 (cl:defvar command-history nil)
+(cl:defvar window-persistent-parameters nil)
+(cl:defvar focus-follows-mouse nil)
+(cl:defvar mouse-autoselect-window nil)
 
 ;; Bring-up: these are defined later in upstream ELisp (or in libraries we may
 ;; not load yet), but are referenced by early-startup code paths.

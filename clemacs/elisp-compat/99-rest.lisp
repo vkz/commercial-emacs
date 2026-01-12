@@ -15,6 +15,9 @@
   (declare (cl:ignore _name))
   (list 'keymap nil (make-elisp-keymap)))
 
+(cl:defvar special-event-map (make-sparse-keymap)
+  "Bring-up default for the C-defined variable `special-event-map'.")
+
 (cl:defmacro defvar-keymap (variable-name &rest defs)
   "Bring-up subset of ELisp `defvar-keymap'.
 

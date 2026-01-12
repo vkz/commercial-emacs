@@ -2426,12 +2426,23 @@ enough to support core terminal editing workflows (C-s / C-r)."
       (ignore-errors (message "Replaced %d occurrence%s" count (if (= count 1) "" "s")))
       count)))
 
+(cl:defun scroll-down-command (&optional arg)
+  "Bring-up subset of ELisp `scroll-down-command'."
+  (let* ((n (and arg (- (prefix-numeric-value arg)))))
+    (cond
+     ((fboundp 'scroll-up-command)
+      (scroll-up-command n))
+     (t
+      (ignore-errors (message "scroll-down-command: not implemented")))))
+  nil)
+
 (eval-when (:compile-toplevel :load-toplevel :execute)
   ;; Ensure these show up as commands in `M-x` completions.
   (ignore-errors (function-put 'isearch-forward 'interactive-form '(interactive)))
   (ignore-errors (function-put 'isearch-backward 'interactive-form '(interactive)))
   (ignore-errors (function-put 'query-replace 'interactive-form '(interactive (list nil nil))))
-  (ignore-errors (function-put 'replace-string 'interactive-form '(interactive (list nil nil)))))
+  (ignore-errors (function-put 'replace-string 'interactive-form '(interactive (list nil nil))))
+  (ignore-errors (function-put 'scroll-down-command 'interactive-form '(interactive))))
 
 (cl:defun isearch-search ()
   "Bring-up stub for `isearch-search'.

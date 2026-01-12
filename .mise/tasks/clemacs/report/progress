@@ -105,6 +105,7 @@ from pathlib import Path
 project_root = Path(os.environ.get("MISE_PROJECT_ROOT") or os.getcwd())
 lisp_root = project_root / "lisp"
 pdump = project_root / "admin" / "pdump-common.el"
+skip_path = project_root / "clemacs" / "contract" / "lisp.allowed-skip.files"
 
 def read_manifest(path: Path):
     out = []
@@ -116,6 +117,9 @@ def read_manifest(path: Path):
             continue
         out.append(line.split()[0])
     return out
+
+def read_skip(path: Path):
+    return set(read_manifest(path))
 
 def _ensure_el_suffix(path: str) -> str:
     return path if path.endswith(".el") else f"{path}.el"
@@ -156,11 +160,13 @@ for p in existing:
     seen.add(p)
     pdump_existing_unique.append(p)
 
+skip_set = read_skip(skip_path)
+
 def coverage(manifest_rel: str):
     manifest_path = project_root / manifest_rel
     startup = read_manifest(manifest_path)
     startup_set = set(startup)
-    present = [p for p in pdump_existing_unique if p in startup_set]
+    present = [p for p in pdump_existing_unique if p in startup_set or p in skip_set]
     return {
         "manifest": manifest_rel,
         "startup_entries": len(startup),

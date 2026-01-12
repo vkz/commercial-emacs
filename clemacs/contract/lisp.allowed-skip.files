@@ -19,6 +19,20 @@ lisp/international/eucjp-ms.el
 # UTF-8 working end-to-end (load/edit/save). Revisit once editor core is solid.
 lisp/leim/leim-list.el
 
+# 2026-01-11: GUI-only / non-TTY pdump conditionals (TTY-only build; no GUI backends).
+# - dnd/tool-bar/dynamic-setting are only loaded when `x-create-frame` exists
+#   and/or GUI features are present in admin/pdump-common.el.
+lisp/dnd.el
+lisp/tool-bar.el
+lisp/dynamic-setting.el
+
+# 2026-01-11: Non-supported platform (MS-DOS/PC console window-system).
+lisp/term/pc-win.el
+
+# 2026-01-11: Loaded only when `x-create-frame` exists (GUI builds); out of scope
+# for TTY-only clemacs bring-up.
+lisp/mwheel.el
+
 # NOTE: Keep this list strictly "out-of-scope only". If a file is in-scope but
 # currently failing to load, prefer using `startup.*.files` max-forms caps and
 # implement missing primitives instead of skipping.

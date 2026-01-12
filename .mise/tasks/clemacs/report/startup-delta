@@ -7,6 +7,7 @@ set -euo pipefail
 #USAGE flag "--out-dir <dir>" help="Output directory for report artifacts" default=""
 #USAGE flag "--report <path>" help="Markdown report path" default=""
 #USAGE flag "--manifest <path>" help="Manifest file to compare against pdump load list" default="clemacs/contract/startup.smoke.files"
+#USAGE flag "--skip-file <path>" help="Skip list file (repo-relative) counted as 'covered' in reports" default="clemacs/contract/lisp.allowed-skip.files"
 
 if [[ "${usage_help:-false}" == "true" ]]; then
   mise tasks info "${MISE_TASK_NAME}"
@@ -33,6 +34,7 @@ export CLEMACS_REPORT_BUILD_DIR="${build_dir}"
 export CLEMACS_REPORT_OUT_DIR="${out_dir}"
 export CLEMACS_REPORT_PATH="${report_path}"
 export CLEMACS_REPORT_MANIFEST="${usage_manifest}"
+export CLEMACS_REPORT_SKIP_FILE="${usage_skip_file}"
 
 python3 - <<'PY'
 import os
@@ -44,9 +46,11 @@ build_dir = Path(os.environ.get("CLEMACS_REPORT_BUILD_DIR") or "build/clemacs")
 out_dir = Path(os.environ.get("CLEMACS_REPORT_OUT_DIR") or (project_root / build_dir / "reports"))
 report_path = Path(os.environ.get("CLEMACS_REPORT_PATH") or (out_dir / "startup-delta.md"))
 manifest_rel = os.environ.get("CLEMACS_REPORT_MANIFEST") or "clemacs/contract/startup.smoke.files"
+skip_rel = os.environ.get("CLEMACS_REPORT_SKIP_FILE") or "clemacs/contract/lisp.allowed-skip.files"
 
 pdump = project_root / "admin" / "pdump-common.el"
 manifest_path = project_root / manifest_rel
+skip_path = project_root / skip_rel
 lisp_root = project_root / "lisp"
 
 def read_manifest(path: Path):
@@ -59,6 +63,9 @@ def read_manifest(path: Path):
             continue
         out.append(line.split()[0])
     return out
+
+def read_skip(path: Path):
+    return set(read_manifest(path))
 
 def _ensure_el_suffix(path: str) -> str:
     return path if path.endswith(".el") else f"{path}.el"
@@ -98,6 +105,7 @@ def resolve_pdump_load(name: str) -> str:
 
 startup = read_manifest(manifest_path)
 startup_set = set(startup)
+skip_set = read_skip(skip_path)
 
 text = pdump.read_text(encoding="utf-8")
 # Match forms like: (load "foo") or (load "foo" t)
@@ -121,8 +129,10 @@ def ordered_unique(items):
     return out
 
 existing_unique = ordered_unique(existing)
-missing_unique = [p for p in existing_unique if p not in startup_set]
 present_unique = [p for p in existing_unique if p in startup_set]
+skipped_unique = [p for p in existing_unique if p in skip_set]
+covered_unique = [p for p in existing_unique if p in startup_set or p in skip_set]
+missing_unique = [p for p in existing_unique if p not in startup_set and p not in skip_set]
 
 out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -141,6 +151,7 @@ lines.append("# clemacs startup delta report")
 lines.append("")
 lines.append(f"- pdump source: `{pdump}`")
 lines.append(f"- startup manifest: `{manifest_path}`")
+lines.append(f"- skip file: `{skip_path}`")
 lines.append("")
 lines.append("## Summary")
 lines.append(f"- pdump load entries: {len(pdump_paths_all)} (includes duplicates)")
@@ -148,10 +159,15 @@ lines.append(f"- pdump unique existing entries: {len(existing_unique)}")
 lines.append(f"- pdump entries missing in repo: {len(set(missing_in_repo))}")
 lines.append(f"- startup entries: {len(startup)}")
 lines.append(f"- present in startup: {len(present_unique)}")
-lines.append(f"- missing from startup: {len(missing_unique)}")
+lines.append(f"- skipped (out-of-scope): {len(skipped_unique)}")
+lines.append(f"- covered (startup + skipped): {len(covered_unique)}")
+lines.append(f"- missing from startup (excluding skipped): {len(missing_unique)}")
 lines.append("")
-lines.append("## Next candidates (pdump entries missing from startup)")
+lines.append("## Next candidates (pdump entries missing from startup, excluding skipped)")
 lines.extend(md_list(missing_unique, limit=40))
+lines.append("")
+lines.append("## Pdump entries marked skipped (out-of-scope)")
+lines.extend(md_list(skipped_unique, limit=40))
 lines.append("")
 lines.append("## Pdump entries missing in repo")
 lines.extend(md_list(ordered_unique(missing_in_repo), limit=40))

@@ -1507,6 +1507,7 @@ The first non-argument event is pushed back onto `unread-command-events'."
                      m)))))
           (ensure global (vector 27) esc)               ; ESC prefix
           (ensure esc (vector 37) 'query-replace)       ; %
+          (ensure esc (vector 118) 'scroll-down-command) ; v (M-v)
           (ensure esc (vector 120) 'execute-extended-command) ; x (M-x)
           (when (fboundp 'beginning-of-buffer)
             (ensure esc (vector 60) 'beginning-of-buffer)))   ; < (M-<)

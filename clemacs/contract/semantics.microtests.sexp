@@ -338,6 +338,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "startup-vars-special-event-map-and-window-persistent-parameters-bound"
+  :expr "(and (boundp 'special-event-map) (keymapp special-event-map) (boundp 'window-persistent-parameters))"
+  :expected "t"
+  :emacs :match)
+
  (:name "read-string-parses-vector"
   :expr "(equal (read \"[1 2]\") [1 2])"
   :expected "t"

@@ -173,6 +173,13 @@ Returns a plist with keys:
         (format *error-output* "[clemacs] startup load failed: ~A~%" e)
         (finish-output *error-output*)
         (return-from %maybe-load-startup-elisp 1))))
+  ;; The progress dashboard checks keybindings by running the clemacs executable
+  ;; in `--batch` mode with `--startup-level tty-editor`.  In that mode, we
+  ;; don't run the TTY loop, so the usual `clemacs-tty-setup' keybinding
+  ;; "ensure" logic would not run.  Apply it here so tty-editor's keybindings
+  ;; are Emacs-shaped even in batch.
+  (when (and (stringp level) (string= level "tty-editor") (cl:fboundp 'elisp::clemacs-tty-setup))
+    (ignore-errors (elisp::clemacs-tty-setup :path nil)))
   0)
 
 (defun %find-user-init-file ()
