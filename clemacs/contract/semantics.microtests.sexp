@@ -343,6 +343,71 @@
   :expected "t"
   :emacs nil)
 
+ (:name "windows-frame-internal-border-width-zero"
+  :expr "(frame-internal-border-width)"
+  :expected "0"
+  :emacs :match)
+
+ (:name "windows-window-current-scroll-bars-none"
+  :expr "(window-current-scroll-bars)"
+  :expected "(nil)"
+  :emacs :match)
+
+ (:name "windows-window-scroll-bar-width-zero"
+  :expr "(window-scroll-bar-width)"
+  :expected "0"
+  :emacs :match)
+
+ (:name "windows-window-margins-none"
+  :expr "(window-margins)"
+  :expected "(nil)"
+  :emacs :match)
+
+ (:name "windows-window-header-line-height-zero"
+  :expr "(window-header-line-height)"
+  :expected "0"
+  :emacs :match)
+
+ (:name "windows-window-pixel-left-zero"
+  :expr "(window-pixel-left)"
+  :expected "0"
+  :emacs :match)
+
+ (:name "windows-window-pixel-top-zero"
+  :expr "(window-pixel-top)"
+  :expected "0"
+  :emacs :match)
+
+ (:name "windows-window-left-column-zero"
+  :expr "(window-left-column)"
+  :expected "0"
+  :emacs :match)
+
+ (:name "windows-window-top-line-zero"
+  :expr "(window-top-line)"
+  :expected "0"
+  :emacs :match)
+
+ (:name "windows-window-total-width-positive-integer"
+  :expr "(let ((w (window-total-width))) (and (integerp w) (> w 0)))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "windows-window-total-height-positive-integer"
+  :expr "(let ((h (window-total-height))) (and (integerp h) (> h 0)))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "windows-window-pixel-width-positive-integer"
+  :expr "(let ((w (window-pixel-width))) (and (integerp w) (> w 0)))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "windows-window-pixel-height-positive-integer"
+  :expr "(let ((h (window-pixel-height))) (and (integerp h) (> h 0)))"
+  :expected "t"
+  :emacs :match)
+
  (:name "keymaps-bindings--define-key-defines-key"
   :expr "(let ((m (make-sparse-keymap))) (bindings--define-key m [load] 'foo) (eq (lookup-key m [load]) 'foo))"
   :expected "t"
@@ -828,13 +893,13 @@
   :notes "clemacs extension: some upstream callers scan bindings via `indirect-function` and pass concrete keymaps; treat keymaps as already-indirect during bring-up.")
 
  (:name "cl-defgeneric-setf-basic"
-  :expr "(progn (setq clemacs--sfg-store 0)\n  (cl-defgeneric clemacs--sfg (x))\n  (cl-defgeneric (setf clemacs--sfg) (v x))\n  (cl-defmethod (setf clemacs--sfg) (v (_x t)) (setq clemacs--sfg-store v))\n  (setf (clemacs--sfg 1) 9)\n  clemacs--sfg-store)"
+  :expr "(progn (setq clemacs--sfg-store 0) (cl-defgeneric clemacs--sfg (x)) (cl-defgeneric (setf clemacs--sfg) (v x)) (cl-defmethod (setf clemacs--sfg) (v (_x t)) (setq clemacs--sfg-store v)) (setf (clemacs--sfg 1) 9) clemacs--sfg-store)"
   :expected "9"
   :emacs :match
   :notes "Support setf generic function names (needed by cl-generic).")
 
  (:name "gv-deref-setf-basic"
-  :expr "(progn (require 'gv)\n  (let* ((cell (cons 1 nil))\n         (ref (cons (lambda () (car cell))\n                   (lambda (v) (setcar cell v)))))\n    (setf (gv-deref ref) 42)\n    (car cell)))"
+  :expr "(progn (require 'gv) (let* ((cell (cons 1 nil)) (ref (cons (lambda () (car cell)) (lambda (v) (setcar cell v))))) (setf (gv-deref ref) 42) (car cell)))"
   :expected "42"
   :emacs :match
   :notes "Host CL `setf` must support `(gv-deref REF)` places (used by cl-generic/nadvice).")

@@ -1270,32 +1270,9 @@ single-window model, so prefer the small compat implementations from
     (setf (fdefinition 'switch-to-buffer-other-window)
           *clemacs-switch-to-buffer-other-window-shim*))
 
-  ;; window.el also defines core window functions like `window-size` and
-  ;; interactive commands like `split-window-below`.  Reinstall our TTY-safe
-  ;; versions to avoid recursive definitions and deep window-tree assumptions.
-  (when (and (boundp '*clemacs-window-size-shim*) *clemacs-window-size-shim*)
-    (setf (fdefinition 'window-size) *clemacs-window-size-shim*))
-  (when (and (boundp '*clemacs-window-pixel-height-shim*) *clemacs-window-pixel-height-shim*)
-    (setf (fdefinition 'window-pixel-height) *clemacs-window-pixel-height-shim*))
-  (when (and (boundp '*clemacs-window-pixel-width-shim*) *clemacs-window-pixel-width-shim*)
-    (setf (fdefinition 'window-pixel-width) *clemacs-window-pixel-width-shim*))
-  (when (and (boundp '*clemacs-window-body-width-shim*) *clemacs-window-body-width-shim*)
-    (setf (fdefinition 'window-body-width) *clemacs-window-body-width-shim*))
-  (when (and (boundp '*clemacs-window-body-height-shim*) *clemacs-window-body-height-shim*)
-    (setf (fdefinition 'window-body-height) *clemacs-window-body-height-shim*))
-  (when (and (boundp '*clemacs-window-total-height-shim*) *clemacs-window-total-height-shim*)
-    (setf (fdefinition 'window-total-height) *clemacs-window-total-height-shim*))
-  (when (and (boundp '*clemacs-window-total-width-shim*) *clemacs-window-total-width-shim*)
-    (setf (fdefinition 'window-total-width) *clemacs-window-total-width-shim*))
-  (when (and (boundp '*clemacs-window-width-shim*) *clemacs-window-width-shim*)
-    (setf (fdefinition 'window-width) *clemacs-window-width-shim*))
-  (when (and (boundp '*clemacs-window-height-shim*) *clemacs-window-height-shim*)
-    (setf (fdefinition 'window-height) *clemacs-window-height-shim*))
-  (when (and (boundp '*clemacs-window-font-height-shim*) *clemacs-window-font-height-shim*)
-    (setf (fdefinition 'window-font-height) *clemacs-window-font-height-shim*))
-  (when (and (boundp '*clemacs-window-font-width-shim*) *clemacs-window-font-width-shim*)
-    (setf (fdefinition 'window-font-width) *clemacs-window-font-width-shim*))
-
+  ;; window.el defines a full window-tree + layout model.  During clemacs TTY
+  ;; bring-up we keep the single-window model, so prefer the small compat
+  ;; implementations for interactive window commands.
   (when (and (boundp '*clemacs-split-window-shim*) *clemacs-split-window-shim*)
     (setf (fdefinition 'split-window) *clemacs-split-window-shim*))
   (when (and (boundp '*clemacs-split-window-internal-shim*) *clemacs-split-window-internal-shim*)

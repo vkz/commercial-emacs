@@ -118,6 +118,9 @@ P3: Upstream ERT bring-up (coverage as a guardrail)
 - DONE (2026-01-12): Add microtests covering new startup bring-up blockers (ensure `special-event-map` and `window-persistent-parameters` are bound as expected).
 - DONE (2026-01-12): Make command loop honor overriding keymaps and `pre-command-hook`/`post-command-hook` so modal libraries like `isearch.el` behave correctly.
 - DONE (2026-01-12): Stabilize the PTY editor gate input stream (handle partial PTY writes; treat query-replace confirmation as a single keystroke).
+- DONE (2026-01-12): Implement TTY window geometry primitives used by upstream `window.el` (pixelwise sizes + edges deps), remove window post-load size shims to avoid recursion, and add one semantics microtest per primitive.
+- DONE (2026-01-12): Fix two bring-up correctness bugs uncovered while gating: `symbol-value` now signals `void-variable` for truly unbound vars, and `function-get` no longer loops forever on circular function indirections.
+- TODO: Improve `clemacs:test:contract -- --level elisp-core` iteration time/visibility: make `startup-check` emit periodic progress (or chunk checkpoints) so long runs are obviously live.
 
 ### Milestone B1-8: load the shipped `lisp/` tree under clemacs
 

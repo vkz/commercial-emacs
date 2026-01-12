@@ -996,10 +996,16 @@ AUTOLOAD is non-nil and F is an autoload, attempt to load it."
   (unless (symbolp prop)
     (error "ELISP:FUNCTION-GET expects a symbol property key, got: ~S" prop))
   (let ((val nil)
-        (cur f))
+        (cur f)
+        (seen nil))
     (loop
       (when (not (symbolp cur))
         (return val))
+      ;; Avoid infinite loops on circular function indirections like:
+      ;; (fset 'a 'b) (fset 'b 'a)
+      (when (cl:member cur seen :test #'eq)
+        (return nil))
+      (push cur seen)
       (setf val (get cur prop))
       (when val
         (return val))

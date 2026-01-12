@@ -54,7 +54,7 @@ if [[ -z "${script}" ]]; then
   fi
   tmp_dir="${project_root}/${build_dir}/tmp"
   mkdir -p "${tmp_dir}"
-  tmp="$(mktemp "${tmp_dir}/sbcl-eval.XXXXXX.lisp")"
+  tmp="$(mktemp "${tmp_dir}/sbcl-eval.XXXXXX")"
   {
     echo ";; -*- mode: lisp; -*-"
     echo "(in-package #:elisp)"

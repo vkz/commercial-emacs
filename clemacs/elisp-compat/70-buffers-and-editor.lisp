@@ -770,47 +770,47 @@ count from `point-min' (respects narrowing)."
   (declare (cl:ignore _mode))
   0)
 
-(cl:defun window-width (&optional _window _pixelwise)
-  "Bring-up subset of ELisp `window-width'."
-  (declare (cl:ignore _window _pixelwise))
-  (handler-case
-      (multiple-value-bind (_rows cols) (clemacs::tty-winsize)
-        (declare (cl:ignore _rows))
-        (if (and (integerp cols) (> cols 0)) cols 80))
-    (cl:error () 80)))
-
-(cl:defun window-height (&optional _window _pixelwise)
-  "Bring-up subset of ELisp `window-height'."
-  (declare (cl:ignore _window _pixelwise))
-  (handler-case
-      (multiple-value-bind (rows _cols) (clemacs::tty-winsize)
-        (declare (cl:ignore _cols))
-        (if (and (integerp rows) (> rows 0)) rows 24))
-    (cl:error () 24)))
-
-(cl:defun window-total-height (&optional _window pixelwise)
-  "Bring-up subset of ELisp `window-total-height' (single-window, TTY)."
-  (let ((chars
-          (handler-case
-              (multiple-value-bind (rows _cols) (clemacs::tty-winsize)
-                (declare (cl:ignore _cols))
-                (if (and (integerp rows) (> rows 0)) rows 24))
-            (cl:error () 24))))
+(cl:defun window-width (&optional window pixelwise)
+  "Bring-up subset of ELisp `window-width' (single-window, TTY)."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-WIDTH expected live window, got: ~S" w))
     (if pixelwise
-        (* chars (frame-char-size (selected-frame) nil))
-        chars)))
+        (window-pixel-width w)
+      (window-total-width w))))
 
-(cl:defun window-total-width (&optional _window pixelwise)
-  "Bring-up subset of ELisp `window-total-width' (single-window, TTY)."
-  (let ((chars
-          (handler-case
-              (multiple-value-bind (_rows cols) (clemacs::tty-winsize)
-                (declare (cl:ignore _rows))
-                (if (and (integerp cols) (> cols 0)) cols 80))
-            (cl:error () 80))))
+(cl:defun window-height (&optional window pixelwise)
+  "Bring-up subset of ELisp `window-height' (single-window, TTY)."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-HEIGHT expected live window, got: ~S" w))
     (if pixelwise
-        (* chars (frame-char-size (selected-frame) t))
-        chars)))
+        (window-pixel-height w)
+      (window-total-height w))))
+
+(cl:defun window-total-height (&optional window round)
+  "Bring-up subset of the C primitive `window-total-height' (single-window, TTY)."
+  (declare (cl:ignore round))
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-TOTAL-HEIGHT expected live window, got: ~S" w))
+    (handler-case
+        (multiple-value-bind (rows _cols) (clemacs::tty-winsize)
+          (declare (cl:ignore _cols))
+          (if (and (integerp rows) (> rows 0)) rows 24))
+      (cl:error () 24))))
+
+(cl:defun window-total-width (&optional window round)
+  "Bring-up subset of the C primitive `window-total-width' (single-window, TTY)."
+  (declare (cl:ignore round))
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-TOTAL-WIDTH expected live window, got: ~S" w))
+    (handler-case
+        (multiple-value-bind (_rows cols) (clemacs::tty-winsize)
+          (declare (cl:ignore _rows))
+          (if (and (integerp cols) (> cols 0)) cols 80))
+      (cl:error () 80))))
 
 (cl:defun recenter (&optional _arg)
   "Bring-up stub for ELisp `recenter'."
@@ -2868,6 +2868,11 @@ Interactive incremental search is not supported yet."
   (declare (cl:ignore _frame))
   0)
 
+(cl:defun frame-internal-border-width (&optional _frame)
+  "Bring-up stub for the C primitive `frame-internal-border-width' (TTY)."
+  (declare (cl:ignore _frame))
+  0)
+
 (cl:defun frame-char-size (&optional frame horizontal)
   "Bring-up subset of the C primitive `frame-char-size' (TTY)."
   (declare (cl:ignore frame))
@@ -2894,6 +2899,46 @@ Interactive incremental search is not supported yet."
   ;; Return (LEFT RIGHT OUTSIDE-MARGINS . ...).  Callers typically look at the
   ;; first two elements.
   (list 0 0 0 0))
+
+(cl:defun window-current-scroll-bars (&optional _window)
+  "Bring-up stub for the C primitive `window-current-scroll-bars' (no scroll bars)."
+  (declare (cl:ignore _window))
+  (cons nil nil))
+
+(cl:defun window-scroll-bar-width (&optional _window)
+  "Bring-up stub for the C primitive `window-scroll-bar-width' (TTY; no scroll bars)."
+  (declare (cl:ignore _window))
+  0)
+
+(cl:defun window-margins (&optional _window)
+  "Bring-up stub for the C primitive `window-margins' (TTY; no margins)."
+  (declare (cl:ignore _window))
+  (cons nil nil))
+
+(cl:defun window-header-line-height (&optional _window)
+  "Bring-up stub for the C primitive `window-header-line-height' (TTY)."
+  (declare (cl:ignore _window))
+  0)
+
+(cl:defun window-pixel-left (&optional _window)
+  "Bring-up stub for the C primitive `window-pixel-left' (single-window, TTY)."
+  (declare (cl:ignore _window))
+  0)
+
+(cl:defun window-pixel-top (&optional _window)
+  "Bring-up stub for the C primitive `window-pixel-top' (single-window, TTY)."
+  (declare (cl:ignore _window))
+  0)
+
+(cl:defun window-left-column (&optional _window)
+  "Bring-up stub for the C primitive `window-left-column' (single-window, TTY)."
+  (declare (cl:ignore _window))
+  0)
+
+(cl:defun window-top-line (&optional _window)
+  "Bring-up stub for the C primitive `window-top-line' (single-window, TTY)."
+  (declare (cl:ignore _window))
+  0)
 
 (cl:defun frame-live-p (frame)
   "Bring-up subset of ELisp `frame-live-p' (single-frame)."
@@ -3102,8 +3147,11 @@ treated as nil."
   (let ((w (or window (selected-window))))
     (unless (window-live-p w)
       (error "ELISP:WINDOW-BODY-WIDTH expected live window, got: ~S" w))
-    (let ((pixelp (or (eq pixelwise t) (eq pixelwise 'pixel))))
-      (window-size w t pixelp nil))))
+    (let* ((pixelp (or (eq pixelwise t) (eq pixelwise 'pixel)))
+           (chars (window-total-width w)))
+      (if pixelp
+          (* chars (frame-char-width (window-frame w)))
+        chars))))
 
 (cl:defun window-body-height (&optional window pixelwise)
   "Bring-up subset of the C primitive `window-body-height' (TTY).
@@ -3113,8 +3161,11 @@ treated as nil."
   (let ((w (or window (selected-window))))
     (unless (window-live-p w)
       (error "ELISP:WINDOW-BODY-HEIGHT expected live window, got: ~S" w))
-    (let ((pixelp (or (eq pixelwise t) (eq pixelwise 'pixel))))
-      (window-size w nil pixelp nil))))
+    (let* ((pixelp (or (eq pixelwise t) (eq pixelwise 'pixel)))
+           (chars (window-total-height w)))
+      (if pixelp
+          (* chars (frame-char-height (window-frame w)))
+        chars))))
 
 (cl:defun window-size-fixed-p (&optional window _horizontal)
   "Bring-up stub for the C primitive `window-size-fixed-p' (no fixed windows)."
@@ -3123,11 +3174,17 @@ treated as nil."
 
 (cl:defun window-pixel-height (&optional window)
   "Bring-up subset of the C primitive `window-pixel-height' (TTY)."
-  (window-size (or window (selected-window)) nil t))
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-PIXEL-HEIGHT expected live window, got: ~S" w))
+    (* (window-total-height w) (frame-char-height (window-frame w)))))
 
 (cl:defun window-pixel-width (&optional window)
   "Bring-up subset of the C primitive `window-pixel-width' (TTY)."
-  (window-size (or window (selected-window)) t t))
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-PIXEL-WIDTH expected live window, got: ~S" w))
+    (* (window-total-width w) (frame-char-width (window-frame w)))))
 
 (cl:defun window-point (&optional window)
   "Bring-up subset of the C primitive `window-point'."
@@ -3591,18 +3648,6 @@ When PARTIALLY is non-nil and POS is visible, return a small (X Y) list."
 (cl:defvar *clemacs-switch-to-buffer-shim* nil)
 (cl:defvar *clemacs-switch-to-buffer-other-window-shim* nil)
 
-(cl:defvar *clemacs-window-size-shim* nil)
-(cl:defvar *clemacs-window-pixel-height-shim* nil)
-(cl:defvar *clemacs-window-pixel-width-shim* nil)
-(cl:defvar *clemacs-window-body-width-shim* nil)
-(cl:defvar *clemacs-window-body-height-shim* nil)
-(cl:defvar *clemacs-window-total-height-shim* nil)
-(cl:defvar *clemacs-window-total-width-shim* nil)
-(cl:defvar *clemacs-window-width-shim* nil)
-(cl:defvar *clemacs-window-height-shim* nil)
-(cl:defvar *clemacs-window-font-height-shim* nil)
-(cl:defvar *clemacs-window-font-width-shim* nil)
-
 (cl:defvar *clemacs-split-window-shim* nil)
 (cl:defvar *clemacs-split-window-internal-shim* nil)
 (cl:defvar *clemacs-split-window-below-shim* nil)
@@ -3643,31 +3688,6 @@ When PARTIALLY is non-nil and POS is visible, return a small (X Y) list."
     (setf *clemacs-switch-to-buffer-shim* (fdefinition 'switch-to-buffer)))
   (when (null *clemacs-switch-to-buffer-other-window-shim*)
     (setf *clemacs-switch-to-buffer-other-window-shim* (fdefinition 'switch-to-buffer-other-window)))
-
-  ;; window.el can overwrite core window functions.  Capture the clemacs-safe
-  ;; implementations so we can reinstall them after loading upstream window.el.
-  (when (null *clemacs-window-size-shim*)
-    (setf *clemacs-window-size-shim* (fdefinition 'window-size)))
-  (when (null *clemacs-window-pixel-height-shim*)
-    (setf *clemacs-window-pixel-height-shim* (fdefinition 'window-pixel-height)))
-  (when (null *clemacs-window-pixel-width-shim*)
-    (setf *clemacs-window-pixel-width-shim* (fdefinition 'window-pixel-width)))
-  (when (null *clemacs-window-body-width-shim*)
-    (setf *clemacs-window-body-width-shim* (fdefinition 'window-body-width)))
-  (when (null *clemacs-window-body-height-shim*)
-    (setf *clemacs-window-body-height-shim* (fdefinition 'window-body-height)))
-  (when (null *clemacs-window-total-height-shim*)
-    (setf *clemacs-window-total-height-shim* (fdefinition 'window-total-height)))
-  (when (null *clemacs-window-total-width-shim*)
-    (setf *clemacs-window-total-width-shim* (fdefinition 'window-total-width)))
-  (when (null *clemacs-window-width-shim*)
-    (setf *clemacs-window-width-shim* (fdefinition 'window-width)))
-  (when (null *clemacs-window-height-shim*)
-    (setf *clemacs-window-height-shim* (fdefinition 'window-height)))
-  (when (null *clemacs-window-font-height-shim*)
-    (setf *clemacs-window-font-height-shim* (fdefinition 'window-font-height)))
-  (when (null *clemacs-window-font-width-shim*)
-    (setf *clemacs-window-font-width-shim* (fdefinition 'window-font-width)))
 
   (when (null *clemacs-split-window-shim*)
     (setf *clemacs-split-window-shim* (fdefinition 'split-window)))

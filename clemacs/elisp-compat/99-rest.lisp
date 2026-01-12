@@ -1079,7 +1079,10 @@ the prefix flag (\"p\")."
        ((and presentp (eq default +elisp-unbound+))
         (signal 'void-variable (list sym)))
        (t
-        (cl:symbol-value sym))))))
+        (handler-case
+            (cl:symbol-value sym)
+          (cl:unbound-variable ()
+            (signal 'void-variable (list sym)))))))))
 
 (cl:defun set (symbol value)
   "ELisp-ish SET (respects `defvaralias')."

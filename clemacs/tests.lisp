@@ -274,6 +274,11 @@
       (when (null tests)
         (error "No semantics microtests match CLEMACS_MICROTEST_NAME=~S"
                (uiop:getenv "CLEMACS_MICROTEST_NAME"))))
+    (let ((limit-raw (uiop:getenv "CLEMACS_MICROTEST_LIMIT")))
+      (when (and limit-raw (> (length limit-raw) 0))
+        (let ((n (ignore-errors (parse-integer limit-raw :junk-allowed t))))
+          (when (and (integerp n) (> n 0))
+            (setf tests (subseq tests 0 (min n (length tests))))))))
     (let* ((match-items
              (mapcar (lambda (entry) (cons (getf entry :name) (getf entry :expr)))
                      (remove-if-not (lambda (entry) (eql (getf entry :emacs) :match)) tests)))

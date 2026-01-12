@@ -5,6 +5,7 @@ set -euo pipefail
 #USAGE flag "-h --help" help="Print help"
 #USAGE flag "--no-emacs" help="Skip reference Emacs comparisons (faster)" default="false"
 #USAGE flag "--name <name>" help="Run only semantics microtests whose :name contains this substring (or comma-separated substrings). Equivalent to CLEMACS_MICROTEST_NAME." default=""
+#USAGE flag "--limit <n>" help="Run only the first N semantics microtests after filtering. Equivalent to CLEMACS_MICROTEST_LIMIT." default=""
 #USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
 
 if [[ "${usage_help:-false}" == "true" ]]; then
@@ -35,6 +36,10 @@ fi
 
 if [[ -n "${usage_name:-}" ]]; then
   export CLEMACS_MICROTEST_NAME="${usage_name}"
+fi
+
+if [[ -n "${usage_limit:-}" ]]; then
+  export CLEMACS_MICROTEST_LIMIT="${usage_limit}"
 fi
 
 usage_build_dir="${build_dir}" bash "${project_root}/.mise/tasks/clemacs/deps/install"
