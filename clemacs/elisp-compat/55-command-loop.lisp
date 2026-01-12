@@ -90,6 +90,21 @@ is equivalent to `minibuffer-contents'."
       (set sym nil)))
   nil)
 
+(cl:defun %clemacs--tty-input-pending-p-safe ()
+  ;; The substrate's `tty-input-pending-p` should be non-blocking, but guard it
+  ;; with a short timeout so upstream loops (e.g. isearch) don't hang if a
+  ;; platform-specific polling bug slips in.
+  #+sbcl
+  (handler-case
+      (sb-ext:with-timeout 0.05
+        (and (clemacs::tty-input-pending-p) t))
+    (sb-ext:timeout () nil)
+    (cl:error () nil))
+  #-sbcl
+  (handler-case
+      (and (clemacs::tty-input-pending-p) t)
+    (cl:error () nil)))
+
 (cl:defun input-pending-p (&optional _check-timers)
   "Bring-up subset of the C primitive `input-pending-p'."
   (declare (cl:ignore _check-timers))
@@ -99,16 +114,14 @@ is equivalent to `minibuffer-contents'."
     (return-from input-pending-p nil))
   (or (and (consp unread-command-events) t)
       (%clemacs--tty-unread-bytes-present-p)
-      (handler-case
-          (and (clemacs::tty-input-pending-p) t)
-        (cl:error () nil))))
+      (%clemacs--tty-input-pending-p-safe)))
 
 (cl:defun discard-input ()
   "Bring-up stub for the C primitive `discard-input'."
   (setf unread-command-events nil)
   (%clemacs--tty-unread-bytes-clear)
   (handler-case
-      (loop while (clemacs::tty-input-pending-p) do
+      (loop while (%clemacs--tty-input-pending-p-safe) do
         (ignore-errors (clemacs::tty-read-byte)))
     (cl:error () nil))
   nil)
@@ -482,12 +495,23 @@ return something cancelable."
 (cl:defun key-binding (keys &optional accept-default _no-remap _position)
   "Bring-up subset of ELisp `key-binding'."
   (declare (cl:ignore _no-remap _position))
-  (let* ((local (current-local-map))
-         (global (current-global-map)))
-    (cond
-     ((and local (lookup-key local keys accept-default)))
-     ((and global (lookup-key global keys accept-default)))
-     (t nil))))
+  (labels ((normalize (km)
+             (let ((k km))
+               (when (and (consp k)
+                          (stringp (car k))
+                          (keymapp (cdr k)))
+                 (setf k (cdr k)))
+               k)))
+    (let* ((overriding-terminal (normalize overriding-terminal-local-map))
+           (overriding (normalize overriding-local-map))
+           (local (current-local-map))
+           (global (current-global-map)))
+      (cond
+       ((and overriding-terminal (lookup-key overriding-terminal keys accept-default)))
+       ((and overriding (lookup-key overriding keys accept-default)))
+       ((and local (lookup-key local keys accept-default)))
+       ((and global (lookup-key global keys accept-default)))
+       (t nil)))))
 
 (cl:defun local-key-binding (keys &optional accept-default)
   "Bring-up subset of ELisp `local-key-binding'."
@@ -681,6 +705,9 @@ return something cancelable."
                                 (push (prefix-numeric-value current-prefix-arg) args))
                                (#\P
                                 (push current-prefix-arg args))
+                               (#\i
+                                ;; `interactive "i"` produces a nil argument.
+                                (push nil args))
                                (#\s
                                 (push (read-from-minibuffer (string-to-unibyte prompt)) args))
                                (#\b
@@ -725,7 +752,16 @@ return something cancelable."
      (setf prefix-arg nil)
      (setf current-prefix-arg saved-prefix-arg)
      (unwind-protect
-         (call-interactively command)
+         (progn
+           ;; Many upstream modes (notably isearch) rely on pre/post-command
+           ;; hooks for modal behavior and cleanup.
+           (ignore-errors (run-hooks 'pre-command-hook))
+           (let ((cmd this-command))
+             ;; `pre-command-hook` may set `this-command` to `ignore` (or another
+             ;; command).  Respect that.
+             (unless (eq cmd 'ignore)
+               (call-interactively cmd)))
+           (ignore-errors (run-hooks 'post-command-hook)))
        ;; After a command finishes, `last-command' should name the command that
        ;; was just executed (even if the command invoked minibuffer reads that
        ;; executed their own internal commands).
@@ -746,10 +782,34 @@ Upstream lisp/ may redefine `command-execute'.  The clemacs TTY loop reinstalls
 Returns a single event: an integer character code or an ELISP symbol
 (LEFT/RIGHT/UP/DOWN)."
   (declare (cl:ignore _prompt _inherit-input-method _seconds))
-  (let ((ev (or (%clemacs--unread-pop)
-                (clemacs::%tty-read-event))))
+  (let* ((trace-events (ignore-errors (uiop:getenv "CLEMACS_TTY_TRACE_EVENTS")))
+         (enabledp (and trace-events (not (string= trace-events ""))))
+         (log (and enabledp (ignore-errors (uiop:getenv "CLEMACS_TTY_TRACE_LOG")))))
+    (when (and log (not (string= log "")))
+      (ignore-errors
+        (multiple-value-bind (sec min hour day month year)
+            (decode-universal-time (get-universal-time) 0)
+          (with-open-file (out log
+                               :direction :output
+                               :if-exists :append
+                               :if-does-not-exist :create)
+            (cl:format out "~4,'0D-~2,'0D-~2,'0DT~2,'0D:~2,'0D:~2,'0DZ read-event<~%"
+                       year month day hour min sec)))))
+    (let ((ev (or (%clemacs--unread-pop)
+                  (clemacs::%tty-read-event))))
+    (setf last-input-event ev)
     (setf last-command-event ev)
-    ev))
+      (when (and log (not (string= log "")))
+        (ignore-errors
+          (multiple-value-bind (sec min hour day month year)
+              (decode-universal-time (get-universal-time) 0)
+            (with-open-file (out log
+                                 :direction :output
+                                 :if-exists :append
+                                 :if-does-not-exist :create)
+              (cl:format out "~4,'0D-~2,'0D-~2,'0DT~2,'0D:~2,'0D:~2,'0DZ read-event=~S~%"
+                         year month day hour min sec ev)))))
+      ev)))
 
 (cl:defun event-apply-modifier (event symbol _lshiftby _prefix)
   "Bring-up subset of the C primitive `event-apply-modifier'."
@@ -1150,8 +1210,11 @@ no default is provided)."
          ((exact-member-p input cands) input)
          ((let ((uniq (unique-completion input cands)))
             (when uniq uniq)))
-         (t
-          (error "ELISP:COMPLETING-READ no match: %S" input)))))))
+	         (t
+	          ;; clemacs TTY bring-up: prefer returning the raw INPUT so callers
+	          ;; like `execute-extended-command' can signal a normal "no such
+	          ;; command" error without trapping the user in minibuffer completion.
+	          input))))))
 
 (cl:defun read-key-sequence (&optional _prompt &rest _args)
   "Bring-up subset of ELisp `read-key-sequence'.

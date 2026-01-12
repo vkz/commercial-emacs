@@ -110,35 +110,43 @@
 
 (cl:defun downcase (s)
   "Bring-up subset of ELisp `downcase'."
-  (unless (stringp s)
-    (error "ELISP:DOWNCASE expects a string, got: ~S" s))
   (cond
-   ((unibyte-string-p s)
-    (let ((out (%make-unibyte-string (length s))))
-      (dotimes (i (length s))
-        (let ((b (aref s i)))
-          (setf (aref out i)
-                (cond
-                 ((<= (char-code #\A) b (char-code #\Z)) (+ b 32))
-                 (t b)))))
-      out))
-   (t (string-downcase s))))
+   ((or (integerp s) (characterp s))
+    (%elisp-char-code (char-downcase (%elisp-code->char s))))
+   ((stringp s)
+    (cond
+     ((unibyte-string-p s)
+      (let ((out (%make-unibyte-string (length s))))
+        (dotimes (i (length s))
+          (let ((b (aref s i)))
+            (setf (aref out i)
+                  (cond
+                   ((<= (char-code #\A) b (char-code #\Z)) (+ b 32))
+                   (t b)))))
+        out))
+     (t (string-downcase s))))
+   (t
+    (error "ELISP:DOWNCASE expects a string or character code, got: ~S" s))))
 
 (cl:defun upcase (s)
   "Bring-up subset of ELisp `upcase'."
-  (unless (stringp s)
-    (error "ELISP:UPCASE expects a string, got: ~S" s))
   (cond
-   ((unibyte-string-p s)
-    (let ((out (%make-unibyte-string (length s))))
-      (dotimes (i (length s))
-        (let ((b (aref s i)))
-          (setf (aref out i)
-                (cond
-                 ((<= (char-code #\a) b (char-code #\z)) (- b 32))
-                 (t b)))))
-      out))
-   (t (string-upcase s))))
+   ((or (integerp s) (characterp s))
+    (%elisp-char-code (char-upcase (%elisp-code->char s))))
+   ((stringp s)
+    (cond
+     ((unibyte-string-p s)
+      (let ((out (%make-unibyte-string (length s))))
+        (dotimes (i (length s))
+          (let ((b (aref s i)))
+            (setf (aref out i)
+                  (cond
+                   ((<= (char-code #\a) b (char-code #\z)) (- b 32))
+                   (t b)))))
+        out))
+     (t (string-upcase s))))
+   (t
+    (error "ELISP:UPCASE expects a string or character code, got: ~S" s))))
 
 (cl:defun string= (a b)
   "ELisp-ish STRING=.

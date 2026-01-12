@@ -97,7 +97,28 @@ def run_pty(*, level, tty_path, data, expect_file_bytes):
                 pass
 
     try:
-        os.write(fd, data)
+        # `fd` is non-blocking; `os.write` can be partial.  Avoid silently
+        # dropping keystrokes (which can make the TTY loop appear to hang
+        # waiting for input).
+        view = memoryview(data)
+        off = 0
+        # Allow up to the main deadline to feed the whole keystroke stream.
+        write_deadline = deadline
+        while off < len(view) and time.time() < write_deadline:
+            try:
+                n = os.write(fd, view[off:])
+                if n:
+                    off += n
+                    continue
+            except BlockingIOError:
+                pass
+            except OSError:
+                break
+            _, w, _ = select.select([], [fd], [], 0.05)
+            if not w:
+                continue
+        if off < len(view):
+            sys.stderr.write(f"[clemacs:test:tty] WARN: short pty write: {off}/{len(view)} bytes\n")
     except OSError:
         pass
 
@@ -188,7 +209,8 @@ try:
     data2 += bytes([27, 37])  # M-% (query-replace)
     data2 += b"line2\n"
     data2 += b"LINE2\n"
-    data2 += b"y\n"
+    # Query-replace prompts accept a single keystroke (no RET needed).
+    data2 += b"y"
     data2 += bytes([24, 19])  # C-x C-s (save-buffer)
     # Minibuffer history: M-x save-buffer, then M-x M-p RET recalls it.
     data2 += bytes([27, ord("x")])  # M-x (ESC x)

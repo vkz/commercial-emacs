@@ -731,6 +731,16 @@ count from `point-min' (respects narrowing)."
          (end-idx (max start-idx (min (length txt) (1- p*)))))
     (1+ (count #\Newline txt :start start-idx :end end-idx))))
 
+(cl:defun bounds-of-thing-at-point (&rest _args)
+  "Bring-up stub for ELisp `bounds-of-thing-at-point'."
+  (declare (cl:ignore _args))
+  nil)
+
+(cl:defun thing-at-point (&rest _args)
+  "Bring-up stub for ELisp `thing-at-point'."
+  (declare (cl:ignore _args))
+  nil)
+
 (cl:defun move-to-column (column &optional force)
   "Bring-up subset of ELisp `move-to-column'."
   (declare (cl:ignore force))
@@ -755,6 +765,11 @@ count from `point-min' (respects narrowing)."
     (error "ELISP:STRING-WIDTH expects a string, got: ~S" string))
   (length (%elisp-string->cl-string string)))
 
+(cl:defun line-number-display-width (&optional _mode)
+  "Bring-up stub for the C primitive `line-number-display-width' (TTY)."
+  (declare (cl:ignore _mode))
+  0)
+
 (cl:defun window-width (&optional _window _pixelwise)
   "Bring-up subset of ELisp `window-width'."
   (declare (cl:ignore _window _pixelwise))
@@ -773,15 +788,29 @@ count from `point-min' (respects narrowing)."
         (if (and (integerp rows) (> rows 0)) rows 24))
     (cl:error () 24)))
 
-(cl:defun window-body-height (&optional window _pixelwise)
-  "Bring-up subset of ELisp `window-body-height' (single-window)."
-  (declare (cl:ignore _pixelwise))
-  (window-height window))
+(cl:defun window-total-height (&optional _window pixelwise)
+  "Bring-up subset of ELisp `window-total-height' (single-window, TTY)."
+  (let ((chars
+          (handler-case
+              (multiple-value-bind (rows _cols) (clemacs::tty-winsize)
+                (declare (cl:ignore _cols))
+                (if (and (integerp rows) (> rows 0)) rows 24))
+            (cl:error () 24))))
+    (if pixelwise
+        (* chars (frame-char-size (selected-frame) nil))
+        chars)))
 
-(cl:defun window-total-height (&optional window _pixelwise)
-  "Bring-up subset of ELisp `window-total-height' (single-window)."
-  (declare (cl:ignore _pixelwise))
-  (window-height window))
+(cl:defun window-total-width (&optional _window pixelwise)
+  "Bring-up subset of ELisp `window-total-width' (single-window, TTY)."
+  (let ((chars
+          (handler-case
+              (multiple-value-bind (_rows cols) (clemacs::tty-winsize)
+                (declare (cl:ignore _rows))
+                (if (and (integerp cols) (> cols 0)) cols 80))
+            (cl:error () 80))))
+    (if pixelwise
+        (* chars (frame-char-size (selected-frame) t))
+        chars)))
 
 (cl:defun recenter (&optional _arg)
   "Bring-up stub for ELisp `recenter'."
@@ -2604,6 +2633,14 @@ Interactive incremental search is not supported yet."
     (funcall indent-line-function))
   nil)
 
+(cl:defun set-buffer-major-mode (&optional _buffer)
+  "Bring-up stub for ELisp `set-buffer-major-mode'."
+  (declare (cl:ignore _buffer))
+  ;; Prefer a stable, TTY-safe default until mode machinery is implemented.
+  (when (boundp 'major-mode)
+    (setf major-mode 'fundamental-mode))
+  nil)
+
 (cl:defun indent-rigidly (start end columns)
   "Bring-up subset of ELisp `indent-rigidly'."
   (let* ((s (%pos start))
@@ -2707,7 +2744,8 @@ Interactive incremental search is not supported yet."
 
 (defstruct elisp-window
   (buffer nil)
-  (start nil))
+  (start nil)
+  (parameters nil))
 
 (defstruct elisp-frame
   (selected-window nil))
@@ -2788,6 +2826,10 @@ Interactive incremental search is not supported yet."
   "Bring-up subset of ELisp `windowp' (single-window)."
   (and (elisp-window-p object) t))
 
+(cl:defun window-valid-p (object)
+  "Bring-up subset of the C primitive `window-valid-p'."
+  (and (window-live-p object) t))
+
 (cl:defun framep (object)
   "Bring-up subset of ELisp `framep' (single-frame)."
   (and (elisp-frame-p object) t))
@@ -2816,10 +2858,42 @@ Interactive incremental search is not supported yet."
   (declare (cl:ignore _frame))
   1)
 
+(cl:defun frame-right-divider-width (&optional _frame)
+  "Bring-up stub for the C primitive `frame-right-divider-width' (TTY)."
+  (declare (cl:ignore _frame))
+  0)
+
+(cl:defun frame-bottom-divider-width (&optional _frame)
+  "Bring-up stub for the C primitive `frame-bottom-divider-width' (TTY)."
+  (declare (cl:ignore _frame))
+  0)
+
+(cl:defun frame-char-size (&optional frame horizontal)
+  "Bring-up subset of the C primitive `frame-char-size' (TTY)."
+  (declare (cl:ignore frame))
+  (if horizontal
+      (frame-char-width)
+      (frame-char-height)))
+
 (cl:defun scroll-bar-scale (&rest _args)
   "Bring-up stub for ELisp `scroll-bar-scale' (no scroll bars)."
   (declare (cl:ignore _args))
   nil)
+
+(cl:defun terminal-live-p (&optional _terminal)
+  "Bring-up stub for the C primitive `terminal-live-p' (single TTY)."
+  (declare (cl:ignore _terminal))
+  ;; Emacs's `terminal-live-p` returns non-nil for the selected terminal when
+  ;; passed nil.  Returning t here avoids frame.el display helpers walking
+  ;; terminal/frame lists we don't model yet.
+  t)
+
+(cl:defun window-fringes (&optional _window)
+  "Bring-up stub for the C primitive `window-fringes' (TTY; no fringes)."
+  (declare (cl:ignore _window))
+  ;; Return (LEFT RIGHT OUTSIDE-MARGINS . ...).  Callers typically look at the
+  ;; first two elements.
+  (list 0 0 0 0))
 
 (cl:defun frame-live-p (frame)
   "Bring-up subset of ELisp `frame-live-p' (single-frame)."
@@ -2896,6 +2970,28 @@ Interactive incremental search is not supported yet."
   (append (or *windows* nil)
           (when minibuffer (list (minibuffer-window)))))
 
+(cl:defun next-window (&optional window minibuffer _all-frames)
+  "Bring-up subset of the C primitive `next-window'."
+  (declare (cl:ignore _all-frames))
+  (let* ((w (or window (selected-window)))
+         (wins (window-list nil minibuffer nil)))
+    (when (null wins)
+      (return-from next-window w))
+    (let* ((pos (or (cl:position w wins :test #'eq) -1))
+           (idx (mod (1+ pos) (length wins))))
+      (nth idx wins))))
+
+(cl:defun previous-window (&optional window minibuffer _all-frames)
+  "Bring-up subset of the C primitive `previous-window'."
+  (declare (cl:ignore _all-frames))
+  (let* ((w (or window (selected-window)))
+         (wins (window-list nil minibuffer nil)))
+    (when (null wins)
+      (return-from previous-window w))
+    (let* ((pos (or (cl:position w wins :test #'eq) 0))
+           (idx (mod (1- pos) (length wins))))
+      (nth idx wins))))
+
 (cl:defun one-window-p (&optional no-minibuffer _all-frames)
   "Bring-up subset of ELisp `one-window-p'."
   (declare (cl:ignore _all-frames))
@@ -2909,6 +3005,129 @@ Interactive incremental search is not supported yet."
     (unless (window-live-p w)
       (error "ELISP:WINDOW-BUFFER expected live window, got: ~S" w))
     (elisp-window-buffer w)))
+
+(cl:defun window-parameters (&optional window)
+  "Bring-up subset of the C primitive `window-parameters'."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-PARAMETERS expected live window, got: ~S" w))
+    (copy-tree (or (elisp-window-parameters w) nil))))
+
+(cl:defun window-parameter (window parameter)
+  "Bring-up subset of the C primitive `window-parameter'."
+  (unless (window-live-p window)
+    (error "ELISP:WINDOW-PARAMETER expected live window, got: ~S" window))
+  (cdr (cl:assoc parameter (or (elisp-window-parameters window) nil) :test #'eq)))
+
+(cl:defun set-window-parameter (window parameter value)
+  "Bring-up subset of the C primitive `set-window-parameter'."
+  (unless (window-live-p window)
+    (error "ELISP:SET-WINDOW-PARAMETER expected live window, got: ~S" window))
+  (let* ((plist (or (elisp-window-parameters window) nil))
+         (cell (cl:assoc parameter plist :test #'eq)))
+    (if cell
+        (setf (cdr cell) value)
+        (push (cons parameter value) plist))
+    (setf (elisp-window-parameters window) plist))
+  value)
+
+(cl:defun window-parent (&optional _window)
+  "Bring-up stub for the C primitive `window-parent' (no window tree)."
+  nil)
+
+(cl:defun window-top-child (&optional _window)
+  "Bring-up stub for the C primitive `window-top-child' (no window tree)."
+  nil)
+
+(cl:defun window-left-child (&optional _window)
+  "Bring-up stub for the C primitive `window-left-child' (no window tree)."
+  nil)
+
+(cl:defun window-next-sibling (window)
+  "Bring-up subset of the C primitive `window-next-sibling' (window list)."
+  (unless (window-live-p window)
+    (error "ELISP:WINDOW-NEXT-SIBLING expected live window, got: ~S" window))
+  (let* ((wins (or *windows* nil))
+         (pos (cl:position window wins :test #'eq)))
+    (when (and pos (< (1+ pos) (length wins)))
+      (nth (1+ pos) wins))))
+
+(cl:defun window-prev-sibling (window)
+  "Bring-up subset of the C primitive `window-prev-sibling' (window list)."
+  (unless (window-live-p window)
+    (error "ELISP:WINDOW-PREV-SIBLING expected live window, got: ~S" window))
+  (let* ((wins (or *windows* nil))
+         (pos (cl:position window wins :test #'eq)))
+    (when (and pos (> pos 0))
+      (nth (1- pos) wins))))
+
+(cl:defun window-dedicated-p (&optional window)
+  "Bring-up subset of the C primitive `window-dedicated-p'."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-DEDICATED-P expected live window, got: ~S" w))
+    (or (window-parameter w 'window-dedicated)
+        (window-parameter w 'dedicated))))
+
+(cl:defun window-edges (&optional _window _body)
+  "Bring-up stub for the C primitive `window-edges' (no layout)."
+  (list 0 0 (window-width) (window-height)))
+
+(cl:defun window-inside-edges (&optional _window _body)
+  "Bring-up stub for the C primitive `window-inside-edges' (no layout)."
+  (window-edges))
+
+(cl:defun window-size (&optional window horizontal pixelwise _round)
+  "Bring-up subset of the C primitive `window-size' (TTY)."
+  (declare (cl:ignore _round))
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-SIZE expected live window, got: ~S" w))
+    (let* ((chars
+             (handler-case
+                 (multiple-value-bind (rows cols) (clemacs::tty-winsize)
+                   (let ((v (if horizontal cols rows))
+                         (fallback (if horizontal 80 24)))
+                     (if (and (integerp v) (> v 0)) v fallback)))
+               (cl:error () (if horizontal 80 24)))))
+      (if pixelwise
+          (* chars (frame-char-size (window-frame w) horizontal))
+          chars))))
+
+(cl:defun window-body-width (&optional window pixelwise)
+  "Bring-up subset of the C primitive `window-body-width' (TTY).
+
+PIXELWISE can be nil, t, or the symbol `pixel'.  Other non-nil values are
+treated as nil."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-BODY-WIDTH expected live window, got: ~S" w))
+    (let ((pixelp (or (eq pixelwise t) (eq pixelwise 'pixel))))
+      (window-size w t pixelp nil))))
+
+(cl:defun window-body-height (&optional window pixelwise)
+  "Bring-up subset of the C primitive `window-body-height' (TTY).
+
+PIXELWISE can be nil, t, or the symbol `pixel'.  Other non-nil values are
+treated as nil."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-BODY-HEIGHT expected live window, got: ~S" w))
+    (let ((pixelp (or (eq pixelwise t) (eq pixelwise 'pixel))))
+      (window-size w nil pixelp nil))))
+
+(cl:defun window-size-fixed-p (&optional window _horizontal)
+  "Bring-up stub for the C primitive `window-size-fixed-p' (no fixed windows)."
+  (declare (cl:ignore window _horizontal))
+  nil)
+
+(cl:defun window-pixel-height (&optional window)
+  "Bring-up subset of the C primitive `window-pixel-height' (TTY)."
+  (window-size (or window (selected-window)) nil t))
+
+(cl:defun window-pixel-width (&optional window)
+  "Bring-up subset of the C primitive `window-pixel-width' (TTY)."
+  (window-size (or window (selected-window)) t t))
 
 (cl:defun window-point (&optional window)
   "Bring-up subset of the C primitive `window-point'."
@@ -2937,14 +3156,14 @@ Interactive incremental search is not supported yet."
     (or (elisp-window-start w)
         (with-current-buffer buf (point-min)))))
 
-(cl:defun window-font-height (&optional _window)
+(cl:defun window-font-height (&optional _window _face)
   "Bring-up stub for the C primitive `window-font-height' (TTY)."
-  (declare (cl:ignore _window))
+  (declare (cl:ignore _window _face))
   1)
 
-(cl:defun window-font-width (&optional _window)
+(cl:defun window-font-width (&optional _window _face)
   "Bring-up stub for the C primitive `window-font-width' (TTY)."
-  (declare (cl:ignore _window))
+  (declare (cl:ignore _window _face))
   1)
 
 (cl:defun window-end (&optional window _update)
@@ -2978,6 +3197,13 @@ Interactive incremental search is not supported yet."
       (error "ELISP:WINDOW-VSCROLL expected live window, got: ~S" w))
     0))
 
+(cl:defun window-hscroll (&optional window)
+  "Bring-up stub for the C primitive `window-hscroll' (TTY)."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:WINDOW-HSCROLL expected live window, got: ~S" w))
+    0))
+
 (cl:defun set-window-vscroll (window vscroll &optional _pixels-p)
   "Bring-up stub for the C primitive `set-window-vscroll' (TTY)."
   (declare (cl:ignore vscroll _pixels-p))
@@ -2985,6 +3211,37 @@ Interactive incremental search is not supported yet."
     (unless (window-live-p w)
       (error "ELISP:SET-WINDOW-VSCROLL expected live window, got: ~S" w))
     0))
+
+(cl:defun set-window-hscroll (window columns)
+  "Bring-up stub for the C primitive `set-window-hscroll' (TTY)."
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:SET-WINDOW-HSCROLL expected live window, got: ~S" w))
+    (unless (integerp columns)
+      (error "ELISP:SET-WINDOW-HSCROLL expected integer columns, got: ~S" columns))
+    columns))
+
+(cl:defun pos-visible-in-window-p (&optional pos window partially)
+  "Bring-up stub for ELisp `pos-visible-in-window-p' (TTY, no layout).
+
+Returns non-nil when POS is within the buffer bounds of WINDOW's buffer.
+When PARTIALLY is non-nil and POS is visible, return a small (X Y) list."
+  (let* ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:POS-VISIBLE-IN-WINDOW-P expected live window, got: ~S" w))
+    (let ((buf (window-buffer w)))
+      (unless (bufferp buf)
+        (error "ELISP:POS-VISIBLE-IN-WINDOW-P expected window buffer, got: ~S" buf))
+      (with-current-buffer buf
+        (let ((p* (if pos (%pos pos) (point))))
+          (when (<= (point-min) p* (point-max))
+            (if partially
+                (list 0 0)
+                t)))))))
+
+(cl:defun undo-boundary ()
+  "Bring-up stub for ELisp `undo-boundary' (no undo list yet)."
+  nil)
 
 (cl:defun get-buffer-window (&optional buffer-or-name _frame)
   "Bring-up subset of ELisp `get-buffer-window' (single-window)."
@@ -3146,6 +3403,26 @@ Interactive incremental search is not supported yet."
                     (subseq wins (min (1+ pos) (length wins)))))
       new)))
 
+(cl:defun split-window-internal (window _new-pixel-size side _new-normal)
+  "Bring-up subset of the C primitive `split-window-internal' (window list only)."
+  (declare (cl:ignore _new-pixel-size _new-normal))
+  (let* ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:SPLIT-WINDOW-INTERNAL expected live window, got: ~S" w))
+    (when (eq w (minibuffer-window))
+      (error "ELISP:SPLIT-WINDOW-INTERNAL cannot split minibuffer window"))
+    (let* ((buf (window-buffer w))
+           (start (window-start w))
+           (new (make-elisp-window :buffer buf :start start))
+           (wins (or *windows* nil))
+           (pos (or (cl:position w wins :test #'eq) 0))
+           (beforep (memq side '(above left))))
+      (setf *windows*
+            (append (subseq wins 0 (if beforep pos (min (1+ pos) (length wins))))
+                    (list new)
+                    (subseq wins (if beforep pos (min (1+ pos) (length wins))))))
+      new)))
+
 (cl:defun split-window-below (&optional _size window-to-split)
   "Bring-up subset of ELisp `split-window-below' (calls `split-window')."
   (declare (cl:ignore _size))
@@ -3174,6 +3451,37 @@ Interactive incremental search is not supported yet."
                  (idx (if (and pos (>= pos n)) (max 0 (1- n)) (or pos 0))))
             (select-window (nth idx wins*) 'norecord)))
         nil))))
+
+(cl:defun delete-window-internal (window)
+  "Bring-up subset of the C primitive `delete-window-internal' (window list only)."
+  (let* ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:DELETE-WINDOW-INTERNAL expected live window, got: ~S" w))
+    (when (eq w (minibuffer-window))
+      (error "ELISP:DELETE-WINDOW-INTERNAL cannot delete minibuffer window"))
+    (let ((wins (or *windows* nil)))
+      (when (<= (length wins) 1)
+        (error "ELISP:DELETE-WINDOW-INTERNAL cannot delete the sole window"))
+      (let* ((pos (cl:position w wins :test #'eq))
+             (wins* (cl:remove w wins :test #'eq)))
+        (setf *windows* wins*)
+        (when (eq w (selected-window))
+          (let* ((n (length wins*))
+                 (idx (if (and pos (>= pos n)) (max 0 (1- n)) (or pos 0))))
+            (select-window (nth idx wins*) 'norecord)))
+        nil))))
+
+(cl:defun delete-other-windows-internal (window &optional _root)
+  "Bring-up subset of the C primitive `delete-other-windows-internal'."
+  (declare (cl:ignore _root))
+  (let ((w (or window (selected-window))))
+    (unless (window-live-p w)
+      (error "ELISP:DELETE-OTHER-WINDOWS-INTERNAL expected live window, got: ~S" w))
+    (when (eq w (minibuffer-window))
+      (error "ELISP:DELETE-OTHER-WINDOWS-INTERNAL cannot keep only the minibuffer window"))
+    (setf *windows* (list w))
+    (select-window w 'norecord)
+    nil))
 
 (cl:defun delete-other-windows (&optional window)
   "Bring-up subset of ELisp `delete-other-windows' (window list only)."
@@ -3277,6 +3585,34 @@ Interactive incremental search is not supported yet."
     (select-window win)
     (window-buffer win)))
 
+(cl:defvar *clemacs-display-buffer-shim* nil)
+(cl:defvar *clemacs-pop-to-buffer-shim* nil)
+(cl:defvar *clemacs-pop-to-buffer-same-window-shim* nil)
+(cl:defvar *clemacs-switch-to-buffer-shim* nil)
+(cl:defvar *clemacs-switch-to-buffer-other-window-shim* nil)
+
+(cl:defvar *clemacs-window-size-shim* nil)
+(cl:defvar *clemacs-window-pixel-height-shim* nil)
+(cl:defvar *clemacs-window-pixel-width-shim* nil)
+(cl:defvar *clemacs-window-body-width-shim* nil)
+(cl:defvar *clemacs-window-body-height-shim* nil)
+(cl:defvar *clemacs-window-total-height-shim* nil)
+(cl:defvar *clemacs-window-total-width-shim* nil)
+(cl:defvar *clemacs-window-width-shim* nil)
+(cl:defvar *clemacs-window-height-shim* nil)
+(cl:defvar *clemacs-window-font-height-shim* nil)
+(cl:defvar *clemacs-window-font-width-shim* nil)
+
+(cl:defvar *clemacs-split-window-shim* nil)
+(cl:defvar *clemacs-split-window-internal-shim* nil)
+(cl:defvar *clemacs-split-window-below-shim* nil)
+(cl:defvar *clemacs-split-window-right-shim* nil)
+(cl:defvar *clemacs-delete-window-shim* nil)
+(cl:defvar *clemacs-delete-window-internal-shim* nil)
+(cl:defvar *clemacs-delete-other-windows-shim* nil)
+(cl:defvar *clemacs-delete-other-windows-internal-shim* nil)
+(cl:defvar *clemacs-other-window-shim* nil)
+
 (cl:defun pop-to-buffer-same-window (buffer-or-name &optional _action _norecord)
   "Bring-up subset of ELisp `pop-to-buffer-same-window' (single-window)."
   (declare (cl:ignore _action _norecord))
@@ -3295,6 +3631,62 @@ Interactive incremental search is not supported yet."
   (let ((w (display-buffer buffer-or-name)))
     (select-window w 'norecord)
     (window-buffer w)))
+
+(eval-when (:load-toplevel :execute)
+  (when (null *clemacs-display-buffer-shim*)
+    (setf *clemacs-display-buffer-shim* (fdefinition 'display-buffer)))
+  (when (null *clemacs-pop-to-buffer-shim*)
+    (setf *clemacs-pop-to-buffer-shim* (fdefinition 'pop-to-buffer)))
+  (when (null *clemacs-pop-to-buffer-same-window-shim*)
+    (setf *clemacs-pop-to-buffer-same-window-shim* (fdefinition 'pop-to-buffer-same-window)))
+  (when (null *clemacs-switch-to-buffer-shim*)
+    (setf *clemacs-switch-to-buffer-shim* (fdefinition 'switch-to-buffer)))
+  (when (null *clemacs-switch-to-buffer-other-window-shim*)
+    (setf *clemacs-switch-to-buffer-other-window-shim* (fdefinition 'switch-to-buffer-other-window)))
+
+  ;; window.el can overwrite core window functions.  Capture the clemacs-safe
+  ;; implementations so we can reinstall them after loading upstream window.el.
+  (when (null *clemacs-window-size-shim*)
+    (setf *clemacs-window-size-shim* (fdefinition 'window-size)))
+  (when (null *clemacs-window-pixel-height-shim*)
+    (setf *clemacs-window-pixel-height-shim* (fdefinition 'window-pixel-height)))
+  (when (null *clemacs-window-pixel-width-shim*)
+    (setf *clemacs-window-pixel-width-shim* (fdefinition 'window-pixel-width)))
+  (when (null *clemacs-window-body-width-shim*)
+    (setf *clemacs-window-body-width-shim* (fdefinition 'window-body-width)))
+  (when (null *clemacs-window-body-height-shim*)
+    (setf *clemacs-window-body-height-shim* (fdefinition 'window-body-height)))
+  (when (null *clemacs-window-total-height-shim*)
+    (setf *clemacs-window-total-height-shim* (fdefinition 'window-total-height)))
+  (when (null *clemacs-window-total-width-shim*)
+    (setf *clemacs-window-total-width-shim* (fdefinition 'window-total-width)))
+  (when (null *clemacs-window-width-shim*)
+    (setf *clemacs-window-width-shim* (fdefinition 'window-width)))
+  (when (null *clemacs-window-height-shim*)
+    (setf *clemacs-window-height-shim* (fdefinition 'window-height)))
+  (when (null *clemacs-window-font-height-shim*)
+    (setf *clemacs-window-font-height-shim* (fdefinition 'window-font-height)))
+  (when (null *clemacs-window-font-width-shim*)
+    (setf *clemacs-window-font-width-shim* (fdefinition 'window-font-width)))
+
+  (when (null *clemacs-split-window-shim*)
+    (setf *clemacs-split-window-shim* (fdefinition 'split-window)))
+  (when (null *clemacs-split-window-internal-shim*)
+    (setf *clemacs-split-window-internal-shim* (fdefinition 'split-window-internal)))
+  (when (null *clemacs-split-window-below-shim*)
+    (setf *clemacs-split-window-below-shim* (fdefinition 'split-window-below)))
+  (when (null *clemacs-split-window-right-shim*)
+    (setf *clemacs-split-window-right-shim* (fdefinition 'split-window-right)))
+  (when (null *clemacs-delete-window-shim*)
+    (setf *clemacs-delete-window-shim* (fdefinition 'delete-window)))
+  (when (null *clemacs-delete-window-internal-shim*)
+    (setf *clemacs-delete-window-internal-shim* (fdefinition 'delete-window-internal)))
+  (when (null *clemacs-delete-other-windows-shim*)
+    (setf *clemacs-delete-other-windows-shim* (fdefinition 'delete-other-windows)))
+  (when (null *clemacs-delete-other-windows-internal-shim*)
+    (setf *clemacs-delete-other-windows-internal-shim* (fdefinition 'delete-other-windows-internal)))
+  (when (null *clemacs-other-window-shim*)
+    (setf *clemacs-other-window-shim* (fdefinition 'other-window))))
 
 (cl:defun buffer-size (&optional buffer)
   "Bring-up subset of the C primitive `buffer-size'."

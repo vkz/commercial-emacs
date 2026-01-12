@@ -11,9 +11,37 @@
 (defvar *string-match-scanner-cache* (cl:make-hash-table :test #'cl:equal))
 (defvar *string-match-anchored-scanner-cache* (cl:make-hash-table :test #'cl:equal))
 
-(cl:defun match-data ()
-  "Bring-up subset of ELisp `match-data'."
-  (and *match-data* (copy-list *match-data*)))
+(cl:defun match-data (&optional _integers reuse set)
+  "Bring-up subset of ELisp `match-data'.
+
+Accept optional REUSE and SET arguments as used by `replace.el`."
+  (declare (cl:ignore _integers))
+  (let ((md (and *match-data* (copy-list *match-data*))))
+    (cond
+     ((null md)
+      (when set
+        (set-match-data nil))
+      nil)
+     ((and (listp reuse) reuse (cl:>= (length reuse) (length md)))
+      ;; Update REUSE in place so callers can preserve identity checks.
+      (let ((src md)
+            (dst reuse)
+            (prev nil))
+        (loop while (and src dst) do
+          (setf (car dst) (car src))
+          (setf prev dst)
+          (setf src (cdr src))
+          (setf dst (cdr dst)))
+        ;; Truncate if REUSE is longer than MD.
+        (when prev
+          (setf (cdr prev) nil))
+        (when set
+          (set-match-data reuse))
+        reuse))
+     (t
+      (when set
+        (set-match-data md))
+      md))))
 
 (cl:defun set-match-data (data &optional _reseat _inhibit-read-only)
   "Bring-up subset of ELisp `set-match-data'."

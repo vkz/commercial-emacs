@@ -48,7 +48,7 @@ lisp/loaddefs.el -
 lisp/env.el 10
 lisp/format.el 10
 lisp/bindings.el 347
-lisp/window.el 10
+lisp/window.el -
 lisp/frame.el -
 lisp/files.el -
 lisp/emacs-lisp/cl-generic.el -
@@ -56,6 +56,8 @@ lisp/emacs-lisp/cl-generic.el -
 # pdump: nadvice.
 lisp/emacs-lisp/nadvice.el -
 lisp/simple.el -
+lisp/isearch.el -
+lisp/replace.el -
 
 # bring-up: comint/shell (first slice; caps will rise over time).
 lisp/comint.el 60

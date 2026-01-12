@@ -26,6 +26,14 @@
             (apply #'format out fmt args)
             (terpri out)))))))
 
+(defun %tty-command-timeout-seconds ()
+  (let ((s (uiop:getenv "CLEMACS_TTY_COMMAND_TIMEOUT")))
+    (when (and s (not (string= s "")))
+      (handler-case
+          (let ((n (parse-integer s :junk-allowed t)))
+            (and n (> n 0) n))
+        (error () nil)))))
+
 (defun %tty-read-byte ()
   (if (consp *tty-unread-bytes*)
       (let ((b (car *tty-unread-bytes*)))
@@ -336,8 +344,11 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
             (list (make-grid-patch-jsonl-sink dump))))
     (unwind-protect
         (progn
-          (%tty-maybe-load-startup)
+          ;; Enter raw mode before loading startup so PTY-driven test input
+          ;; can't be eaten by the terminal line discipline (notably ^S/^Q flow
+          ;; control) while startup is still loading.
           (tty-enter-raw)
+          (%tty-maybe-load-startup)
           (let* ((level (or (uiop:getenv "CLEMACS_TTY_STARTUP_LEVEL") "tty-editor"))
                  (bringup-p (or (string= level "none")
                                 (string= level "subr"))))
@@ -394,7 +405,37 @@ package symbols for special keys (LEFT/RIGHT/UP/DOWN)."
                                             (ignore-errors elisp::last-command)
                                             (ignore-errors elisp::this-command))
                             (if (and cmd (not (integerp cmd)) (not (elisp::keymapp cmd)))
-                                (elisp::command-execute cmd)
+                                (let ((timeout (%tty-command-timeout-seconds)))
+                                  #+sbcl
+                                  (handler-case
+                                      (if timeout
+                                          (sb-ext:with-timeout timeout
+                                            (handler-bind
+                                                ((sb-ext:timeout
+                                                   (lambda (c)
+                                                     ;; Print the backtrace at the signal site so we
+                                                     ;; can see where the command is stuck.
+                                                     (declare (ignore c))
+                                                     (%tty-trace-log "timeout-signal: keys=~S cmd=~S" keys cmd)
+                                                     (format *error-output*
+                                                             "[clemacs] tty command timeout (signal): keys=~S cmd=~S this-command=~S~%"
+                                                             keys cmd (ignore-errors elisp::this-command))
+                                                     (ignore-errors
+                                                       (sb-debug:print-backtrace :stream *error-output* :count 120))
+                                                     (finish-output *error-output*)
+                                                     nil)))
+                                              (elisp::command-execute cmd)))
+                                          (elisp::command-execute cmd))
+                                    (sb-ext:timeout ()
+                                      (%tty-trace-log "timeout: keys=~S cmd=~S" keys cmd)
+                                      (format *error-output*
+                                              "[clemacs] tty command timeout: keys=~S cmd=~S this-command=~S~%"
+                                              keys cmd (ignore-errors elisp::this-command))
+                                      (ignore-errors
+                                        (sb-debug:print-backtrace :stream *error-output* :count 80))
+                                      (error "clemacs tty command timeout: cmd=~S" cmd)))
+                                  #-sbcl
+                                  (elisp::command-execute cmd))
                                 (tty-write-string "\a")))))
                     (clemacs-quit ()
                       (return 0))

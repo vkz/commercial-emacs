@@ -44,6 +44,7 @@
 (cl:defvar current-prefix-arg nil)
 (cl:defvar defining-kbd-macro nil)
 (cl:defvar last-command-event nil)
+(cl:defvar last-input-event nil)
 (cl:defvar unread-command-events nil)
 (cl:defvar executing-kbd-macro nil)
 (cl:defvar keyboard-translate-table nil)
@@ -66,6 +67,7 @@
 (cl:defvar auto-mode-alist nil)
 (cl:defvar magic-fallback-mode-alist nil)
 (cl:defvar minor-mode-map-alist nil)
+(cl:defvar text-mode-map nil)
 (cl:defvar load-path nil)
 (cl:defvar load-file-rep-suffixes nil)
 (cl:defvar temporary-file-directory nil)
@@ -85,6 +87,14 @@
 (cl:defvar window-persistent-parameters nil)
 (cl:defvar focus-follows-mouse nil)
 (cl:defvar mouse-autoselect-window nil)
+(cl:defvar buffer-backed-up nil)
+(cl:defvar baud-rate 9600)
+(cl:defvar window-combination-limit nil)
+(cl:defvar window-combination-resize nil)
+(cl:defvar minibuffer-auto-raise nil)
+(cl:defvar input-method-function nil)
+(cl:defvar minibuffer-message-timeout 2)
+(cl:defvar cursor-sensor-inhibit nil)
 
 ;; Bring-up: these are defined later in upstream ELisp (or in libraries we may
 ;; not load yet), but are referenced by early-startup code paths.
@@ -93,6 +103,14 @@
 (cl:defvar isearch-forward nil)
 (cl:defvar isearch-success nil)
 (cl:defvar isearch-error nil)
+(cl:defvar current-input-method nil)
+(cl:defvar current-input-method-title nil)
+(cl:defvar multi-isearch-file-list nil)
+(cl:defvar multi-isearch-buffer-list nil)
+(cl:defvar multi-isearch-next-buffer-function nil)
+(cl:defvar multi-isearch-next-buffer-current-function nil)
+(cl:defvar multi-isearch-current-buffer nil)
+(cl:defvar minibuffer-history-isearch-message-overlay nil)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   ;; The CL reader does not parse Emacs's special float syntax (e.g.
@@ -117,6 +135,16 @@
 (cl:defmacro bound-and-true-p (var)
   "Bring-up subset of ELisp `bound-and-true-p'."
   `(and (cl:boundp ',var) ,var))
+
+(cl:defun gettext (msgid)
+  "Bring-up stub for ELisp `gettext' (no i18n)."
+  msgid)
+
+(cl:defun ngettext (singular plural n)
+  "Bring-up stub for ELisp `ngettext' (no i18n)."
+  (if (and (integerp n) (= n 1))
+      singular
+      plural))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   ;; Upstream `pcase.el` uses `pure`/`side-effect-free` symbol properties to

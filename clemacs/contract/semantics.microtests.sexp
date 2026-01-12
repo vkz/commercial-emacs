@@ -152,6 +152,21 @@
   :expected "(t t t t t t t)"
   :emacs :match)
 
+ (:name "core-vars-text-mode-map-boundp"
+  :expr "(boundp 'text-mode-map)"
+  :expected "t"
+  :emacs :match)
+
+ (:name "command-loop-interactive-i-produces-nil"
+  :expr "(progn (defun clemacs--tmp-int-i (x) (interactive \"i\") x) (call-interactively 'clemacs--tmp-int-i))"
+  :expected "nil"
+  :emacs :match)
+
+ (:name "windows-window-parameter-set-get"
+  :expr "(let ((w (selected-window))) (list (window-parameter w 'clemacs--tmp-win-param) (progn (set-window-parameter w 'clemacs--tmp-win-param 7) (window-parameter w 'clemacs--tmp-win-param)) (alist-get 'clemacs--tmp-win-param (window-parameters w))))"
+  :expected "(nil 7 7)"
+  :emacs :match)
+
  (:name "core-internal-define-uninitialized-variable-does-not-bind"
   :expr "(progn (makunbound 'clemacs--tmp-uninit-var) (internal--define-uninitialized-variable 'clemacs--tmp-uninit-var \"doc\") (list (boundp 'clemacs--tmp-uninit-var) (special-variable-p 'clemacs--tmp-uninit-var) (get 'clemacs--tmp-uninit-var 'variable-documentation)))"
   :expected "(nil t \"doc\")"
@@ -601,6 +616,11 @@
  (:name "match-data-basic"
   :expr "(progn (string-match \"b\" \"abc\") (match-beginning 0))"
   :expected "1"
+  :emacs :match)
+
+ (:name "match-data-optional-args"
+  :expr "(progn (string-match \"b\" \"abc\") (match-data t nil t))"
+  :expected "(1 2)"
   :emacs :match)
 
  (:name "match-string-basic"

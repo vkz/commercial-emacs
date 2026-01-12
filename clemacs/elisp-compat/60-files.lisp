@@ -220,6 +220,30 @@ expanded file name string."
   #-sbcl
   nil)
 
+(cl:defun file-acl (_filename)
+  "Bring-up stub for the C primitive `file-acl'."
+  (declare (cl:ignore _filename))
+  nil)
+
+(cl:defun set-file-acl (_filename _acl-string)
+  "Bring-up stub for the C primitive `set-file-acl'."
+  (declare (cl:ignore _filename _acl-string))
+  nil)
+
+(cl:defun file-selinux-context (_filename)
+  "Bring-up stub for the C primitive `file-selinux-context'."
+  (declare (cl:ignore _filename))
+  nil)
+
+(cl:defun set-file-selinux-context (_filename _context)
+  "Bring-up stub for the C primitive `set-file-selinux-context'."
+  (declare (cl:ignore _filename _context))
+  nil)
+
+(cl:defun user-uid ()
+  "Bring-up stub for the C primitive `user-uid'."
+  0)
+
 (cl:defun %posix-access-ok-p (path mode)
   #+sbcl
   (handler-case

@@ -113,9 +113,11 @@ P3: Upstream ERT bring-up (coverage as a guardrail)
 - DONE (2026-01-11): Keep `clemacs/contract/lisp.allowed-skip.files` strictly “out-of-scope only” (no skipping to get green).
 - DONE (2026-01-11): Keep the PTY editor gate (`mise run clemacs:test:tty`) representative of the promised alpha UX (visit/edit/save/quit + search/replace + basic window ops).
 - DONE (2026-01-11): Close the `pdump.check` gap (105/105) by explicitly marking GUI/non-supported pdump conditionals as out-of-scope and teaching clemacs progress/startup-delta reports to count allowed skips as "covered".
-- DONE (2026-01-12): Grow `clemacs/contract/startup.tty-editor.files` while keeping `clemacs:test:contract -- --level elisp-core` green (added more early core: `pp`, `ldefs-boot`, `loaddefs`; keep window/isearch/replace wired via clemacs shims until upstream loads are safe).
+- DONE (2026-01-12): Grow `clemacs/contract/startup.tty-editor.files` while keeping `clemacs:test:contract -- --level elisp-core` green (added more early core: `pp`, `ldefs-boot`, `loaddefs`; load `window.el`/`isearch.el`/`replace.el` directly, with minimal post-load shims to keep the single-window TTY model stable).
 - DONE (2026-01-12): Fix TTY UX keybindings to 22/22 (M-v, C-s, C-r, M-%, C-x 2, C-x o, C-x 0) and make the batch check accurate by applying `clemacs-tty-setup` keybinding ensures after loading the tty-editor startup manifest.
 - DONE (2026-01-12): Add microtests covering new startup bring-up blockers (ensure `special-event-map` and `window-persistent-parameters` are bound as expected).
+- DONE (2026-01-12): Make command loop honor overriding keymaps and `pre-command-hook`/`post-command-hook` so modal libraries like `isearch.el` behave correctly.
+- DONE (2026-01-12): Stabilize the PTY editor gate input stream (handle partial PTY writes; treat query-replace confirmation as a single keystroke).
 
 ### Milestone B1-8: load the shipped `lisp/` tree under clemacs
 
