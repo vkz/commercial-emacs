@@ -87,21 +87,34 @@ lisp/select.el 10
 lisp/emacs-lisp/timer.el -
 
 # bring-up: minibuffer UX helpers (TTY-first; cap will rise over time).
-lisp/emacs-lisp/easymenu.el 10
-lisp/rfn-eshadow.el 10
+lisp/emacs-lisp/easymenu.el 50
+lisp/rfn-eshadow.el 50
 
 # bring-up: menu chrome (loaded by upstream pdump; keep capped).
 lisp/menu-bar.el 1
 lisp/tab-bar.el 1
 
 # bring-up: core major modes (TTY/editor surfaces; first slice).
-lisp/emacs-lisp/lisp.el 21
-lisp/textmodes/page.el 10
-lisp/register.el 10
-lisp/textmodes/paragraphs.el 10
-lisp/progmodes/prog-mode.el 10
-lisp/emacs-lisp/lisp-mode.el 10
-lisp/textmodes/text-mode.el 21
+lisp/emacs-lisp/lisp.el 50
+lisp/textmodes/page.el 50
+lisp/register.el 50
+lisp/textmodes/paragraphs.el 50
+lisp/progmodes/prog-mode.el 50
+lisp/emacs-lisp/lisp-mode.el 50
+lisp/textmodes/text-mode.el 50
+
+# bring-up: fill/comment/list UIs (TTY/editor surfaces; first slice).
+lisp/textmodes/fill.el 10
+lisp/newcomment.el 10
+lisp/emacs-lisp/tabulated-list.el 10
+lisp/buff-menu.el 10
+lisp/progmodes/elisp-mode.el 10
+
+# bring-up: TTY display and directory listings (first slice).
+lisp/disp-table.el 10
+lisp/ls-lisp.el 10
+lisp/term/internal.el 10
+lisp/international/ucs-normalize.el 10
 
 # bring-up: comint/shell (first slice; caps will rise over time).
 lisp/comint.el 60

@@ -216,6 +216,9 @@ completion-substring-test-2
 completion-substring-test-3
 completion-substring-test-4
 completion-substring-test-5
+completion-flex-test-1
+completion-flex-test-2
+completion-flex-test-3
 test-map-nested-elt
 test-map-nested-elt-default
 test-mapp
