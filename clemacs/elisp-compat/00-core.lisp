@@ -70,11 +70,45 @@
 (cl:defvar auto-mode-alist nil)
 (cl:defvar magic-fallback-mode-alist nil)
 (cl:defvar minor-mode-map-alist nil)
+(cl:defvar auto-save-file-name-transforms nil)
 (cl:defvar text-mode-map)
 (cl:defvar load-path nil)
 (cl:defvar load-file-rep-suffixes nil)
-(cl:defvar temporary-file-directory nil)
+(cl:defvar temporary-file-directory "/tmp")
+(cl:defvar small-temporary-file-directory "/tmp")
 (cl:defvar pdumper--pure-pool nil)
+(cl:defvar after-init-time nil)
+(cl:defvar before-init-time nil)
+
+(cl:defun pdumping-p ()
+  "Bring-up stub for the C primitive `pdumping-p'.
+
+clemacs does not (yet) support pdump; treat this as false, except when
+`pdumper--pure-pool' is explicitly non-nil."
+  (and (boundp 'pdumper--pure-pool) pdumper--pure-pool t))
+
+(cl:defun make-translation-table-from-alist (alist)
+  "Bring-up stub for ELisp `make-translation-table-from-alist'.
+
+Upstream `mule.el` returns a char-table suitable for `translate-region' and
+CCL translation.  For clemacs bring-up, return ALIST as an opaque placeholder
+so libraries like `ucs-normalize.el` can load and register their tables."
+  alist)
+
+(cl:defun define-translation-table (symbol &rest args)
+  "Bring-up stub for ELisp `define-translation-table'.
+
+Upstream `mule.el` registers translation tables in `translation-table-vector'.
+For clemacs bring-up, store the table on SYMBOL and return 0."
+  (let ((table (car args)))
+    (put symbol 'translation-table table)
+    (put symbol 'translation-table-id 0)
+    0))
+
+(cl:defun translate-region (_start _end _table)
+  "Bring-up stub for ELisp `translate-region'."
+  (declare (cl:ignore _start _end _table))
+  0)
 
 ;; Variables that upstream ELisp assumes exist very early (often C-defined),
 ;; but which may not have been DEFVAR'd yet when we start loading a subset of
@@ -85,6 +119,7 @@
 (cl:defvar inhibit-file-name-operation nil)
 (cl:defvar buffer-undo-list nil)
 (cl:defvar default-frame-alist nil)
+(cl:defvar default-frame-scroll-bars nil)
 (cl:defvar shell-file-name nil)
 (cl:defvar command-history nil)
 (cl:defvar window-persistent-parameters nil)
@@ -98,6 +133,21 @@
 (cl:defvar input-method-function nil)
 (cl:defvar minibuffer-message-timeout 2)
 (cl:defvar cursor-sensor-inhibit nil)
+(cl:defvar scalable-fonts-allowed nil)
+(cl:defvar composition-break-at-point nil)
+(cl:defvar display-fill-column-indicator nil)
+(cl:defvar display-fill-column-indicator-column t)
+(cl:defvar display-fill-column-indicator-character nil)
+(cl:defvar display-line-numbers nil)
+(cl:defvar display-line-numbers-width nil)
+(cl:defvar display-line-numbers-current-absolute t)
+(cl:defvar display-line-numbers-widen t)
+(cl:defvar display-line-numbers-major-tick 10)
+(cl:defvar display-line-numbers-minor-tick 5)
+(cl:defvar display-hourglass nil)
+(cl:defvar hourglass-delay 1)
+(cl:defvar resize-mini-windows t)
+(cl:defvar display-raw-bytes-as-hex nil)
 
 ;; Bring-up: these are defined later in upstream ELisp (or in libraries we may
 ;; not load yet), but are referenced by early-startup code paths.
@@ -605,6 +655,25 @@ This supports COLLECTION as either:
         (return-from test-completion t))))
   nil)
 
+(cl:defun completion-table-dynamic (fun &optional _switch-buffer)
+  "Bring-up subset of ELisp `completion-table-dynamic'.
+
+Return a functional completion table that calls FUN to produce the current
+collection.  This is normally defined in `lisp/minibuffer.el`, but some
+libraries (e.g. `lisp/progmodes/elisp-mode.el`) reference it before we reach the
+`minibuffer.el` checkpoint in the `tty-editor` bring-up manifest."
+  (declare (cl:ignore _switch-buffer))
+  (unless (functionp fun)
+    (error "ELISP:COMPLETION-TABLE-DYNAMIC expects function FUN, got: %S" fun))
+  (lambda (string predicate action)
+    (let ((collection (funcall fun string)))
+      (cond
+       ((eq action t) (all-completions string collection predicate))
+       ((eq action 'lambda) (test-completion string collection predicate))
+       ;; Unknown ACTION: be permissive during bring-up; behave like no matches.
+       ((and action (not (null action))) nil)
+       (t (try-completion string collection predicate))))))
+
 (cl:defun assoc-string (key list &optional case-fold)
   "Bring-up subset of ELisp `assoc-string'."
   (unless (stringp key)
@@ -623,24 +692,88 @@ This supports COLLECTION as either:
             (return-from assoc-string elt))))))
     nil))
 
-(cl:defun intern (name &optional (package (find-package "ELISP")))
-  "ELisp-ish INTERN; canonicalizes strings to CL-style names.
+(cl:defvar *clemacs-obarray-tables*
+  (cl:make-hash-table :test 'cl:eq)
+  "Map obarray vectors to backing hash tables (string -> symbol).")
 
-This is a pragmatic compatibility shim, not a full obarray model."
-  (etypecase name
-    ((or cl:string unibyte-string)
-     (cl:intern (string-upcase (%elisp-string->cl-string name)) package))
-    (symbol name)))
+(cl:defun obarray-make (size)
+  "Bring-up subset of the C primitive `obarray-make'.
 
-(cl:defun intern-soft (name &optional _obarray)
+Return a fresh obarray vector of SIZE, suitable for passing as the OBARRAY
+argument to `intern'/`intern-soft'."
+  (unless (and (integerp size) (> size 0))
+    (error "ELISP:OBARRAY-MAKE expects positive integer SIZE, got: %S" size))
+  (let ((v (make-array size :initial-element nil)))
+    (setf (gethash v *clemacs-obarray-tables*)
+          (cl:make-hash-table :test 'cl:equal))
+    v))
+
+(cl:defun %intern-obarray-table (obarray)
+  (unless (vectorp obarray)
+    (error "ELISP: expected obarray vector, got: %S" obarray))
+  (or (gethash obarray *clemacs-obarray-tables*)
+      (setf (gethash obarray *clemacs-obarray-tables*)
+            (cl:make-hash-table :test 'cl:equal))))
+
+(cl:defun intern (name &optional obarray)
+  "ELisp-ish INTERN.
+
+Supports:
+- NAME as a string (including unibyte strings) or a symbol.
+- OBARRAY as either:
+  - nil (intern into the ELISP package; pragmatic compatibility), or
+  - an obarray vector created by `obarray-make' (intern into that obarray), or
+  - a CL package designator (legacy clemacs convenience; not used by upstream ELisp)."
+  (when (symbolp name)
+    (return-from intern name))
+  (unless (stringp name)
+    (error "ELISP:INTERN expects NAME as string or symbol, got: %S" name))
+  (cond
+   ;; Legacy clemacs behavior: allow passing an explicit CL package.
+   ((or (null obarray)
+        (typep obarray 'package)
+        (and (symbolp obarray) (find-package obarray))
+        (and (cl:stringp obarray) (find-package obarray)))
+    (let ((pkg (cond
+                ((null obarray) (find-package "ELISP"))
+                ((typep obarray 'package) obarray)
+                (t (find-package obarray)))))
+      (cl:intern (string-upcase (%elisp-string->cl-string name)) pkg)))
+   ;; Emacs-style: obarray vector.
+   ((vectorp obarray)
+    (let* ((k (%elisp-string->cl-string name))
+           (tab (%intern-obarray-table obarray))
+           (sym (gethash k tab)))
+      (or sym
+          (setf (gethash k tab) (cl:make-symbol k)))))
+   (t
+    (error "ELISP:INTERN unsupported OBARRAY: %S" obarray))))
+
+(cl:defun intern-soft (name &optional obarray)
   "Bring-up subset of ELisp `intern-soft'."
-  (declare (cl:ignore _obarray))
   (unless (stringp name)
     (error "ELISP:INTERN-SOFT expects a string, got: ~S" name))
-  (multiple-value-bind (sym status)
-      (find-symbol (string-upcase (%elisp-string->cl-string name)) (find-package "ELISP"))
-    (declare (cl:ignore status))
-    sym))
+  (cond
+   ((null obarray)
+    (multiple-value-bind (sym status)
+        (find-symbol (string-upcase (%elisp-string->cl-string name)) (find-package "ELISP"))
+      (declare (cl:ignore status))
+      sym))
+   ((vectorp obarray)
+    (gethash (%elisp-string->cl-string name) (%intern-obarray-table obarray)))
+   ;; Legacy clemacs behavior: allow passing an explicit CL package.
+   ((or (typep obarray 'package)
+        (and (symbolp obarray) (find-package obarray))
+        (and (cl:stringp obarray) (find-package obarray)))
+    (let ((pkg (cond
+                ((typep obarray 'package) obarray)
+                (t (find-package obarray)))))
+      (multiple-value-bind (sym status)
+          (find-symbol (string-upcase (%elisp-string->cl-string name)) pkg)
+        (declare (cl:ignore status))
+        sym)))
+   (t
+    (error "ELISP:INTERN-SOFT unsupported OBARRAY: %S" obarray))))
 
 (cl:defun make-symbol (name)
   "ELisp-ish MAKE-SYMBOL."

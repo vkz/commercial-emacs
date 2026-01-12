@@ -16,7 +16,7 @@ lisp/version.el -
 
 # pdump: widget, custom, map-ynp.
 lisp/widget.el 10
-lisp/custom.el 10
+lisp/custom.el 120
 lisp/emacs-lisp/map-ynp.el 10
 
 # pdump: mule + startup basics (needed for file I/O + coding systems).
@@ -80,10 +80,10 @@ lisp/font-lock.el 200
 
 # pdump: jit-lock, timer.
 lisp/jit-lock.el 200
-lisp/mouse.el 10
-lisp/fringe.el 10
-lisp/scroll-bar.el 10
-lisp/select.el 10
+lisp/mouse.el 50
+lisp/fringe.el 50
+lisp/scroll-bar.el 50
+lisp/select.el 50
 lisp/emacs-lisp/timer.el -
 
 # bring-up: minibuffer UX helpers (TTY-first; cap will rise over time).
@@ -104,17 +104,41 @@ lisp/emacs-lisp/lisp-mode.el 50
 lisp/textmodes/text-mode.el 50
 
 # bring-up: fill/comment/list UIs (TTY/editor surfaces; first slice).
-lisp/textmodes/fill.el 10
-lisp/newcomment.el 10
-lisp/emacs-lisp/tabulated-list.el 10
-lisp/buff-menu.el 10
-lisp/progmodes/elisp-mode.el 10
+lisp/textmodes/fill.el 50
+lisp/newcomment.el 50
+lisp/emacs-lisp/tabulated-list.el 50
+lisp/buff-menu.el 50
+
+# pdump: image, fontset.
+lisp/image.el 50
+lisp/international/fontset.el 50
+
+# bring-up: elisp-mode (TTY/editor surfaces; first slice).
+lisp/progmodes/elisp-mode.el 50
+
+# pdump: float-sup, vc-hooks, ediff-hook, uniquify, electric, paren, shorthands.
+lisp/emacs-lisp/float-sup.el 20
+lisp/vc/vc-hooks.el 50
+lisp/vc/ediff-hook.el 20
+lisp/uniquify.el 20
+lisp/electric.el 20
+lisp/paren.el 50
+lisp/emacs-lisp/shorthands.el 20
+
+# pdump: eldoc, inline, cconv, cus-start, tooltip, iso-transl, rmc.
+lisp/emacs-lisp/eldoc.el 50
+lisp/emacs-lisp/inline.el 50
+lisp/emacs-lisp/cconv.el 20
+lisp/cus-start.el 1
+lisp/tooltip.el 20
+lisp/international/iso-transl.el 20
+lisp/emacs-lisp/rmc.el 20
 
 # bring-up: TTY display and directory listings (first slice).
-lisp/disp-table.el 10
-lisp/ls-lisp.el 10
-lisp/term/internal.el 10
-lisp/international/ucs-normalize.el 10
+lisp/disp-table.el 50
+lisp/ls-lisp.el 50
+lisp/term/internal.el 50
+lisp/international/ucs-normalize.el 20
 
 # bring-up: comint/shell (first slice; caps will rise over time).
 lisp/comint.el 60

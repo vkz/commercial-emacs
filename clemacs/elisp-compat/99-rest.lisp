@@ -68,6 +68,12 @@ Supports only:
 
 (cl:defvar function-key-map (make-sparse-keymap))
 
+(cl:defvar key-translation-map (make-sparse-keymap)
+  "Bring-up default for the C-defined variable `key-translation-map'.")
+
+(cl:defvar input-decode-map (make-sparse-keymap)
+  "Bring-up default for the C-defined variable `input-decode-map'.")
+
 (cl:defun make-vector (length init)
   "ELisp-ish MAKE-VECTOR."
   (make-array length :initial-element init))

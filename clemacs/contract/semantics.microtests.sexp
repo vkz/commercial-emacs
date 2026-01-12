@@ -152,14 +152,24 @@
   :expected "(t t)"
   :emacs :match)
 
+ (:name "completion-completion-table-dynamic-basic"
+  :expr "(let ((tbl (completion-table-dynamic (lambda (_s) '(\"aa\" \"ab\"))))) (equal (all-completions \"a\" tbl) '(\"aa\" \"ab\")))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "obarray-obarray-make-and-intern-isolated"
+  :expr "(let* ((o (obarray-make 7)) (s1 (intern \"foo\" o)) (s2 (intern \"foo\" o)) (s3 (intern \"foo\"))) (list (eq s1 s2) (eq s1 s3)))"
+  :expected "(t nil)"
+  :emacs :match)
+
  (:name "files-file-attribute-modification-time-basic"
   :expr "(let ((f (make-temp-file \"clemacs-fat-\"))) (write-region \"x\" nil f nil 0) (not (null (file-attribute-modification-time (file-attributes f)))))"
   :expected "t"
   :emacs :match)
 
  (:name "core-vars-files-and-inhibit-boundp"
-  :expr "(mapcar #'boundp '(inhibit-point-motion-hooks inhibit-file-name-handlers inhibit-file-name-operation buffer-undo-list default-frame-alist shell-file-name command-history))"
-  :expected "(t t t t t t t)"
+  :expr "(mapcar #'boundp '(inhibit-point-motion-hooks inhibit-file-name-handlers inhibit-file-name-operation buffer-undo-list default-frame-alist default-frame-scroll-bars shell-file-name command-history))"
+  :expected "(t t t t t t t t)"
   :emacs :match)
 
  (:name "core-vars-text-mode-map-boundp"
@@ -440,6 +450,11 @@
 
  (:name "startup-vars-special-event-map-and-window-persistent-parameters-bound"
   :expr "(and (boundp 'special-event-map) (keymapp special-event-map) (boundp 'window-persistent-parameters))"
+  :expected "t"
+  :emacs :match)
+
+ (:name "startup-vars-key-translation-and-input-decode-maps-bound"
+  :expr "(and (boundp 'key-translation-map) (keymapp key-translation-map) (boundp 'input-decode-map) (keymapp input-decode-map))"
   :expected "t"
   :emacs :match)
 
