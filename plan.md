@@ -85,6 +85,7 @@ Issue noticed + fix path
 - DONE (2026-01-12): Upstream minibuffer/completion bring-up stabilized: `clemacs:test:ert-upstream` completion cluster is green again after implementing `try-completion`/`all-completions`/`test-completion` case+regexp semantics, adding `assoc-string`, and stubbing the remaining completion globals used by `minibuffer.el`.
 - DONE (2026-01-12): Grow `startup.smoke` toward pdump order: add a first capped slice of `frame.el`, `startup.el`, `term/tty-colors.el`, and `font-core.el` to `clemacs/contract/startup.smoke.files`.
 - DONE (2026-01-12): Expand `ert-upstream.tests` minibuffer completion must-pass set: promote `completion-pcm-test-{3,4,5,6}` (still green).
+- DONE (2026-01-12): Grow `startup.tty-editor` toward pdump order: add a first capped slice of `button.el`, `abbrev.el`, `help.el`, `jka-cmpr-hook.el`, `epa-hook.el`, `mule-cmds.el`, `charprop.el`, `characters.el`, `composite.el`, `indent.el`, `startup.el`, `term/tty-colors.el`, `font-core.el`, `mouse.el`, `fringe.el`, `scroll-bar.el`, and `select.el` to `clemacs/contract/startup.tty-editor.files`.
 - NOTE (2026-01-12): clemacs currently canonicalizes mixed-case symbol names via `intern`/`prin1-to-string` (effectively upcasing). Full Emacs-fidelity fix path is to stop upcasing in `intern` and teach the printer to preserve case (or implement Emacs-like `print-escape-uppercase`). Decision: defer until it blocks shipped `lisp/` loads or upstream ERT; prioritize core TTY/editor correctness first.
 
 Next high-leverage steps

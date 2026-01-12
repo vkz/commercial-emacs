@@ -50,6 +50,7 @@ lisp/format.el 10
 lisp/bindings.el 347
 lisp/window.el -
 lisp/frame.el -
+lisp/button.el 1
 lisp/files.el -
 lisp/emacs-lisp/cl-generic.el -
 
@@ -59,12 +60,30 @@ lisp/simple.el -
 lisp/isearch.el -
 lisp/replace.el -
 
+# bring-up: abbrev/help/archives (first slice; caps will rise over time).
+lisp/abbrev.el 1
+lisp/help.el 1
+lisp/jka-cmpr-hook.el 1
+lisp/epa-hook.el 1
+lisp/international/mule-cmds.el 1
+lisp/international/charprop.el 1
+lisp/international/characters.el 1
+lisp/composite.el 1
+lisp/indent.el 1
+lisp/startup.el 1
+lisp/term/tty-colors.el 1
+lisp/font-core.el 1
+
 # pdump: syntax, font-lock.
 lisp/emacs-lisp/syntax.el -
 lisp/font-lock.el 200
 
 # pdump: jit-lock, timer.
 lisp/jit-lock.el 200
+lisp/mouse.el 1
+lisp/fringe.el 1
+lisp/scroll-bar.el 1
+lisp/select.el 1
 lisp/emacs-lisp/timer.el -
 
 # bring-up: comint/shell (first slice; caps will rise over time).
