@@ -78,6 +78,15 @@ Decision checkpoint (must ask the user)
 - If/when we hit a point where clemacs must diverge from upstream ELisp syntax or semantics beyond
   mechanical rewrites, stop and ask for an explicit decision with concrete examples and tradeoffs.
 
+Iteration notes (2026-01-12)
+
+Issue noticed + fix path
+- DONE (2026-01-12): `clemacs:test:micro` now runs `:emacs :match` comparisons against reference Emacs (no mass "reference Emacs not available" skips); fix path was to make the reference-Emacs batch run succeed (repair two `:match` microtests) and implement the missing compat needed by those tests (notably cyclic `fset` detection and better completion primitives).
+
+Next high-leverage steps
+- DONE (2026-01-12): Start the minibuffer bring-up loop: add `lisp/minibuffer.el` to `startup.tty-editor` with a low checkpoint and confirm `startup-check` stays green; promote a tiny minibuffer completion cluster into `ert-upstream.tests` and implement the completion plumbing needed to keep it green.
+- DONE (2026-01-12): Tighten window/buffer surface toward upstream: implement/stub next window primitives referenced by the `window.el` paths we’re exercising (e.g. `set-window-dedicated-p`) instead of leaving them as undefined warnings.
+
 ## Current snapshot
 
 Source of truth: `build/clemacs/reports/progress.md` (regenerate via `mise run clemacs:report:progress`).

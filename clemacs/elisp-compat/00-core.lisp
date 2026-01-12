@@ -445,25 +445,37 @@ If N is zero or negative, return nil.  Always returns a fresh list."
   (cl:string< (%elisp-string->cl-string s1)
               (%elisp-string->cl-string s2)))
 
+(cl:defvar completion-ignore-case nil)
+
 (cl:defun try-completion (string collection &optional _predicate)
   "Bring-up subset of the C primitive `try-completion'.
 
-This currently only supports COLLECTION as a list of strings."
-  (declare (cl:ignore _predicate))
+This supports COLLECTION as either:
+- a list of strings, or
+- a functional completion table (STRING PREDICATE ACTION)."
   (unless (stringp string)
     (error "ELISP:TRY-COMPLETION expects STRING, got: %S" string))
+  (when (functionp collection)
+    (return-from try-completion (funcall collection string _predicate nil)))
   (unless (listp collection)
     (error "ELISP:TRY-COMPLETION only supports list collections, got: %S" collection))
   (let* ((prefix (%elisp-string->cl-string string))
-         (cands nil))
+         (cands nil)
+         (pred _predicate))
     (dolist (s collection)
-      (when (stringp s)
+      (when (and (stringp s)
+                 (or (null pred)
+                     (not (functionp pred))
+                     (funcall pred s)))
         (let ((cs (%elisp-string->cl-string s)))
           (when (and (<= (length prefix) (length cs))
                      (cl:string= prefix cs :end2 (length prefix)))
             (push cs cands)))))
     (when (null cands)
       (return-from try-completion nil))
+    (when (and (= (length cands) 1)
+               (cl:string= (first cands) prefix))
+      (return-from try-completion t))
     (let ((common (copy-seq (first cands))))
       (dolist (s (rest cands))
         (let ((n (mismatch common s)))
@@ -477,21 +489,46 @@ This currently only supports COLLECTION as a list of strings."
 (cl:defun all-completions (string collection &optional _predicate)
   "Bring-up subset of the C primitive `all-completions'.
 
-This currently only supports COLLECTION as a list of strings."
-  (declare (cl:ignore _predicate))
+This supports COLLECTION as either:
+- a list of strings, or
+- a functional completion table (STRING PREDICATE ACTION)."
   (unless (stringp string)
     (error "ELISP:ALL-COMPLETIONS expects STRING, got: %S" string))
+  (when (functionp collection)
+    (return-from all-completions (funcall collection string _predicate t)))
   (unless (listp collection)
     (error "ELISP:ALL-COMPLETIONS only supports list collections, got: %S" collection))
   (let* ((prefix (%elisp-string->cl-string string))
-         (out nil))
+         (out nil)
+         (pred _predicate))
     (dolist (s collection)
-      (when (stringp s)
+      (when (and (stringp s)
+                 (or (null pred)
+                     (not (functionp pred))
+                     (funcall pred s)))
         (let ((cs (%elisp-string->cl-string s)))
           (when (and (<= (length prefix) (length cs))
                      (cl:string= prefix cs :end2 (length prefix)))
             (push s out)))))
     (nreverse out)))
+
+(cl:defun test-completion (string collection &optional _predicate)
+  "Bring-up subset of the C primitive `test-completion'."
+  (unless (stringp string)
+    (error "ELISP:TEST-COMPLETION expects STRING, got: %S" string))
+  (when (functionp collection)
+    (return-from test-completion (and (funcall collection string _predicate 'lambda) t)))
+  (unless (listp collection)
+    (error "ELISP:TEST-COMPLETION only supports list collections, got: %S" collection))
+  (let ((pred _predicate))
+    (dolist (s collection)
+      (when (and (stringp s)
+                 (string= s string)
+                 (or (null pred)
+                     (not (functionp pred))
+                     (funcall pred s)))
+        (return-from test-completion t))))
+  nil)
 
 (cl:defun intern (name &optional (package (find-package "ELISP")))
   "ELisp-ish INTERN; canonicalizes strings to CL-style names.

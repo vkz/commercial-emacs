@@ -70,3 +70,6 @@ lisp/emacs-lisp/timer.el -
 # bring-up: comint/shell (first slice; caps will rise over time).
 lisp/comint.el 60
 lisp/shell.el 80
+
+# bring-up: minibuffer (first slice; caps will rise over time).
+lisp/minibuffer.el 40

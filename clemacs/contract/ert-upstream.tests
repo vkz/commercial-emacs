@@ -198,6 +198,10 @@ test-map-insert
 test-map-delete
 test-map-delete-empty
 test-map-delete-alist
+
+# 2026-01-12: Bring up minibuffer completion tests (tiny cluster).
+completion-table-with-predicate-test
+completion-table-subvert-test
 test-map-nested-elt
 test-map-nested-elt-default
 test-mapp
