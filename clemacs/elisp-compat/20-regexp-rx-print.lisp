@@ -109,7 +109,7 @@ So we:
 - convert escaped Emacs grouping/alternation to PCRE metacharacters,
 - escape otherwise-unescaped PCRE metacharacters to preserve literal meaning,
 - translate `\\` and `\\'' anchors to ^/$."
-  (let ((regexp (%elisp-string->cl-string regexp)))
+(let ((regexp (%elisp-string->cl-string regexp)))
     (cl:with-output-to-string (out)
       (labels ((emit-posix-class (name)
                  ;; cl-ppcre does not support POSIX bracket expressions like
@@ -253,13 +253,39 @@ So we:
 	                 (write-char ch out))))
 	             (incf i))))))
 
+(cl:defun %pcre-hacks (pcre)
+  "Apply PCRE-targeted compatibility rewrites.
+
+This is intentionally tiny and surgical, used to bridge a few known mismatches
+between Emacs regexps and cl-ppcre's PCRE parser."
+  (let* ((pcre (or pcre ""))
+         (needle "[^z-a]")
+         ;; Emacs uses `[^z-a]` as a hack to mean \"match any character\".
+         ;; cl-ppcre rejects that as an invalid range, so rewrite to a class
+         ;; that matches any character (including newlines).
+         (replacement "[\\s\\S]"))
+    (cl:with-output-to-string (out)
+      (loop with i = 0
+            with n = (length pcre)
+            with m = (length needle)
+            while (< i n) do
+              (let ((pos (search needle pcre :start2 i)))
+                (cond
+                 ((null pos)
+                  (write-string (subseq pcre i) out)
+                  (setf i n))
+                 (t
+                  (write-string (subseq pcre i pos) out)
+                  (write-string replacement out)
+                  (setf i (+ pos m)))))))))
+
 (cl:defun %string-match-scanner (regexp case-fold-search)
   (let* ((regexp (%elisp-string->cl-string regexp))
          (key (list regexp (and case-fold-search t)))
          (cached (gethash key *string-match-scanner-cache*)))
     (or cached
         (setf (gethash key *string-match-scanner-cache*)
-              (cl-ppcre:create-scanner (%elisp-regexp->pcre regexp)
+              (cl-ppcre:create-scanner (%pcre-hacks (%elisp-regexp->pcre regexp))
                                        :case-insensitive-mode
                                        (and case-fold-search t))))))
 
@@ -273,7 +299,7 @@ This is used for ELisp `looking-at', which must not search forward past point."
     (or cached
         (setf (gethash key *string-match-anchored-scanner-cache*)
               (cl-ppcre:create-scanner
-               (concatenate 'cl:string "\\A(?:" (%elisp-regexp->pcre regexp) ")")
+               (concatenate 'cl:string "\\A(?:" (%pcre-hacks (%elisp-regexp->pcre regexp)) ")")
                :case-insensitive-mode
                (and case-fold-search t))))))
 

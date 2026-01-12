@@ -3316,11 +3316,12 @@ When PARTIALLY is non-nil and POS is visible, return a small (X Y) list."
 (cl:defun get-buffer-window (&optional buffer-or-name _frame)
   "Bring-up subset of ELisp `get-buffer-window' (single-window)."
   (declare (cl:ignore _frame))
-  (let* ((buf (or (and buffer-or-name (get-buffer buffer-or-name))
-                  (and buffer-or-name (error "ELISP:GET-BUFFER-WINDOW no such buffer: ~S"
-                                             buffer-or-name))
-                  (current-buffer)))
+  (let* ((buf (cond
+               ((null buffer-or-name) (current-buffer))
+               (t (get-buffer buffer-or-name))))
          (wins (append (or *windows* nil) (list *minibuffer-window*))))
+    (when (null buf)
+      (return-from get-buffer-window nil))
     (dolist (win wins nil)
       (when (and (window-live-p win) (eq (elisp-window-buffer win) buf))
         (return-from get-buffer-window win)))))
@@ -3369,8 +3370,9 @@ When PARTIALLY is non-nil and POS is visible, return a small (X Y) list."
          (eq w (minibuffer-window))
          t)))
 
-(cl:defun minibufferp (&optional _buffer)
+(cl:defun minibufferp (&optional _buffer _live)
   "Bring-up subset of ELisp `minibufferp' (TTY)."
+  (declare (cl:ignore _live))
   (let ((buf (or _buffer (current-buffer))))
     (or (and (boundp '*clemacs-minibuffer-buffer*)
              (bufferp *clemacs-minibuffer-buffer*)

@@ -760,6 +760,30 @@ START/END are 1-based buffer positions."
     (put-text-property start end k v object))
   t)
 
+(cl:defun add-face-text-property (start end face &optional append object)
+  "Bring-up subset of ELisp `add-face-text-property'.
+
+Supports strings and buffers.  This is currently only as complete as needed for
+minibuffer completion tests (`completion-pcm--hilit-commonality`)."
+  (let ((obj (or object (current-buffer))))
+    (cond
+     ((not append)
+      (put-text-property start end 'face face obj))
+     (t
+      ;; Conservative, position-wise merge.  This is slow but sufficient for
+      ;; bring-up.
+      (let* ((s (%text-props--normalize-pos start obj "ADD-FACE-TEXT-PROPERTY"))
+             (e (%text-props--normalize-pos end obj "ADD-FACE-TEXT-PROPERTY")))
+        (loop for i from s below e do
+          (let* ((old (get-text-property i 'face obj))
+                 (new (cond
+                       ((null old) face)
+                       ((equal old face) old)
+                       ((listp old) (append old (list face)))
+                       (t (list old face)))))
+            (put-text-property i (1+ i) 'face new obj)))))))
+  t)
+
 (cl:defun remove-text-properties (start end props &optional object)
   "Bring-up subset of ELisp `remove-text-properties'."
   (unless (and (listp props) (evenp (length props)))

@@ -202,6 +202,11 @@ test-map-delete-alist
 # 2026-01-12: Bring up minibuffer completion tests (tiny cluster).
 completion-table-with-predicate-test
 completion-table-subvert-test
+completion-test1
+completion-pcm--optimize-pattern
+completion-test--pcm-bug38458
+completion-pcm-test-1
+completion-pcm-test-2
 test-map-nested-elt
 test-map-nested-elt-default
 test-mapp

@@ -3,8 +3,16 @@
 (cl:defvar *clemacs-current-message* nil)
 
 (cl:defun message (format-string &rest args)
+  (when (null format-string)
+    ;; In Emacs, (message nil) clears the echo area and returns nil.
+    (setf *clemacs-current-message* nil)
+    (return-from message nil))
   (let ((s (apply #'format format-string args)))
-    (setf *clemacs-current-message* (and (stringp s) s))
+    ;; In noninteractive (batch) mode, Emacs's `current-message' reports nil
+    ;; even after calling `message'.
+    (if (and (boundp 'noninteractive) noninteractive)
+        (setf *clemacs-current-message* nil)
+        (setf *clemacs-current-message* (and (stringp s) s)))
     (let ((log-max
             (if (boundp 'message-log-max)
                 (symbol-value 'message-log-max)
@@ -1073,7 +1081,13 @@ In Emacs, characters are represented as integers."
 
 This is intentionally not CL:ERROR; it raises an `elisp-signal' so ELisp
 `handler-bind' and `condition-case' can recover the (SYMBOL . DATA) pair."
-  (let ((msg (if args (%format-message fmt args) fmt)))
+  ;; Upstream ELisp sometimes uses `(error nil ...)` as a control-flow escape
+  ;; where the message is intentionally absent.  Treat NIL as a valid "no
+  ;; message" format and ignore any args.
+  (let ((msg (cond
+              ((null fmt) nil)
+              (args (%format-message fmt args))
+              (t fmt))))
     (signal 'error (list msg))))
 
 (cl:defun %handler-bind-match-p (types err)

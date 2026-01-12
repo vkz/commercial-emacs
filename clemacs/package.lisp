@@ -68,8 +68,9 @@
 	   #:ignore
 	   #:1+ #:1-
 	   #:append
-	   #:dolist
+		           #:dolist
 	           #:member
+	           #:delete
 	           #:typep
 	           #:mapcar
 	           #:mapc

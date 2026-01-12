@@ -66,4 +66,4 @@ test/lisp/emacs-lisp/nadvice-tests.el -
 
 # 2026-01-12: Bring up minibuffer completion tests (early slice).
 lisp/minibuffer.el 300
-test/lisp/minibuffer-tests.el 12
+test/lisp/minibuffer-tests.el 20

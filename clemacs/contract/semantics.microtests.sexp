@@ -142,6 +142,11 @@
   :expected "(\"aa\" \"ab\")"
   :emacs :match)
 
+ (:name "completion-try-all-obey-ignore-case-and-regexp-list"
+  :expr "(list (let ((completion-ignore-case t)) (try-completion \"TEST\" '(\"test: \"))) (let ((completion-ignore-case t)) (try-completion \"tes\" '(\"Test\" \"test\"))) (let ((completion-regexp-list '(\"foo\"))) (all-completions \"\" '(\"hello\" \"barfoo\"))))"
+  :expected "(\"test: \" \"test\" (\"barfoo\"))"
+  :emacs :match)
+
  (:name "files-file-attribute-modification-time-basic"
   :expr "(let ((f (make-temp-file \"clemacs-fat-\"))) (write-region \"x\" nil f nil 0) (not (null (file-attribute-modification-time (file-attributes f)))))"
   :expected "t"
@@ -270,6 +275,11 @@
  (:name "macros-let-when-compile-binds-for-eval-when-compile"
   :expr "(progn (setq clemacs--tmp-lwc 0) (let-when-compile ((x 7)) (eval-when-compile (setq clemacs--tmp-lwc x))) clemacs--tmp-lwc)"
   :expected "7"
+  :emacs :match)
+
+ (:name "macros-cl-flet*-basic"
+  :expr "(progn (require 'cl-lib) (require 'cl-macs) (cl-flet* ((clemacs--f () 1) (clemacs--g () (clemacs--f))) (clemacs--g)))"
+  :expected "1"
   :emacs :match)
 
  (:name "function-lambda-funcall"
@@ -854,6 +864,11 @@
   :expected "(b c)"
   :emacs :match)
 
+ (:name "lists-delete-uses-equal"
+  :expr "(let ((s (concat \"\"))) (delete \"\" (list s \"x\")))"
+  :expected "(\"x\")"
+  :emacs :match)
+
  (:name "lists-alist-get-setf-inserts"
   :expr "(let ((a nil)) (setf (alist-get 'x a) 1) a)"
   :expected "((x . 1))"
@@ -1216,6 +1231,11 @@
  (:name "messages-minibuffer-message-returns-t"
   :expr "(minibuffer-message \"hi\")"
   :expected "t"
+  :emacs :match)
+
+ (:name "messages-message-nil-clears-current-message"
+  :expr "(progn (message \"hi\") (list (current-message) (message nil) (current-message)))"
+  :expected "(nil nil nil)"
   :emacs :match)
 
  (:name "overlays-move-overlay-updates-start-end"

@@ -2297,6 +2297,25 @@ the setter stored in REF).  We mirror that behavior for host CL `setf`."
           (setf cur (cdr cur)))))
       head)))
 
+(cl:defun delete (elt list)
+  "ELisp-ish DELETE (destructive equal-based deletion)."
+  (labels ((skip-head (xs)
+             (loop while (and (consp xs) (equal elt (car xs))) do
+               (setf xs (cdr xs)))
+             xs))
+    (let* ((head (skip-head list))
+           (prev head)
+           (cur (and (consp head) (cdr head))))
+      (loop while (consp cur) do
+        (cond
+         ((equal elt (car cur))
+          (setf (cdr prev) (cdr cur))
+          (setf cur (cdr cur)))
+         (t
+          (setf prev cur)
+          (setf cur (cdr cur)))))
+      head)))
+
 (cl:defun delete-dups (list)
   "Bring-up subset of ELisp `delete-dups' (destructive equal-based deletion)."
   (labels ((skip-head (xs seen)

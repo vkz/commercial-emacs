@@ -372,8 +372,22 @@ Supports destructuring patterns of the form:
 
 (cl:defmacro defcustom (symbol value _docstring &rest _args)
   "Stub for ELisp `defcustom'."
-  (declare (cl:ignore _docstring _args))
-  `(defparameter ,symbol ,value))
+  (declare (cl:ignore _docstring))
+  (let* ((args _args)
+         (set (getf args :set))
+         (val (gensym "DEFCUSTOM-VALUE-")))
+    (if (and (consp set) (eq (car set) 'lambda))
+        `(let ((,val ,value))
+           (defparameter ,symbol ,val)
+           ;; Bring-up subset: if the custom definition provides a `:set`
+           ;; lambda, run it once so dependent derived variables are
+           ;; initialized (e.g. `completion-pcm--delim-wild-regex` in
+           ;; `minibuffer.el`).
+           (ignore-errors (funcall ,set ',symbol ,val))
+           ',symbol)
+      `(progn
+         (defparameter ,symbol ,value)
+         ',symbol))))
 
 (cl:defmacro defface (face _spec _docstring &rest _args)
   "Stub for ELisp `defface'."

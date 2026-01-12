@@ -54,6 +54,9 @@
 (cl:defvar auto-window-vscroll t)
 (cl:defvar xterm-mouse-mode nil)
 (cl:defvar minibuffer-default-prompt-format nil)
+(cl:defvar minibuffer-completion-table nil)
+(cl:defvar minibuffer-completion-predicate nil)
+(cl:defvar minibuffer-completing-file-name nil)
 (cl:defvar *clemacs-minibuffer-active-p* nil)
 (cl:defvar *clemacs-minibuffer-buffer* nil)
 (cl:defvar *clemacs-minibuffer-prompt-end* nil)
@@ -446,6 +449,55 @@ If N is zero or negative, return nil.  Always returns a fresh list."
               (%elisp-string->cl-string s2)))
 
 (cl:defvar completion-ignore-case nil)
+(cl:defvar completion-regexp-list nil)
+(cl:defvar minibuffer-allow-text-properties nil)
+
+(cl:defun %completion--prefix-match-p (prefix candidate)
+  (let ((n (length prefix)))
+    (and (<= n (length candidate))
+         (if completion-ignore-case
+             (cl:string-equal prefix candidate :end1 n :end2 n)
+             (cl:string= prefix candidate :end1 n :end2 n)))))
+
+(cl:defun %completion--regexp-list-match-p (candidate)
+  (let ((regs completion-regexp-list))
+    (cond
+     ((null regs) t)
+     ((not (listp regs)) t)
+     ((not (fboundp 'string-match-p)) t)
+     (t
+      (dolist (re regs t)
+        (when (and re (stringp re))
+          (unless (string-match-p re candidate)
+            (return nil))))))))
+
+(cl:defun %completion--concat2 (a b)
+  (cond
+   ;; If either side is a CL string, produce a CL string result.  This avoids
+   ;; trying to stuff unibyte octets into (array character) when callers
+   ;; preserve typed prefix text from a multibyte buffer substring.
+   ((or (cl:stringp a) (cl:stringp b))
+    (concatenate 'cl:string (%elisp-string->cl-string a) (%elisp-string->cl-string b)))
+   ((and (unibyte-string-p a) (unibyte-string-p b))
+    (let* ((alen (length a))
+           (blen (length b))
+           (out (make-array (+ alen blen) :element-type (array-element-type a))))
+      (cl:replace out a :start1 0 :start2 0 :end2 alen)
+      (cl:replace out b :start1 alen :start2 0 :end2 blen)
+      out))
+   (t
+    (concatenate 'cl:string (%elisp-string->cl-string a) (%elisp-string->cl-string b)))))
+
+(cl:defun %completion--copy-subseq (s start end)
+  (cond
+   ((unibyte-string-p s)
+    (let* ((len (- end start))
+           (out (%make-unibyte-string len)))
+      (dotimes (i len)
+        (setf (aref out i) (aref s (+ start i))))
+      out))
+   (t
+    (subseq (copy-seq s) start end))))
 
 (cl:defun try-completion (string collection &optional _predicate)
   "Bring-up subset of the C primitive `try-completion'.
@@ -460,6 +512,8 @@ This supports COLLECTION as either:
   (unless (listp collection)
     (error "ELISP:TRY-COMPLETION only supports list collections, got: %S" collection))
   (let* ((prefix (%elisp-string->cl-string string))
+         ;; Store (ELISP-STRING . CL-STRING) pairs so we can preserve the
+         ;; original string type (unibyte vs multibyte) in the return value.
          (cands nil)
          (pred _predicate))
     (dolist (s collection)
@@ -468,23 +522,39 @@ This supports COLLECTION as either:
                      (not (functionp pred))
                      (funcall pred s)))
         (let ((cs (%elisp-string->cl-string s)))
-          (when (and (<= (length prefix) (length cs))
-                     (cl:string= prefix cs :end2 (length prefix)))
-            (push cs cands)))))
+          (when (and (%completion--prefix-match-p prefix cs)
+                     (%completion--regexp-list-match-p s))
+            (push (cons s cs) cands)))))
     (when (null cands)
       (return-from try-completion nil))
-    (when (and (= (length cands) 1)
-               (cl:string= (first cands) prefix))
+    (setf cands (nreverse cands))
+    ;; NOTE: even with completion-ignore-case non-nil, Emacs returns T only
+    ;; when STRING exactly equals the sole completion (case-sensitive).
+    (when (and (null (cdr cands)) (cl:string= (cdar cands) prefix))
       (return-from try-completion t))
-    (let ((common (copy-seq (first cands))))
-      (dolist (s (rest cands))
-        (let ((n (mismatch common s)))
+    (let* ((test (if completion-ignore-case #'char-equal #'char=))
+           (multiplep (and (consp cands) (consp (cdr cands))))
+           (s0 (caar cands))
+           (cs0 (cdar cands))
+           (common-len (length cs0)))
+      (dolist (c (cdr cands))
+        (let* ((cs (cdr c))
+               (end2 (min common-len (length cs)))
+               (n (mismatch cs0 cs :end1 common-len :end2 end2 :test test)))
           (when n
-            (setf common (subseq common 0 n)))))
-      ;; Emacs returns unibyte strings for ASCII-only completions.
-      (if (every (lambda (ch) (< (char-code ch) 128)) common)
-          (string-to-unibyte common)
-          common))))
+            (setf common-len (min common-len n)))))
+      (let ((common (%completion--copy-subseq s0 0 common-len)))
+        ;; When completing while ignoring case, prefer to preserve the user's
+        ;; already-typed text, rather than switching its case to match the first
+        ;; completion (e.g. bug#4219 / completion-pcm bug#38458).
+        (let ((typed-len (length string)))
+          (if (and completion-ignore-case
+                   multiplep
+                   (> typed-len 0)
+                   (> common-len typed-len))
+              (%completion--concat2 (%completion--copy-subseq string 0 typed-len)
+                                    (%completion--copy-subseq common typed-len common-len))
+            common))))))
 
 (cl:defun all-completions (string collection &optional _predicate)
   "Bring-up subset of the C primitive `all-completions'.
@@ -507,8 +577,8 @@ This supports COLLECTION as either:
                      (not (functionp pred))
                      (funcall pred s)))
         (let ((cs (%elisp-string->cl-string s)))
-          (when (and (<= (length prefix) (length cs))
-                     (cl:string= prefix cs :end2 (length prefix)))
+          (when (and (%completion--prefix-match-p prefix cs)
+                     (%completion--regexp-list-match-p s))
             (push s out)))))
     (nreverse out)))
 
@@ -520,15 +590,37 @@ This supports COLLECTION as either:
     (return-from test-completion (and (funcall collection string _predicate 'lambda) t)))
   (unless (listp collection)
     (error "ELISP:TEST-COMPLETION only supports list collections, got: %S" collection))
-  (let ((pred _predicate))
+  (let ((pred _predicate)
+        (target (%elisp-string->cl-string string)))
     (dolist (s collection)
       (when (and (stringp s)
-                 (string= s string)
+                 (let ((cs (%elisp-string->cl-string s)))
+                   (if completion-ignore-case
+                       (cl:string-equal target cs)
+                       (cl:string= target cs)))
                  (or (null pred)
                      (not (functionp pred))
                      (funcall pred s)))
         (return-from test-completion t))))
   nil)
+
+(cl:defun assoc-string (key list &optional case-fold)
+  "Bring-up subset of ELisp `assoc-string'."
+  (unless (stringp key)
+    (error "ELISP:ASSOC-STRING expects string key, got: %S" key))
+  (let* ((k (%elisp-string->cl-string key))
+         (fold (and case-fold t)))
+    (dolist (elt list)
+      (cond
+       ((and (consp elt) (stringp (car elt)))
+        (let ((cs (%elisp-string->cl-string (car elt))))
+          (when (if fold (cl:string-equal k cs) (cl:string= k cs))
+            (return elt))))
+       ((stringp elt)
+        (let ((cs (%elisp-string->cl-string elt)))
+          (when (if fold (cl:string-equal k cs) (cl:string= k cs))
+            (return elt))))))
+    nil))
 
 (cl:defun intern (name &optional (package (find-package "ELISP")))
   "ELisp-ish INTERN; canonicalizes strings to CL-style names.

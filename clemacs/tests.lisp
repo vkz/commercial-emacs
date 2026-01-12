@@ -266,6 +266,15 @@
          (backquote-el (merge-pathnames #p"lisp/emacs-lisp/backquote.el" project-root)))
     (unless (fboundp 'elisp::backquote)
       (elisp::load-elisp-file backquote-el)))
+  ;; `elisp:eval` uses CL:EVAL, so macros must be present at compile time.
+  ;; Preload the ported `cl-macs` subset so microtests can use `cl-flet*`
+  ;; without relying on (require ...) inside the evaluated expression.
+  (let* ((project-root (%project-root))
+         (cl-macs-el
+           (merge-pathnames #p"clemacs/ported/lisp/emacs-lisp/cl-macs.el"
+                            project-root)))
+    (unless (fboundp 'elisp::cl-flet*)
+      (elisp::load-elisp-file cl-macs-el)))
   (let* ((tests (%read-semantics-microtests))
          (name-filter (%microtest-name-filter)))
     (when name-filter
