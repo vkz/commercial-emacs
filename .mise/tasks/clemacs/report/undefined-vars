@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+#MISE description="Summarize SBCL undefined-variable warnings from a clemacs log (writes txt+json)"
+#USAGE flag "-h --help" help="Print help"
+#USAGE flag "--build-dir <dir>" help="Out-of-tree clemacs build directory" default="build/clemacs"
+#USAGE flag "--log <path>" help="Path to an SBCL log (default: build/.../tmp/sbcl.latest.log)" default=""
+#USAGE flag "--out-prefix <path>" help="Output prefix (default: build/.../reports/undefined-vars)" default=""
+
+if [[ "${usage_help:-false}" == "true" ]]; then
+  mise tasks info "${MISE_TASK_NAME}"
+  exit 0
+fi
+
+project_root="${MISE_PROJECT_ROOT:-$(pwd)}"
+cd "${project_root}"
+
+build_dir="${usage_build_dir}"
+log_path="${usage_log:-}"
+out_prefix="${usage_out_prefix:-}"
+
+if [[ -z "${log_path}" ]]; then
+  log_path="${project_root}/${build_dir}/tmp/sbcl.latest.log"
+fi
+if [[ ! -f "${log_path}" ]]; then
+  echo "[clemacs:report:undefined-vars] missing log: ${log_path}" >&2
+  exit 2
+fi
+
+out_dir="${project_root}/${build_dir}/reports"
+mkdir -p "${out_dir}"
+
+if [[ -z "${out_prefix}" ]]; then
+  out_prefix="${out_dir}/undefined-vars"
+fi
+
+python3 - <<'PY'
+import json
+import os
+import re
+from collections import Counter
+from pathlib import Path
+
+project_root = Path(os.environ.get("MISE_PROJECT_ROOT") or os.getcwd())
+build_dir = os.environ.get("usage_build_dir") or "build/clemacs"
+log_path = Path(os.environ.get("usage_log") or "")
+out_prefix = os.environ.get("usage_out_prefix") or ""
+
+if not log_path:
+    log_path = project_root / build_dir / "tmp" / "sbcl.latest.log"
+if not out_prefix:
+    out_prefix = str(project_root / build_dir / "reports" / "undefined-vars")
+
+text = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+rx = re.compile(r"undefined variable:\s+ELISP::([A-Z0-9-]+)")
+
+counts = Counter()
+for line in text:
+    m = rx.search(line)
+    if m:
+        counts[m.group(1)] += 1
+
+items = [{"name": k, "count": v} for k, v in counts.items()]
+items.sort(key=lambda d: (-d["count"], d["name"]))
+
+out_txt = Path(out_prefix + ".txt")
+out_json = Path(out_prefix + ".json")
+
+lines = []
+total = sum(counts.values())
+lines.append(f"log: {log_path}")
+lines.append(f"total: {total}")
+lines.append(f"unique: {len(items)}")
+lines.append("")
+for it in items:
+    lines.append(f"{it['count']:5d}  {it['name']}")
+
+out_txt.write_text("\n".join(lines) + "\n", encoding="utf-8")
+out_json.write_text(json.dumps({"log": str(log_path), "items": items}, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8")
+
+print(f"[clemacs:report:undefined-vars] wrote {out_txt}")
+print(f"[clemacs:report:undefined-vars] wrote {out_json}")
+print("")
+print("\n".join(lines[:25]))
+if len(lines) > 25:
+    print("... (see full report)")
+PY
