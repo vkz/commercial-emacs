@@ -82,6 +82,10 @@ Iteration notes (2026-01-12)
 
 Issue noticed + fix path
 - DONE (2026-01-12): `clemacs:test:micro` now runs `:emacs :match` comparisons against reference Emacs (no mass "reference Emacs not available" skips); fix path was to make the reference-Emacs batch run succeed (repair two `:match` microtests) and implement the missing compat needed by those tests (notably cyclic `fset` detection and better completion primitives).
+- DONE (2026-01-13): `clemacs:load:lisp` undefined-var warnings (`QUIT-FLAG`, `COMINT-FILE-NAME-QUOTE-LIST`) fixed by defvar-ing the underlying globals early in `clemacs/elisp-compat/00-core.lisp`.
+- DONE (2026-01-13): Raised 20 remaining low caps in `clemacs/contract/startup.tty-editor.files` to 50 (one file at a time), keeping the `clemacs:test:tty` gate green and re-running `mise run clemacs:loop:elisp-core` after the batch.
+- DONE (2026-01-13): `ucs-normalize` no longer blocks cap growth: implement a Unicode-only `translate-region` + translation-table path (supports `make-translation-table-from-alist` char-tables and `define-translation-table` symbols), add a semantics microtest, and raise `lisp/international/ucs-normalize.el` cap 20 -> 40 in `startup.tty-editor`.
+- DONE (2026-01-13): Raised `lisp/minibuffer.el` cap 40 -> 50 in `startup.tty-editor`.
 - DONE (2026-01-12): Upstream minibuffer/completion bring-up stabilized: `clemacs:test:ert-upstream` completion cluster is green again after implementing `try-completion`/`all-completions`/`test-completion` case+regexp semantics, adding `assoc-string`, and stubbing the remaining completion globals used by `minibuffer.el`.
 - DONE (2026-01-12): Grow `startup.smoke` toward pdump order: add a first capped slice of `frame.el`, `startup.el`, `term/tty-colors.el`, and `font-core.el` to `clemacs/contract/startup.smoke.files`.
 - DONE (2026-01-12): Expand `ert-upstream.tests` minibuffer completion must-pass set: promote `completion-pcm-test-{3,4,5,6}` (still green).

@@ -15,42 +15,42 @@ lisp/keymap.el -
 lisp/version.el -
 
 # pdump: widget, custom, map-ynp.
-lisp/widget.el 10
+lisp/widget.el 50
 lisp/custom.el 120
-lisp/emacs-lisp/map-ynp.el 10
+lisp/emacs-lisp/map-ynp.el 50
 
 # pdump: mule + startup basics (needed for file I/O + coding systems).
 lisp/international/mule.el 20
 lisp/international/mule-conf.el 200
-lisp/international/mule-util.el 10
-lisp/case-table.el 10
+lisp/international/mule-util.el 50
+lisp/case-table.el 50
 
 # core: macros/dispatch helpers that many libraries assume.
 lisp/emacs-lisp/macroexp.el 200
 lisp/emacs-lisp/pcase.el 200
-lisp/cus-face.el 10
-lisp/faces.el 10
-lisp/emacs-lisp/regexp-opt.el 10
-lisp/emacs-lisp/rx.el 10
+lisp/cus-face.el 50
+lisp/faces.el 50
+lisp/emacs-lisp/regexp-opt.el 50
+lisp/emacs-lisp/rx.el 50
 lisp/emacs-lisp/pp.el 50
 lisp/ldefs-boot.el 203
 lisp/emacs-lisp/gv.el -
-lisp/emacs-lisp/cl-lib.el 10
-lisp/emacs-lisp/cl-macs.el 10
+lisp/emacs-lisp/cl-lib.el 50
+lisp/emacs-lisp/cl-macs.el 50
 lisp/emacs-lisp/cl-preloaded.el 120
 lisp/emacs-lisp/oclosure.el -
-lisp/emacs-lisp/cl-seq.el 10
+lisp/emacs-lisp/cl-seq.el 50
 lisp/emacs-lisp/seq.el -
-lisp/obarray.el 10
+lisp/obarray.el 50
 
 # key bindings + core commands.
 lisp/loaddefs.el -
-lisp/env.el 10
-lisp/format.el 10
+lisp/env.el 50
+lisp/format.el 50
 lisp/bindings.el 347
 lisp/window.el -
 lisp/frame.el -
-lisp/button.el 10
+lisp/button.el 50
 lisp/files.el -
 lisp/emacs-lisp/cl-generic.el -
 
@@ -61,12 +61,12 @@ lisp/isearch.el -
 lisp/replace.el -
 
 # bring-up: abbrev/help/archives (first slice; caps will rise over time).
-lisp/abbrev.el 10
-lisp/help.el 10
-lisp/jka-cmpr-hook.el 10
-lisp/epa-hook.el 10
+lisp/abbrev.el 50
+lisp/help.el 50
+lisp/jka-cmpr-hook.el 50
+lisp/epa-hook.el 50
 lisp/international/mule-cmds.el 6
-lisp/international/charprop.el 10
+lisp/international/charprop.el 50
 lisp/international/characters.el 20
 lisp/composite.el 10
 lisp/indent.el 10
@@ -138,11 +138,11 @@ lisp/emacs-lisp/rmc.el 20
 lisp/disp-table.el 50
 lisp/ls-lisp.el 50
 lisp/term/internal.el 50
-lisp/international/ucs-normalize.el 20
+lisp/international/ucs-normalize.el 40
 
 # bring-up: comint/shell (first slice; caps will rise over time).
 lisp/comint.el 60
 lisp/shell.el 80
 
 # bring-up: minibuffer (first slice; caps will rise over time).
-lisp/minibuffer.el 40
+lisp/minibuffer.el 50
