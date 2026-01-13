@@ -109,9 +109,24 @@ So we:
 - convert escaped Emacs grouping/alternation to PCRE metacharacters,
 - escape otherwise-unescaped PCRE metacharacters to preserve literal meaning,
 - translate `\\` and `\\'' anchors to ^/$."
-(let ((regexp (%elisp-string->cl-string regexp)))
-    (cl:with-output-to-string (out)
-      (labels ((emit-posix-class (name)
+  (let* ((regexp (%elisp-string->cl-string regexp))
+         ;; Map 1-based PCRE capturing group indices -> Emacs group number.
+         (group-map (make-array 0 :element-type 'integer :adjustable t :fill-pointer 0))
+         (next-implicit-group 1)
+         (max-emacs-group 0))
+    (labels ((record-capture (emacs-group)
+               (cl:vector-push-extend emacs-group group-map)
+               (setf max-emacs-group (cl:max max-emacs-group emacs-group)))
+             (record-implicit-capture ()
+               (let ((n next-implicit-group))
+                 (incf next-implicit-group)
+                 (record-capture n)))
+             (record-explicit-capture (n)
+               (record-capture n)
+               (setf next-implicit-group (cl:max next-implicit-group (1+ n)))))
+      (let ((pcre
+              (cl:with-output-to-string (out)
+                (labels ((emit-posix-class (name)
                  ;; cl-ppcre does not support POSIX bracket expressions like
                  ;; [[:alpha:]] directly, so approximate the commonly used
                  ;; ones with ASCII ranges.
@@ -155,7 +170,37 @@ So we:
 	                   (return))
 	                 (let ((next (char regexp i)))
 	                   (case next
-	                     (#\( (write-char #\( out))
+	                     (#\(
+                              ;; Emacs grouping constructs:
+                              ;; - \\(...\\) is capturing group
+                              ;; - \\(?:...\\) is shy (non-capturing) group
+                              ;; - \\(?N:...\\) is explicitly-numbered capturing group N
+                              (let ((peek (and (< (1+ i) n) (char regexp (1+ i)))))
+                                (cond
+                                 ;; \\(?:
+                                 ((and peek (char= peek #\?) (< (+ i 2) n)
+                                       (char= (char regexp (+ i 2)) #\:))
+                                  (write-string "(?:" out)
+                                  (incf i 2))
+                                 ;; \\(?N:
+                                 ((and peek (char= peek #\?) (< (+ i 2) n)
+                                       (cl:digit-char-p (char regexp (+ i 2))))
+                                  (let ((j (+ i 2)))
+                                    (loop while (and (< j n) (cl:digit-char-p (char regexp j)))
+                                          do (incf j))
+                                    (if (and (< j n) (char= (char regexp j) #\:))
+                                        (let ((num (cl:parse-integer regexp :start (+ i 2) :end j)))
+                                          (write-char #\( out)
+                                          (record-explicit-capture num)
+                                          ;; Skip ?N: so the main loop resumes after ':'.
+                                          (setf i j))
+                                        (progn
+                                          (write-char #\( out)
+                                          (record-implicit-capture)))))
+                                 ;; \\(
+                                 (t
+                                  (write-char #\( out)
+                                  (record-implicit-capture)))))
 	                     (#\) (write-char #\) out))
 	                     (#\| (write-char #\| out))
 	                     (#\{ (write-char #\{ out))
@@ -252,6 +297,7 @@ So we:
 	                (t
 	                 (write-char ch out))))
 	             (incf i))))))
+        (cl:values pcre group-map max-emacs-group)))))
 
 (cl:defun %pcre-hacks (pcre)
   "Apply PCRE-targeted compatibility rewrites.
@@ -284,10 +330,15 @@ between Emacs regexps and cl-ppcre's PCRE parser."
          (key (list regexp (and case-fold-search t)))
          (cached (gethash key *string-match-scanner-cache*)))
     (or cached
-        (setf (gethash key *string-match-scanner-cache*)
-              (cl-ppcre:create-scanner (%pcre-hacks (%elisp-regexp->pcre regexp))
-                                       :case-insensitive-mode
-                                       (and case-fold-search t))))))
+        (multiple-value-bind (pcre group-map max-emacs-group)
+            (%elisp-regexp->pcre regexp)
+          (setf (gethash key *string-match-scanner-cache*)
+                (list
+                 (cl-ppcre:create-scanner (%pcre-hacks pcre)
+                                          :case-insensitive-mode
+                                          (and case-fold-search t))
+                 group-map
+                 max-emacs-group))))))
 
 (cl:defun %string-match-anchored-scanner (regexp case-fold-search)
   "Return a scanner that only matches at the start of the searched region.
@@ -297,11 +348,16 @@ This is used for ELisp `looking-at', which must not search forward past point."
          (key (list regexp (and case-fold-search t)))
          (cached (gethash key *string-match-anchored-scanner-cache*)))
     (or cached
-        (setf (gethash key *string-match-anchored-scanner-cache*)
-              (cl-ppcre:create-scanner
-               (concatenate 'cl:string "\\A(?:" (%pcre-hacks (%elisp-regexp->pcre regexp)) ")")
-               :case-insensitive-mode
-               (and case-fold-search t))))))
+        (multiple-value-bind (pcre group-map max-emacs-group)
+            (%elisp-regexp->pcre regexp)
+          (setf (gethash key *string-match-anchored-scanner-cache*)
+                (list
+                 (cl-ppcre:create-scanner
+                  (concatenate 'cl:string "\\A(?:" (%pcre-hacks pcre) ")")
+                  :case-insensitive-mode
+                  (and case-fold-search t))
+                 group-map
+                 max-emacs-group))))))
 
 (cl:defun string-match (regexp string &optional start _inhibit-modify)
   "Bring-up `string-match' using cl-ppcre as a temporary regexp engine."
@@ -312,33 +368,41 @@ This is used for ELisp `looking-at', which must not search forward past point."
         (s (%elisp-string->cl-string string)))
     (unless (and (integerp start) (<= 0 start))
       (error "ELISP:STRING-MATCH bad start: %S" start))
-    (multiple-value-bind (mstart mend reg-starts reg-ends)
-        (cl-ppcre:scan (%string-match-scanner regexp case-fold-search)
-                       s
-                       :start start
-                       ;; cl-ppcre's internal "real start" affects how anchors
-                       ;; behave with :start.  Emacs anchors are not relative to
-                       ;; the search start, so pin to 0.
-                       :real-start-pos 0)
-      (if (null mstart)
-          (progn
-            (setf *match-data* nil
-                  *match-source-string* string)
-            nil)
-          (let ((md nil))
-            ;; Build match data in reverse, then NREVERSE to produce:
-            ;; (mstart mend g1start g1end g2start g2end ...).
-            (push mstart md)
-            (push mend md)
-            (when reg-starts
-              (loop for rs across reg-starts
-                    for re across reg-ends
-                    do
-                      (push (and (integerp rs) (<= 0 rs) rs) md)
-                      (push (and (integerp re) (<= 0 re) re) md)))
-            (setf *match-data* (nreverse md)
-                  *match-source-string* string)
-            mstart)))))
+    (let* ((compiled (%string-match-scanner regexp case-fold-search))
+           (scanner (first compiled))
+           (group-map (second compiled))
+           (max-emacs-group (third compiled)))
+      (multiple-value-bind (mstart mend reg-starts reg-ends)
+          (cl-ppcre:scan scanner
+                         s
+                         :start start
+                         ;; cl-ppcre's internal "real start" affects how anchors
+                         ;; behave with :start.  Emacs anchors are not relative to
+                         ;; the search start, so pin to 0.
+                         :real-start-pos 0)
+        (if (null mstart)
+            (progn
+              (setf *match-data* nil
+                    *match-source-string* string)
+              nil)
+            (let ((md (list mstart mend))
+                  (pcre-groups (length group-map)))
+              (when (> max-emacs-group 0)
+                (loop for emacs-g from 1 to max-emacs-group do
+                  (let ((best-s nil)
+                        (best-e nil))
+                    (loop for pcre-i from 0 below pcre-groups do
+                      (when (= (aref group-map pcre-i) emacs-g)
+                        (let ((rs (aref reg-starts pcre-i))
+                              (re (aref reg-ends pcre-i)))
+                          (when (and (integerp rs) (integerp re))
+                            (setf best-s rs
+                                  best-e re)
+                            (return)))))
+                    (setf md (nconc md (list best-s best-e))))))
+              (setf *match-data* md
+                    *match-source-string* string)
+              mstart))))))
 
 (cl:defun string-match-p (regexp string &optional start)
   "Bring-up `string-match-p' (like `string-match' but does not modify match data)."

@@ -158,6 +158,11 @@ subr-test-version-parsing
 subr-test-version-list-<
 subr-test-version-list-=
 subr-test-version-list-<=
+
+# 2026-01-13: env.el bring-up (process-environment plumbing).
+test-substitute-env-in-file-name
+test-getenv-setenv
+test-with-environment-variables
 subr-tests--string-match-p--blank
 subr-tests--gensym
 

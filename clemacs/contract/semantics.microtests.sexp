@@ -162,6 +162,11 @@
   :expected "(t nil)"
   :emacs :match)
 
+ (:name "obarray-obarray-make-default-intern-isolated"
+  :expr "(let* ((o (obarray-make)) (s1 (intern \"foo\" o)) (s2 (intern \"foo\" o)) (s3 (intern \"foo\"))) (list (eq s1 s2) (eq s1 s3)))"
+  :expected "(t nil)"
+  :emacs :match)
+
  (:name "files-file-attribute-modification-time-basic"
   :expr "(let ((f (make-temp-file \"clemacs-fat-\"))) (write-region \"x\" nil f nil 0) (not (null (file-attribute-modification-time (file-attributes f)))))"
   :expected "t"
@@ -1657,5 +1662,25 @@
  (:name "char-equal-accepts-char-codes"
   :expr "(and (char-equal ?A ?a) (not (= ?A ?a)) (= ?a ?a ?a))"
   :expected "t"
+  :emacs :match)
+
+ (:name "globals-common-boundp"
+  :expr "(mapcar #'boundp '(initial-window-system buffer-invisibility-spec file-name-coding-system default-file-name-coding-system shell-command-switch user-init-file region-extract-function delayed-warnings-list last-nonmenu-event use-dialog-box glyphless-char-display))"
+  :expected "(t t t t t t t t t t t)"
+  :emacs :match)
+
+ (:name "globals-minibuffer-and-completion-boundp"
+  :expr "(mapcar #'boundp '(minibuffer-default completion-auto-select command-line-args-left emacs-major-version file-name-history minibuffer-scroll-window source-directory temp-buffer-show-function completion-extra-properties minibuffer-default-add-function obarray pop-up-windows pop-up-frames values))"
+  :expected "(t t t t t t t t t t t t t t)"
+  :emacs :match)
+
+ (:name "env-setenv-roundtrip"
+  :expr "(let ((process-environment (copy-sequence process-environment))) (setenv \"CLEMACS_TEST_ENVVAR\" \"bar\") (list (getenv \"CLEMACS_TEST_ENVVAR\") (catch 'hit (dolist (e process-environment nil) (when (and (stringp e) (string-match-p \"\\\\`CLEMACS_TEST_ENVVAR=\" e)) (throw 'hit e))))))"
+  :expected "(\"bar\" \"CLEMACS_TEST_ENVVAR=bar\")"
+  :emacs :match)
+
+ (:name "env-setenv-unset-keeps-marker"
+  :expr "(let ((process-environment (copy-sequence process-environment))) (setenv \"CLEMACS_TEST_ENVVAR\" \"bar\") (setenv \"CLEMACS_TEST_ENVVAR\" nil) (list (getenv \"CLEMACS_TEST_ENVVAR\") (catch 'hit (dolist (e process-environment nil) (when (and (stringp e) (or (string= e \"CLEMACS_TEST_ENVVAR\") (string-match-p \"\\\\`CLEMACS_TEST_ENVVAR=\" e))) (throw 'hit e))))))"
+  :expected "(nil \"CLEMACS_TEST_ENVVAR\")"
   :emacs :match)
 )

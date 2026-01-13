@@ -80,6 +80,42 @@
 (cl:defvar process-environment
   #+sbcl (cl:copy-list (sb-ext:posix-environ))
   #-sbcl nil)
+(cl:defvar initial-window-system nil)
+(cl:defvar buffer-invisibility-spec t)
+(cl:defvar default-file-name-coding-system 'utf-8-unix)
+(cl:defvar file-name-coding-system
+  #+darwin 'utf-8-hfs-unix
+  #-darwin 'utf-8-unix)
+(cl:defvar region-extract-function nil)
+(cl:defvar delayed-warnings-list nil)
+(cl:defvar last-nonmenu-event nil)
+(cl:defvar shell-command-switch "-c")
+(cl:defvar user-init-file nil)
+(cl:defvar auto-fill-function nil)
+(cl:defvar macroexp--dynvars nil)
+(cl:defvar temp-buffer-resize-mode nil)
+(cl:defvar truncate-lines nil)
+(cl:defvar comment-start ";")
+(cl:defvar comment-end "")
+(cl:defvar minibuffer-completion-confirm nil)
+(cl:defvar this-command-keys-shift-translated nil)
+(cl:defvar translation-table-for-input nil)
+(cl:defvar use-dialog-box t)
+(cl:defvar glyphless-char-display nil)
+(cl:defvar minibuffer-default nil)
+(cl:defvar completion-auto-select nil)
+(cl:defvar command-line-args-left nil)
+(cl:defvar emacs-major-version nil)
+(cl:defvar file-name-history nil)
+(cl:defvar minibuffer-scroll-window nil)
+(cl:defvar source-directory nil)
+(cl:defvar temp-buffer-show-function nil)
+(cl:defvar completion-extra-properties nil)
+(cl:defvar minibuffer-default-add-function nil)
+(cl:defvar obarray nil)
+(cl:defvar pop-up-windows nil)
+(cl:defvar pop-up-frames nil)
+(cl:defvar values nil)
 (cl:defvar page-delimiter
   (cl:concatenate 'cl:string "^" (cl:string #\Page)))
 (cl:defvar pdumper--pure-pool nil)
@@ -755,17 +791,29 @@ libraries (e.g. `lisp/progmodes/elisp-mode.el`) reference it before we reach the
   (cl:make-hash-table :test 'cl:eq)
   "Map obarray vectors to backing hash tables (string -> symbol).")
 
-(cl:defun obarray-make (size)
+(cl:defun obarray-make (&optional size)
   "Bring-up subset of the C primitive `obarray-make'.
 
-Return a fresh obarray vector of SIZE, suitable for passing as the OBARRAY
-argument to `intern'/`intern-soft'."
-  (unless (and (integerp size) (> size 0))
-    (error "ELISP:OBARRAY-MAKE expects positive integer SIZE, got: %S" size))
-  (let ((v (make-array size :initial-element nil)))
-    (setf (gethash v *clemacs-obarray-tables*)
-          (cl:make-hash-table :test 'cl:equal))
-    v))
+Return a fresh obarray vector, suitable for passing as the OBARRAY argument to
+`intern'/`intern-soft'.
+
+In upstream Emacs, `obarray-make' accepts an optional SIZE.  Some Elisp files
+(notably `lisp/abbrev.el`) call it with no args, so we default SIZE to a
+reasonable prime."
+  (let ((size (or size 1511)))
+    (unless (and (integerp size) (cl:> size 0))
+      (error "ELISP:OBARRAY-MAKE expects positive integer SIZE, got: %S" size))
+    (let ((v (make-array size :initial-element nil)))
+      (setf (gethash v *clemacs-obarray-tables*)
+            (cl:make-hash-table :test 'cl:equal))
+      v)))
+
+(eval-when (:load-toplevel :execute)
+  ;; Upstream has a global `obarray' used as the default symbol table.  clemacs
+  ;; doesn't fully model it yet, but having a non-nil obarray avoids void/arity
+  ;; issues in early-loading Elisp that expects it.
+  (when (and (boundp 'obarray) (null obarray))
+    (setf obarray (obarray-make))))
 
 (cl:defun %intern-obarray-table (obarray)
   (unless (vectorp obarray)
@@ -1079,8 +1127,16 @@ error type when given non-integers."
   (parent nil :type t))
 
 (cl:defun %char-table-ref (table idx)
-  (unless (and (integerp idx) (<= 0 idx) (< idx +char-table-size+))
+  (unless (integerp idx)
     (error "ELISP: char-table index out of range: ~S" idx))
+  ;; clemacs currently models char-tables as a fixed-size vector.  Upstream
+  ;; Elisp code sometimes feeds Unicode codepoints outside our modeled range
+  ;; (e.g. `regexp-opt-charset' building large charset regexps).  Clamp reads
+  ;; to the default rather than erroring during bring-up.
+  (when (< idx 0)
+    (error "ELISP: char-table index out of range: ~S" idx))
+  (when (>= idx +char-table-size+)
+    (return-from %char-table-ref (elisp-char-table-default table)))
   (let ((val (svref (elisp-char-table-data table) idx)))
     (cond
      ((not (null val)) val)
@@ -1089,8 +1145,12 @@ error type when given non-integers."
      (t (elisp-char-table-default table)))))
 
 (cl:defun %char-table-set (table idx value)
-  (unless (and (integerp idx) (<= 0 idx) (< idx +char-table-size+))
+  (unless (integerp idx)
     (error "ELISP: char-table index out of range: ~S" idx))
+  (when (< idx 0)
+    (error "ELISP: char-table index out of range: ~S" idx))
+  (when (>= idx +char-table-size+)
+    (return-from %char-table-set value))
   (setf (svref (elisp-char-table-data table) idx) value)
   value)
 
@@ -1103,9 +1163,16 @@ error type when given non-integers."
     (setf (elisp-char-table-default table) value)
     value)
    ((integerp range)
-    (%char-table-set table range value))
+    ;; Upstream char-tables are Unicode-wide.  clemacs currently clamps to a
+    ;; fixed-size backing vector; ignore assignments outside the modeled range.
+    (if (and (<= 0 range) (< range +char-table-size+))
+        (%char-table-set table range value)
+        value))
    ((characterp range)
-    (%char-table-set table (char-code range) value))
+    (let ((code (char-code range)))
+      (if (and (<= 0 code) (< code +char-table-size+))
+          (%char-table-set table code value)
+          value)))
    ((and (consp range) (integerp (car range)) (integerp (cdr range)))
     (let ((from (car range))
           (to (cdr range)))

@@ -22,7 +22,7 @@ lisp/custom.el 120
 lisp/emacs-lisp/map-ynp.el 10
 lisp/international/mule.el 20
 lisp/international/mule-conf.el 200
-lisp/env.el 10
+lisp/env.el -
 lisp/format.el 10
 lisp/bindings.el 347
 lisp/window.el 10

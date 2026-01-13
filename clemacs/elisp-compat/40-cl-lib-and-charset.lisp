@@ -1022,11 +1022,10 @@ AUTOLOAD is non-nil and F is an autoload, attempt to load it."
          (t nil))
         (setf cur fundef)))))
 
-(cl:defun getenv (var)
+(cl:defun getenv (var &optional _frame)
   "Bring-up subset of ELisp `getenv'."
-  (unless (stringp var)
-    (error "ELISP:GETENV expects a string, got: ~S" var))
-  (uiop:getenv (%elisp-string->cl-string var)))
+  (declare (cl:ignore _frame))
+  (getenv-internal var nil))
 
 (cl:defun getenv-internal (variable &optional environment)
   "Bring-up subset of the C primitive `getenv-internal'.
@@ -1035,22 +1034,96 @@ VARIABLE is a string name.  ENVIRONMENT, when non-nil, is treated like an ELisp
 `process-environment' list of \"NAME=VALUE\" strings."
   (unless (stringp variable)
     (error "ELISP:GETENV-INTERNAL expects a string, got: ~S" variable))
-  (let* ((name (%elisp-string->cl-string variable)))
-    (cond
-     ((null environment)
-      (uiop:getenv name))
-     ((consp environment)
-      (let ((prefix (concatenate 'cl:string name "=")))
-        (dolist (entry environment nil)
-          (when (stringp entry)
-            (let ((s (%elisp-string->cl-string entry)))
-              (when (and (>= (length s) (length prefix))
-                         (string= prefix (subseq s 0 (length prefix))))
-                (return (subseq s (length prefix)))))))))
-     (t
-     (error "ELISP:GETENV-INTERNAL bad ENVIRONMENT: ~S" environment)))))
+  (let* ((name (%elisp-string->cl-string variable))
+         (env (cond
+               ((null environment) process-environment)
+               ((consp environment) environment)
+               (t (error "ELISP:GETENV-INTERNAL bad ENVIRONMENT: ~S" environment))))
+         (prefix (concatenate 'cl:string name "=")))
+    (dolist (entry env nil)
+      (when (stringp entry)
+        (let ((s (%elisp-string->cl-string entry)))
+          (cond
+           ;; NAME=VALUE
+           ((and (>= (length s) (length prefix))
+                 (string= prefix (subseq s 0 (length prefix))))
+            (return (subseq s (length prefix))))
+           ;; NAME (unset marker; `setenv` uses this on unsetting)
+           ((string= name s)
+            (return nil))))))))
+
+(cl:defun setenv-internal (env variable value keep-empty)
+  "Set VARIABLE to VALUE in ENV, adding empty entries if KEEP-EMPTY.
+
+ENV is an ELisp `process-environment` list of strings.  VALUE is either a
+string (including \"\"), or nil to unset.  KEEP-EMPTY matches upstream: unsets
+leave a \"NAME\" marker in ENV instead of deleting the entry."
+  (unless (stringp variable)
+    (error "ELISP:SETENV-INTERNAL expects VARIABLE string, got: ~S" variable))
+  (when (and value (not (stringp value)))
+    (error "ELISP:SETENV-INTERNAL expects VALUE string or nil, got: ~S" value))
+  (let* ((name (%elisp-string->cl-string variable))
+         (val (and value (%elisp-string->cl-string value)))
+         (found nil))
+    (labels ((entry-matches-p (entry)
+               (and (stringp entry)
+                    (let ((s (%elisp-string->cl-string entry)))
+                      (or (string= s name)
+                          (and (>= (length s) (1+ (length name)))
+                               (string= name (subseq s 0 (length name)))
+                               (char= #\= (char s (length name))))))))
+             (make-entry ()
+               (cond
+                (val (concatenate 'cl:string name "=" val))
+                (keep-empty name)
+                (t nil))))
+      (let ((new-entry (make-entry))
+            (out nil))
+        (dolist (entry env)
+          (if (and (not found) (entry-matches-p entry))
+              (progn
+                (setf found t)
+                (when new-entry
+                  (push new-entry out)))
+              (push entry out)))
+        (setf out (nreverse out))
+        (if found
+            out
+            (if new-entry
+                (cons new-entry env)
+                env))))))
+
+(cl:defun setenv (variable &optional value substitute-env-vars)
+  "Set VARIABLE to VALUE in `process-environment` (bring-up subset)."
+  (unless (stringp variable)
+    (error "ELISP:SETENV expects VARIABLE string, got: ~S" variable))
+  (when (and value (not (stringp value)))
+    (error "ELISP:SETENV expects VALUE string or nil, got: ~S" value))
+  (when (position #\= (%elisp-string->cl-string variable))
+    (error "Environment variable name `%s' contains `='" variable))
+  (when (and value substitute-env-vars (fboundp 'substitute-env-vars))
+    (setf value (substitute-env-vars value)))
+  (when (string= "TZ" (%elisp-string->cl-string variable))
+    (set-time-zone-rule value))
+  (setf process-environment
+        (setenv-internal process-environment variable value t))
+  value)
 
 (cl:defvar locale-coding-system nil)
+
+(cl:defun find-coding-systems-string (_string &optional _default-coding)
+  "Bring-up stub for the C primitive `find-coding-systems-string'."
+  (declare (cl:ignore _string _default-coding))
+  (list 'undecided))
+
+(cl:defun coding-system-base (coding-system)
+  "Bring-up stub for the C primitive `coding-system-base'."
+  coding-system)
+
+(cl:defun set-time-zone-rule (&optional _rules)
+  "Bring-up stub for the C primitive `set-time-zone-rule'."
+  (declare (cl:ignore _rules))
+  nil)
 
 (cl:defvar current-language-environment "English")
 (cl:defvar selection-coding-system nil)
@@ -1191,14 +1264,20 @@ LENGTH is the string length. INIT is an ELisp character code or a CL character."
 (cl:defun get-char-code-property (char propname)
   "Bring-up stub for ELisp `get-char-code-property'.
 
-This will eventually consult the Unicode property tables (as in Emacs'
-`charprop.el').  For bring-up, return nil for unknown properties so callers
-can load without requiring the full Unicode database."
+ This will eventually consult the Unicode property tables (as in Emacs'
+  `charprop.el').  For bring-up, return nil for unknown properties so callers
+  can load without requiring the full Unicode database."
   (unless (integerp char)
     (error "ELISP:GET-CHAR-CODE-PROPERTY expects integer char code, got: ~S" char))
   (unless (symbolp propname)
     (error "ELISP:GET-CHAR-CODE-PROPERTY expects symbol property, got: ~S" propname))
-  nil)
+  (case propname
+    ;; `ucs-normalize.el` expects a numeric canonical combining class, and will
+    ;; sort lists of chars using `<` on that value.  Returning NIL here breaks
+    ;; the sort comparator with `(wrong-type-argument number-or-marker-p nil)`.
+    ;; For bring-up, treat all chars as having CCC=0.
+    (canonical-combining-class 0)
+    (t nil)))
 
 (cl:defun define-char-code-property (name file &optional docstring)
   "Bring-up stub for ELisp `define-char-code-property'.

@@ -1707,16 +1707,40 @@ This checks overlays first (when OBJECT is a buffer), then falls back to
     (delete-region (max (point-min) (+ (point) n)) (point))))
   nil)
 
-(cl:defun %set-buffer-match-data (mstart mend reg-starts reg-ends &key (base 0))
-  (let ((md nil))
-    (push (and (integerp mstart) (<= 0 mstart) (+ base mstart 1)) md)
-    (push (and (integerp mend) (<= 0 mend) (+ base mend 1)) md)
-    (when reg-starts
-      (loop for rs across reg-starts
-            for re across reg-ends do
-              (push (and (integerp rs) (<= 0 rs) (+ base rs 1)) md)
-              (push (and (integerp re) (<= 0 re) (+ base re 1)) md)))
-    (setf *match-data* (nreverse md)
+(cl:defun %set-buffer-match-data (mstart mend reg-starts reg-ends
+                                 &key (base 0) group-map max-emacs-group)
+  (let ((md (list
+             (and (integerp mstart) (<= 0 mstart) (+ base mstart 1))
+             (and (integerp mend) (<= 0 mend) (+ base mend 1)))))
+    (cond
+     ;; When GROUP-MAP is provided, rebuild Emacs match-data group numbering
+     ;; (supporting explicitly-numbered `\\(?N:...)` capture groups).
+     ((and group-map max-emacs-group (> max-emacs-group 0))
+      (let ((pcre-groups (length group-map)))
+        (loop for emacs-g from 1 to max-emacs-group do
+          (let ((best-s nil)
+                (best-e nil))
+            (when reg-starts
+              (loop for pcre-i from 0 below pcre-groups do
+                (when (= (aref group-map pcre-i) emacs-g)
+                  (let ((rs (aref reg-starts pcre-i))
+                        (re (aref reg-ends pcre-i)))
+                    (when (and (integerp rs) (integerp re))
+                      (setf best-s (+ base rs 1)
+                            best-e (+ base re 1))
+                      (return))))))
+            (setf md (nconc md (list best-s best-e)))))))
+     ;; Otherwise, keep the raw cl-ppcre group numbering.
+     (t
+      (when reg-starts
+        (loop for rs across reg-starts
+              for re across reg-ends do
+                (setf md
+                      (nconc md
+                             (list
+                              (and (integerp rs) (<= 0 rs) (+ base rs 1))
+                              (and (integerp re) (<= 0 re) (+ base re 1)))))))))
+    (setf *match-data* md
           *match-source-string* nil)
     md))
 
@@ -1730,19 +1754,25 @@ This checks overlays first (when OBJECT is a buffer), then falls back to
     ;; otherwise it can become pathologically slow on large buffers (pp.el relies
     ;; on this being cheap).  Avoid SUBSEQ here; use an anchored scanner and set
     ;; :REAL-START-POS to the match start so \\A behaves like "at point".
-    (multiple-value-bind (mstart mend reg-starts reg-ends)
-        (cl-ppcre:scan (%string-match-anchored-scanner regexp case-fold-search)
+    (let* ((compiled (%string-match-anchored-scanner regexp case-fold-search))
+           (scanner (first compiled))
+           (group-map (second compiled))
+           (max-emacs-group (third compiled)))
+      (multiple-value-bind (mstart mend reg-starts reg-ends)
+          (cl-ppcre:scan scanner
                        s
                        :start start
                        :end (length s)
                        :real-start-pos start)
-      (if (or (null mstart) (/= mstart start))
-          (progn
-            (setf *match-data* nil *match-source-string* nil)
-            nil)
-          (progn
-            (%set-buffer-match-data mstart mend reg-starts reg-ends)
-            t)))))
+        (if (or (null mstart) (/= mstart start))
+            (progn
+              (setf *match-data* nil *match-source-string* nil)
+              nil)
+            (progn
+              (%set-buffer-match-data mstart mend reg-starts reg-ends
+                                      :group-map group-map
+                                      :max-emacs-group max-emacs-group)
+              t))))))
 
 (cl:defun looking-back (regexp &optional limit _greedy)
   "Bring-up subset of ELisp `looking-back'."
@@ -1757,7 +1787,10 @@ This checks overlays first (when OBJECT is a buffer), then falls back to
       (setf *match-data* nil *match-source-string* nil)
       (return-from looking-back nil))
     (let* ((sub (subseq s lim-idx end))
-           (scanner (%string-match-scanner regexp case-fold-search))
+           (compiled (%string-match-scanner regexp case-fold-search))
+           (scanner (first compiled))
+           (group-map (second compiled))
+           (max-emacs-group (third compiled))
            (best nil)
            (best-reg-starts nil)
            (best-reg-ends nil))
@@ -1769,7 +1802,10 @@ This checks overlays first (when OBJECT is a buffer), then falls back to
             (setf *match-data* nil *match-source-string* nil)
             nil)
           (progn
-            (%set-buffer-match-data best (length sub) best-reg-starts best-reg-ends :base lim-idx)
+            (%set-buffer-match-data best (length sub) best-reg-starts best-reg-ends
+                                    :base lim-idx
+                                    :group-map group-map
+                                    :max-emacs-group max-emacs-group)
             t)))))
 
 (cl:defun re-search-forward (regexp &optional bound noerror count)
@@ -1779,24 +1815,30 @@ This checks overlays first (when OBJECT is a buffer), then falls back to
   (let ((count (or count 1)))
     (unless (and (integerp count) (< 0 count))
       (error "ELISP:RE-SEARCH-FORWARD bad count: ~S" count))
-    (loop repeat count
-          for s = (elisp-buffer-text *current-buffer*)
-          for start = (1- (point))
-          for end = (if bound (max 0 (1- (%pos bound))) (length s))
-          do
-            (multiple-value-bind (mstart mend reg-starts reg-ends)
-                (cl-ppcre:scan (%string-match-scanner regexp case-fold-search)
-                               s
-                               :start start
-                               :end end
-                               :real-start-pos 0)
-              (when (null mstart)
-                (setf *match-data* nil *match-source-string* nil)
-                (when noerror
-                  (return-from re-search-forward nil))
-                (error "Search failed: %S" regexp))
-              (%set-buffer-match-data mstart mend reg-starts reg-ends)
-              (goto-char (1+ mend))))
+    (let* ((compiled (%string-match-scanner regexp case-fold-search))
+           (scanner (first compiled))
+           (group-map (second compiled))
+           (max-emacs-group (third compiled)))
+      (loop repeat count
+            for s = (elisp-buffer-text *current-buffer*)
+            for start = (1- (point))
+            for end = (if bound (max 0 (1- (%pos bound))) (length s))
+            do
+              (multiple-value-bind (mstart mend reg-starts reg-ends)
+                  (cl-ppcre:scan scanner
+                                 s
+                                 :start start
+                                 :end end
+                                 :real-start-pos 0)
+                (when (null mstart)
+                  (setf *match-data* nil *match-source-string* nil)
+                  (when noerror
+                    (return-from re-search-forward nil))
+                  (error "Search failed: %S" regexp))
+                (%set-buffer-match-data mstart mend reg-starts reg-ends
+                                        :group-map group-map
+                                        :max-emacs-group max-emacs-group)
+                (goto-char (1+ mend)))))
     (point)))
 
 (cl:defun re-search-backward (regexp &optional bound noerror count)
@@ -1858,7 +1900,10 @@ This checks overlays first (when OBJECT is a buffer), then falls back to
               ;; interpreted relative to the whole buffer (Emacs `^` means
               ;; beginning-of-line, which we're approximating with `(?<=\\n)`),
               ;; so we scan the full buffer string with :START/:END bounds.
-              (let* ((scanner (%string-match-scanner regexp case-fold-search))
+              (let* ((compiled (%string-match-scanner regexp case-fold-search))
+                     (scanner (first compiled))
+                     (group-map (second compiled))
+                     (max-emacs-group (third compiled))
                      (pos lim-idx)
                      (best-ms nil)
                      (best-me nil)
@@ -1881,7 +1926,9 @@ This checks overlays first (when OBJECT is a buffer), then falls back to
                     (return-from re-search-backward nil))
                   (error "Search failed: %S" regexp))
                 (let ((pos (1+ best-ms)))
-                  (%set-buffer-match-data best-ms best-me best-rs best-re)
+                  (%set-buffer-match-data best-ms best-me best-rs best-re
+                                          :group-map group-map
+                                          :max-emacs-group max-emacs-group)
                   (goto-char pos))))))
     (point))
 
