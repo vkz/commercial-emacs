@@ -177,6 +177,16 @@
   :expected "t"
   :emacs :match)
 
+ (:name "core-vars-page-delimiter-default"
+  :expr "(equal page-delimiter \"^\\f\")"
+  :expected "t"
+  :emacs :match)
+
+ (:name "core-vars-process-environment-list-of-strings"
+  :expr "(and (consp process-environment) (stringp (car process-environment)) t)"
+  :expected "t"
+  :emacs :match)
+
  (:name "mule-translate-region-translation-table-basic"
   :expr "(with-temp-buffer (let ((tbl (make-translation-table-from-alist '((?A . [?B]) (?x . [?y ?z]))))) (insert \"Ax\") (translate-region (point-min) (point-max) tbl) (buffer-string)))"
   :expected "\"Byz\""

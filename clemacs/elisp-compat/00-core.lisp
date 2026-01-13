@@ -77,6 +77,11 @@
 (cl:defvar load-file-rep-suffixes nil)
 (cl:defvar temporary-file-directory "/tmp")
 (cl:defvar small-temporary-file-directory "/tmp")
+(cl:defvar process-environment
+  #+sbcl (cl:copy-list (sb-ext:posix-environ))
+  #-sbcl nil)
+(cl:defvar page-delimiter
+  (cl:concatenate 'cl:string "^" (cl:string #\Page)))
 (cl:defvar pdumper--pure-pool nil)
 (cl:defvar after-init-time nil)
 (cl:defvar before-init-time nil)
