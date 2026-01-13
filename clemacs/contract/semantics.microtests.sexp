@@ -177,6 +177,11 @@
   :expected "t"
   :emacs :match)
 
+ (:name "mule-translate-region-translation-table-basic"
+  :expr "(with-temp-buffer (let ((tbl (make-translation-table-from-alist '((?A . [?B]) (?x . [?y ?z]))))) (insert \"Ax\") (translate-region (point-min) (point-max) tbl) (buffer-string)))"
+  :expected "\"Byz\""
+  :emacs :match)
+
  (:name "command-loop-interactive-i-produces-nil"
   :expr "(progn (defun clemacs--tmp-int-i (x) (interactive \"i\") x) (call-interactively 'clemacs--tmp-int-i))"
   :expected "nil"

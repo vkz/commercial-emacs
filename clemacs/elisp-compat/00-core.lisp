@@ -40,6 +40,7 @@
 (cl:defvar standard-output t)
 ;; Common command/key processing vars referenced early by upstream lisp/.
 ;; Bind to NIL for bring-up so loads don't spam UNBOUND warnings.
+(cl:defvar quit-flag nil)
 (cl:defvar prefix-arg nil)
 (cl:defvar current-prefix-arg nil)
 (cl:defvar defining-kbd-macro nil)
@@ -87,28 +88,80 @@ clemacs does not (yet) support pdump; treat this as false, except when
 `pdumper--pure-pool' is explicitly non-nil."
   (and (boundp 'pdumper--pure-pool) pdumper--pure-pool t))
 
-(cl:defun make-translation-table-from-alist (alist)
-  "Bring-up stub for ELisp `make-translation-table-from-alist'.
-
-Upstream `mule.el` returns a char-table suitable for `translate-region' and
-CCL translation.  For clemacs bring-up, return ALIST as an opaque placeholder
-so libraries like `ucs-normalize.el` can load and register their tables."
-  alist)
+(cl:defvar *clemacs--next-translation-table-id* 0)
 
 (cl:defun define-translation-table (symbol &rest args)
   "Bring-up stub for ELisp `define-translation-table'.
 
 Upstream `mule.el` registers translation tables in `translation-table-vector'.
-For clemacs bring-up, store the table on SYMBOL and return 0."
+For clemacs bring-up, store the table on SYMBOL and return a small id."
   (let ((table (car args)))
-    (put symbol 'translation-table table)
-    (put symbol 'translation-table-id 0)
-    0))
+    (put symbol 'translation-table
+         (if (consp table)
+             (make-translation-table-from-alist table)
+             table))
+    (let ((next (or (and (boundp '*clemacs--next-translation-table-id*)
+                         *clemacs--next-translation-table-id*)
+                    0)))
+      (cl:proclaim (list 'cl:special '*clemacs--next-translation-table-id*))
+      (setf *clemacs--next-translation-table-id* (1+ next))
+      (put symbol 'translation-table-id next)
+      next)))
 
-(cl:defun translate-region (_start _end _table)
-  "Bring-up stub for ELisp `translate-region'."
-  (declare (cl:ignore _start _end _table))
-  0)
+(cl:defun translate-region (start end table)
+  "Bring-up subset of ELisp `translate-region' (Unicode-only)."
+  (labels ((resolve-table (x)
+             (cond
+              ((cl:hash-table-p x) x)
+              ((typep x 'elisp-char-table) x)
+              ((symbolp x)
+               (or (get x 'translation-table)
+                   (error "ELISP:TRANSLATE-REGION no translation-table: %S" x)))
+              ((consp x) (make-translation-table-from-alist x))
+              (t (error "ELISP:TRANSLATE-REGION bad TABLE: %S" x))))
+           (lookup (tab code)
+             (cond
+              ((cl:hash-table-p tab)
+               (cl:gethash code tab))
+              ((typep tab 'elisp-char-table)
+               ;; clemacs char-tables are currently 0..65535 only.
+               (if (and (integerp code) (<= 0 code) (< code 65536))
+                   (%char-table-ref tab code)
+                   nil))
+              (t nil)))
+           (emit-replacement (out rep)
+             (cond
+              ((null rep) nil)
+              ((integerp rep) (write-char (%elisp-code->char rep) out))
+              ((characterp rep) (write-char rep out))
+              ((stringp rep) (write-string (%elisp-string->cl-string rep) out))
+              ((vectorp rep)
+               (dotimes (i (length rep))
+                 (write-char (%elisp-code->char (aref rep i)) out)))
+              ((consp rep)
+               (dolist (x rep)
+                 (write-char (%elisp-code->char x) out)))
+              (t
+               (error "ELISP:TRANSLATE-REGION bad replacement: %S" rep)))))
+    (let* ((tab (resolve-table table))
+           (chunk (buffer-substring start end))
+           (translations 0)
+           (out
+             (cl:with-output-to-string (s)
+               (dotimes (i (length chunk))
+                 (let* ((ch (char chunk i))
+                        (code (%elisp-char-code ch))
+                        (rep (lookup tab code)))
+                   (if rep
+                       (progn
+                         (incf translations)
+                         (emit-replacement s rep))
+                       (write-char ch s)))))))
+      (when (plusp translations)
+        (delete-region start end)
+        (goto-char start)
+        (insert out))
+      translations)))
 
 ;; Variables that upstream ELisp assumes exist very early (often C-defined),
 ;; but which may not have been DEFVAR'd yet when we start loading a subset of
@@ -153,6 +206,7 @@ For clemacs bring-up, store the table on SYMBOL and return 0."
 ;; not load yet), but are referenced by early-startup code paths.
 (cl:defvar inhibit-auto-fill nil)
 (cl:defvar comint-file-name-prefix nil)
+(cl:defvar comint-file-name-quote-list nil)
 (cl:defvar isearch-forward nil)
 (cl:defvar isearch-success nil)
 (cl:defvar isearch-error nil)
